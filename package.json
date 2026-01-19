@@ -41,6 +41,12 @@
         "scopeName": "source.umple",
         "path": "./syntaxes/umple.tmLanguage"
       }
+    ],
+    "snippets": [
+      {
+        "language": "umple",
+        "path": "./snippets/umple.json"
+      }
     ]
   }
 }
