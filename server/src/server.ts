@@ -17,7 +17,7 @@ import {
   Range,
 } from "vscode-languageserver/node";
 import { TextDocument } from "vscode-languageserver-textdocument";
-import { KEYWORD_LIST } from "./keywords";
+import { ALL_KEYWORDS, KEYWORDS } from "./keywords";
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new Map<string, TextDocument>();
@@ -29,12 +29,16 @@ let umpleSyncPort = 5555;
 let jarWarningShown = false;
 let serverProcess: ChildProcess | undefined;
 
-const KEYWORD_COMPLETIONS: CompletionItem[] = Array.from(
-  new Set(KEYWORD_LIST),
-).map((label) => ({
-  label,
-  kind: CompletionItemKind.Keyword,
-}));
+const KEYWORD_COMPLETIONS: CompletionItem[] =
+  buildKeywordCompletions(ALL_KEYWORDS);
+
+type CompletionContext =
+  | "top"
+  | "class"
+  | "statemachine"
+  | "association"
+  | "enum"
+  | "unknown";
 
 connection.onInitialize((params: InitializeParams): InitializeResult => {
   const initOptions = params.initializationOptions as
@@ -108,12 +112,21 @@ connection.onCompletion((params): CompletionItem[] => {
     return KEYWORD_COMPLETIONS;
   }
 
+  const context = detectContext(
+    document,
+    params.position.line,
+    params.position.character,
+  );
+  console.log("context: ", context);
   const prefix = getCompletionPrefix(
     document,
     params.position.line,
     params.position.character,
   );
-  const keywordItems = filterCompletions(KEYWORD_COMPLETIONS, prefix);
+  const keywordItems = filterCompletions(
+    buildKeywordCompletions(getKeywordsForContext(context)),
+    prefix,
+  );
   const classItems = getClassNameCompletions(prefix);
   return [...keywordItems, ...classItems];
 });
@@ -425,6 +438,165 @@ function filterCompletions(
   return items.filter((item) =>
     item.label.toLowerCase().startsWith(lowerPrefix),
   );
+}
+
+function buildKeywordCompletions(keywords: string[]): CompletionItem[] {
+  return Array.from(new Set(keywords)).map((label) => ({
+    label,
+    kind: CompletionItemKind.Keyword,
+  }));
+}
+
+function getKeywordsForContext(context: CompletionContext): string[] {
+  switch (context) {
+    case "top":
+      return [
+        ...KEYWORDS.topLevel,
+        ...KEYWORDS.testing,
+        ...KEYWORDS.tracing,
+        ...KEYWORDS.misc,
+      ];
+    case "class":
+      return [
+        ...KEYWORDS.classLevel,
+        ...KEYWORDS.attribute,
+        ...KEYWORDS.method,
+        ...KEYWORDS.constraints,
+        ...KEYWORDS.modelConstraints,
+        ...KEYWORDS.tracing,
+        ...KEYWORDS.testing,
+      ];
+    case "statemachine":
+      return [...KEYWORDS.statemachine, ...KEYWORDS.constraints];
+    case "association":
+      return [...KEYWORDS.constraints];
+    case "enum":
+      return [];
+    default:
+      return ALL_KEYWORDS;
+  }
+}
+
+function detectContext(
+  document: TextDocument,
+  line: number,
+  character: number,
+): CompletionContext {
+  const range = Range.create(
+    Position.create(0, 0),
+    Position.create(line, character),
+  );
+  let text = document.getText(range);
+  if (text.length > 20000) {
+    text = text.slice(text.length - 20000);
+  }
+
+  const stack: string[] = [];
+  const keywordContext: Record<string, CompletionContext> = {
+    class: "class",
+    trait: "class",
+    interface: "class",
+    association: "association",
+    associationClass: "class",
+    statemachine: "statemachine",
+    enum: "enum",
+    mixset: "top",
+    filter: "top",
+  };
+
+  let lastKeyword: string | null = null;
+  let inLineComment = false;
+  let inBlockComment = false;
+  let inString = false;
+
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    const next = text[i + 1];
+
+    if (inLineComment) {
+      if (ch === "\n") {
+        inLineComment = false;
+      }
+      continue;
+    }
+    if (inBlockComment) {
+      if (ch === "*" && next === "/") {
+        inBlockComment = false;
+        i += 1;
+      }
+      continue;
+    }
+    if (inString) {
+      if (ch === "\\") {
+        i += 1;
+        continue;
+      }
+      if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch === "/" && next === "/") {
+      inLineComment = true;
+      i += 1;
+      continue;
+    }
+    if (ch === "/" && next === "*") {
+      inBlockComment = true;
+      i += 1;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (/[A-Za-z_]/.test(ch)) {
+      let j = i + 1;
+      while (j < text.length && /[A-Za-z0-9_]/.test(text[j])) {
+        j += 1;
+      }
+      const word = text.slice(i, j);
+      if (word in keywordContext) {
+        lastKeyword = word;
+      }
+      // lastKeyword = keywordContext[word] ? word : null;
+      i = j - 1;
+      continue;
+    }
+
+    if (ch === "{") {
+      if (lastKeyword && keywordContext[lastKeyword]) {
+        stack.push(keywordContext[lastKeyword]);
+      } else {
+        stack.push("block");
+      }
+      lastKeyword = null;
+      continue;
+    }
+
+    if (ch === "}") {
+      if (stack.length > 0) {
+        stack.pop();
+      }
+      lastKeyword = null;
+    }
+  }
+
+  for (let i = stack.length - 1; i >= 0; i -= 1) {
+    const ctx = stack[i];
+    if (
+      ctx === "statemachine" ||
+      ctx === "association" ||
+      ctx === "class" ||
+      ctx === "enum"
+    ) {
+      return ctx;
+    }
+  }
+
+  return "top";
 }
 
 function getClassNameCompletions(prefix: string): CompletionItem[] {
