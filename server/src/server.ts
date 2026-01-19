@@ -17,6 +17,7 @@ import {
   Range,
 } from "vscode-languageserver/node";
 import { TextDocument } from "vscode-languageserver-textdocument";
+import { KEYWORD_LIST } from "./keywords";
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new Map<string, TextDocument>();
@@ -28,21 +29,12 @@ let umpleSyncPort = 5555;
 let jarWarningShown = false;
 let serverProcess: ChildProcess | undefined;
 
-const KEYWORD_COMPLETIONS: CompletionItem[] = [
-  { label: "class", kind: CompletionItemKind.Keyword },
-  { label: "trait", kind: CompletionItemKind.Keyword },
-  { label: "association", kind: CompletionItemKind.Keyword },
-  { label: "enum", kind: CompletionItemKind.Keyword },
-  { label: "namespace", kind: CompletionItemKind.Keyword },
-  { label: "statemachine", kind: CompletionItemKind.Keyword },
-  { label: "event", kind: CompletionItemKind.Keyword },
-  { label: "attribute", kind: CompletionItemKind.Keyword },
-  { label: "use", kind: CompletionItemKind.Keyword },
-  { label: "generate", kind: CompletionItemKind.Keyword },
-  { label: "extends", kind: CompletionItemKind.Keyword },
-  { label: "implements", kind: CompletionItemKind.Keyword },
-  { label: "abstract", kind: CompletionItemKind.Keyword },
-];
+const KEYWORD_COMPLETIONS: CompletionItem[] = Array.from(
+  new Set(KEYWORD_LIST),
+).map((label) => ({
+  label,
+  kind: CompletionItemKind.Keyword,
+}));
 
 connection.onInitialize((params: InitializeParams): InitializeResult => {
   const initOptions = params.initializationOptions as
