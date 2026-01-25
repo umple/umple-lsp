@@ -21,6 +21,7 @@ import {
 } from "vscode-languageserver/node";
 import { TextDocument } from "vscode-languageserver-textdocument";
 import { ALL_KEYWORDS, KEYWORDS } from "./keywords";
+import { symbolIndex, SymbolEntry } from "./symbolIndex";
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new Map<string, TextDocument>();
@@ -41,6 +42,8 @@ let jarWarningShown = false;
 let serverProcess: ChildProcess | undefined;
 let umpleJarPath: string | undefined;
 let umpleGoToDefClasspath: string | undefined;
+let treeSitterWasmPath: string | undefined;
+let symbolIndexReady = false;
 
 const execFileAsync = promisify(execFile);
 const DEFAULT_UMPLESYNC_TIMEOUT_MS = 50000;
@@ -105,8 +108,39 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
   };
 });
 
-connection.onInitialized(() => {
+connection.onInitialized(async () => {
   connection.console.info("Umple language server initialized.");
+
+  // Initialize tree-sitter symbol index for fast go-to-definition
+  treeSitterWasmPath =
+    treeSitterWasmPath ||
+    path.join(
+      __dirname,
+      "..",
+      "..",
+      "tree-sitter-umple",
+      "tree-sitter-umple.wasm",
+    );
+
+  if (fs.existsSync(treeSitterWasmPath)) {
+    try {
+      symbolIndexReady = await symbolIndex.initialize(treeSitterWasmPath);
+      if (symbolIndexReady) {
+        connection.console.info("Symbol index initialized with tree-sitter.");
+        // Index workspace files in background
+        for (const root of workspaceRoots) {
+          const count = symbolIndex.indexDirectory(root);
+          connection.console.info(`Indexed ${count} files in ${root}`);
+        }
+      }
+    } catch (err) {
+      connection.console.warn(`Failed to initialize symbol index: ${err}`);
+    }
+  } else {
+    connection.console.info(
+      `Tree-sitter WASM not found at ${treeSitterWasmPath}, using fallback go-to-definition.`,
+    );
+  }
 });
 
 // Create
@@ -119,6 +153,17 @@ connection.onDidOpenTextDocument((params) => {
   );
   documents.set(params.textDocument.uri, document);
   scheduleValidation(document);
+  void notifyGoToDefUpdate(document);
+
+  // Update symbol index
+  if (symbolIndexReady) {
+    try {
+      const filePath = fileURLToPath(params.textDocument.uri);
+      symbolIndex.updateFile(filePath, params.textDocument.text);
+    } catch {
+      // Ignore errors for non-file URIs
+    }
+  }
 });
 
 connection.onDidChangeTextDocument((params) => {
@@ -134,6 +179,17 @@ connection.onDidChangeTextDocument((params) => {
   documents.set(params.textDocument.uri, updated);
   modelCache.delete(params.textDocument.uri);
   scheduleValidation(updated);
+  void notifyGoToDefUpdate(updated);
+
+  // Update symbol index
+  if (symbolIndexReady) {
+    try {
+      const filePath = fileURLToPath(params.textDocument.uri);
+      symbolIndex.updateFile(filePath, updated.getText());
+    } catch {
+      // Ignore errors for non-file URIs
+    }
+  }
 });
 
 connection.onDidCloseTextDocument((params) => {
@@ -182,6 +238,32 @@ connection.onDefinition(async (params) => {
     return [useLocation];
   }
 
+  // Fast path: try symbol index first
+  if (symbolIndexReady) {
+    const word = getWordAtPosition(document, params.position);
+    if (word) {
+      const symbols = symbolIndex.findDefinition(word);
+      if (symbols.length > 0) {
+        // Found in symbol index - return immediately (fast path)
+        const results: Location[] = symbols.map((sym) => {
+          const uri = pathToFileURL(sym.file).toString();
+          return Location.create(
+            uri,
+            Range.create(
+              Position.create(sym.line, sym.column),
+              Position.create(sym.endLine, sym.endColumn),
+            ),
+          );
+        });
+        connection.console.info(
+          `Fast go-to-definition for "${word}": found ${results.length} result(s)`,
+        );
+        return results;
+      }
+    }
+  }
+
+  // Slow path: fall back to Java-based go-to-definition
   const settings = resolveGoToDefSettings();
   if (!settings) {
     return [];
@@ -362,6 +444,24 @@ async function runGoToDefOnce(
   return parseGoToDefOutput(stdout);
 }
 
+async function notifyGoToDefUpdate(document: TextDocument): Promise<void> {
+  // Send updated buffer content to the Java daemon.
+  const settings = resolveGoToDefSettings();
+  if (!settings) {
+    return;
+  }
+  const shadowPath = await updateShadowDocument(document, "def");
+  if (!shadowPath) {
+    return;
+  }
+  let text = document.getText();
+  if (!text.endsWith("\n\n")) {
+    text = text.replace(/\n?$/, "\n\n");
+  }
+  const client = getGoToDefClient(settings);
+  client.notifyUpdate(shadowPath, text, document.version);
+}
+
 async function runUmpleSyncAndParseDiagnostics(
   jarPath: string,
   document: TextDocument,
@@ -369,7 +469,8 @@ async function runUmpleSyncAndParseDiagnostics(
   const tempFileInfo = await writeTempUmpleFile(document, "diag");
   const tempFile = tempFileInfo.filePath;
   let text = document.getText();
-  text = sanitizeUseStatements(text);
+  const documentDir = getDocumentDirectory(document);
+  text = replaceUseWithStubs(text, documentDir);
   // Umple needs two trailing newlines to report end-of-file errors on the last line.
   if (!text.endsWith("\n\n")) {
     text = text.replace(/\n?$/, "\n\n");
@@ -536,6 +637,142 @@ function sanitizeUseStatements(text: string): string {
   return lines.join("\n");
 }
 
+/**
+ * Replace `use` statements with external stubs from the symbol index.
+ * This allows diagnostics to run without compiling referenced files,
+ * while still recognizing imported symbols.
+ *
+ * Example:
+ *   use Person.ump;  →  external Person {} external Address {}
+ */
+function replaceUseWithStubs(text: string, documentDir: string | null): string {
+  if (!symbolIndexReady || !documentDir) {
+    // Fall back to commenting out use statements
+    return sanitizeUseStatements(text);
+  }
+
+  const lines = text.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const match = line.match(/^\s*use\s+([^\s;]+)\s*;/);
+    if (match) {
+      const usePath = match[1];
+      const stubs = generateStubsForUse(usePath, documentDir);
+      if (stubs) {
+        // Replace use statement with external stubs
+        lines[i] = `// ${line}\n${stubs}`;
+      } else {
+        // No stubs found, just comment out
+        lines[i] = `//${line}`;
+      }
+    }
+  }
+  return lines.join("\n");
+}
+
+/**
+ * Generate external stub declarations for a use path.
+ * Looks up symbols from the symbol index.
+ */
+function generateStubsForUse(
+  usePath: string,
+  documentDir: string,
+): string | null {
+  // Resolve the file path
+  let resolvedPath: string;
+  if (path.isAbsolute(usePath)) {
+    resolvedPath = usePath;
+  } else {
+    resolvedPath = path.resolve(documentDir, usePath);
+  }
+
+  // Ensure .ump extension
+  if (!resolvedPath.endsWith(".ump")) {
+    resolvedPath += ".ump";
+  }
+
+  // Look up symbols in the index
+  const symbols = symbolIndex.getFileSymbols(resolvedPath);
+  if (symbols.length === 0) {
+    // File not indexed yet, try to index it now
+    if (fs.existsSync(resolvedPath)) {
+      symbolIndex.indexFile(resolvedPath);
+      const newSymbols = symbolIndex.getFileSymbols(resolvedPath);
+      if (newSymbols.length === 0) {
+        return null;
+      }
+      return generateStubDeclarations(newSymbols);
+    }
+    return null;
+  }
+
+  return generateStubDeclarations(symbols);
+}
+
+/**
+ * Generate class/interface declarations with attributes for a list of symbols.
+ * Instead of using `external`, we generate full class stubs with attributes
+ * so that constraints and other references to attributes work correctly.
+ */
+function generateStubDeclarations(symbols: SymbolEntry[]): string {
+  const stubs: string[] = [];
+  const seen = new Set<string>();
+
+  // Group symbols by parent (to find attributes belonging to each class)
+  const attributesByParent = new Map<string, SymbolEntry[]>();
+  for (const sym of symbols) {
+    if (
+      sym.parent &&
+      (sym.kind === "attribute" || sym.kind === "statemachine")
+    ) {
+      const attrs = attributesByParent.get(sym.parent) ?? [];
+      attrs.push(sym);
+      attributesByParent.set(sym.parent, attrs);
+    }
+  }
+
+  for (const sym of symbols) {
+    // Only generate stubs for top-level types (no parent)
+    if (sym.parent) continue;
+
+    // Skip duplicates
+    if (seen.has(sym.name)) continue;
+    seen.add(sym.name);
+
+    // Get attributes for this class/interface (deduplicated)
+    const attributes = attributesByParent.get(sym.name) ?? [];
+    const seenAttrs = new Set<string>();
+    const attrStubs = attributes
+      .filter((a) => a.kind === "attribute")
+      .filter((a) => {
+        if (seenAttrs.has(a.name)) return false;
+        seenAttrs.add(a.name);
+        return true;
+      })
+      .map((a) => `  ${a.name};`)
+      .join("\n");
+
+    const body = attrStubs ? `\n${attrStubs}\n` : "";
+
+    switch (sym.kind) {
+      case "class":
+      case "trait":
+        // Generate a real class stub with attributes
+        stubs.push(`class ${sym.name} {${body}}`);
+        break;
+      case "interface":
+        stubs.push(`interface ${sym.name} {${body}}`);
+        break;
+      case "enum":
+        // Enums - just use external since we don't track enum values
+        stubs.push(`external ${sym.name} {}`);
+        break;
+    }
+  }
+
+  return stubs.join("\n");
+}
+
 function isConnectionError(error: unknown): boolean {
   if (!error || typeof error !== "object") {
     return false;
@@ -611,6 +848,22 @@ class GoToDefServerClient {
         }
       });
     });
+  }
+
+  notifyUpdate(file: string, text: string, version: number): void {
+    this.ensureProcess();
+    const process = this.process;
+    if (!process || !process.stdin) {
+      return;
+    }
+    const payload = JSON.stringify({
+      type: "update",
+      file,
+      version,
+      textBase64: Buffer.from(text, "utf8").toString("base64"),
+    });
+    // Best-effort update; no response expected.
+    process.stdin.write(`${payload}\n`, "utf8");
   }
 
   private ensureProcess(): void {
@@ -880,19 +1133,7 @@ async function getOrCreateShadowWorkspace(
     return null;
   }
 
-  let state = shadowWorkspaces.get(workspaceRoot);
-  if (!state) {
-    const shadowRoot = await fs.promises.mkdtemp(
-      path.join(os.tmpdir(), `umple-shadow-${label}-`),
-    );
-    await mirrorWorkspaceUmpleFiles(workspaceRoot, shadowRoot);
-    state = {
-      shadowRoot,
-      workspaceRoot,
-      docVersions: new Map(),
-    };
-    shadowWorkspaces.set(workspaceRoot, state);
-  }
+  const state = await getOrCreateShadowState(workspaceRoot, label);
 
   await overlayOpenDocumentsCached(
     workspaceRoot,
@@ -907,6 +1148,61 @@ async function getOrCreateShadowWorkspace(
     shadowRoot: state.shadowRoot,
     workspaceRoot,
   };
+}
+
+async function getOrCreateShadowState(
+  workspaceRoot: string,
+  label: string,
+): Promise<ShadowWorkspaceState> {
+  let state = shadowWorkspaces.get(workspaceRoot);
+  if (!state) {
+    const shadowRoot = await fs.promises.mkdtemp(
+      path.join(os.tmpdir(), `umple-shadow-${label}-`),
+    );
+    await mirrorWorkspaceUmpleFiles(workspaceRoot, shadowRoot);
+    state = {
+      shadowRoot,
+      workspaceRoot,
+      docVersions: new Map(),
+    };
+    shadowWorkspaces.set(workspaceRoot, state);
+  }
+  return state;
+}
+
+async function updateShadowDocument(
+  document: TextDocument,
+  label: string,
+): Promise<string | null> {
+  // Keep a shadow copy of the current document on disk.
+  const docPath = getDocumentFilePath(document);
+  if (!docPath) {
+    return null;
+  }
+  const workspaceRoot = getWorkspaceRootForPath(docPath);
+  if (!workspaceRoot) {
+    return null;
+  }
+  const state = await getOrCreateShadowState(workspaceRoot, label);
+  const cachedVersion = state.docVersions.get(document.uri);
+  if (cachedVersion === document.version) {
+    const relative = path.relative(workspaceRoot, docPath);
+    return path.join(state.shadowRoot, relative);
+  }
+
+  const relative = path.relative(workspaceRoot, docPath);
+  const target = path.join(state.shadowRoot, relative);
+  await fs.promises.mkdir(path.dirname(target), { recursive: true });
+  // Remove any existing symlink before writing, otherwise we'd write through
+  // the symlink to the original file!
+  await fs.promises.rm(target, { force: true });
+  let text = document.getText();
+  if (!text.endsWith("\n\n")) {
+    text = text.replace(/\n?$/, "\n\n");
+  }
+  await fs.promises.writeFile(target, text, "utf8");
+  state.docVersions.set(document.uri, document.version);
+  return target;
 }
 
 function getWorkspaceRootForPath(filePath: string): string | null {
@@ -1108,6 +1404,47 @@ function getCompletionPrefix(
   );
   const match = lineText.match(/[A-Za-z_][A-Za-z0-9_]*$/);
   return match ? match[0] : "";
+}
+
+/**
+ * Get the word (identifier) at the given position.
+ * Used for go-to-definition symbol lookup.
+ */
+function getWordAtPosition(
+  document: TextDocument,
+  position: Position,
+): string | null {
+  const lineText = document.getText(
+    Range.create(
+      Position.create(position.line, 0),
+      Position.create(position.line + 1, 0),
+    ),
+  );
+
+  // Find word boundaries around the cursor
+  let start = position.character;
+  let end = position.character;
+
+  // Expand left to find start of word
+  while (start > 0 && /[A-Za-z0-9_]/.test(lineText[start - 1])) {
+    start--;
+  }
+
+  // Expand right to find end of word
+  while (end < lineText.length && /[A-Za-z0-9_]/.test(lineText[end])) {
+    end++;
+  }
+
+  if (start === end) {
+    return null;
+  }
+
+  const word = lineText.substring(start, end);
+  // Only return valid identifiers (must start with letter or underscore)
+  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(word)) {
+    return word;
+  }
+  return null;
 }
 
 function filterCompletions(
