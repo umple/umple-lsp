@@ -1,0 +1,22 @@
+{
+  "grammars": [
+    {
+      "name": "umple",
+      "camelcase": "Umple",
+      "scope": "source.umple",
+      "path": ".",
+      "file-types": ["ump"],
+      "highlights": "queries/highlights.scm",
+      "locals": "queries/locals.scm"
+    }
+  ],
+  "metadata": {
+    "version": "0.1.0",
+    "license": "MIT",
+    "description": "Tree-sitter grammar for Umple modeling language"
+  },
+  "bindings": {
+    "c": true,
+    "node": true
+  }
+}
