@@ -468,9 +468,13 @@ async function runUmpleSyncAndParseDiagnostics(
 ): Promise<Diagnostic[]> {
   const tempFileInfo = await writeTempUmpleFile(document, "diag");
   const tempFile = tempFileInfo.filePath;
-  let text = document.getText();
+  const originalText = document.getText();
   const documentDir = getDocumentDirectory(document);
-  text = replaceUseWithStubs(text, documentDir);
+  const { text: processedText, lineOffset } = replaceUseWithStubs(
+    originalText,
+    documentDir,
+  );
+  let text = processedText;
   // Umple needs two trailing newlines to report end-of-file errors on the last line.
   if (!text.endsWith("\n\n")) {
     text = text.replace(/\n?$/, "\n\n");
@@ -480,7 +484,7 @@ async function runUmpleSyncAndParseDiagnostics(
   try {
     const commandLine = `-generate nothing ${formatUmpleArg(tempFile)}`;
     const { stdout, stderr } = await sendUmpleSyncCommand(jarPath, commandLine);
-    return parseUmpleDiagnostics(stderr, stdout, document);
+    return parseUmpleDiagnostics(stderr, stdout, document, lineOffset);
   } finally {
     await tempFileInfo.cleanup();
   }
@@ -638,20 +642,37 @@ function sanitizeUseStatements(text: string): string {
 }
 
 /**
+ * Result of replacing use statements with stubs.
+ */
+interface StubReplacementResult {
+  text: string;
+  lineOffset: number; // Number of stub lines added at the top
+}
+
+/**
  * Replace `use` statements with external stubs from the symbol index.
  * This allows diagnostics to run without compiling referenced files,
  * while still recognizing imported symbols.
  *
+ * Stubs are added at the TOP of the file, and use statements are commented out
+ * in place. This makes line number adjustment straightforward.
+ *
  * Example:
- *   use Person.ump;  →  external Person {} external Address {}
+ *   use Person.ump;  →  // use Person.ump; (stubs added at top)
  */
-function replaceUseWithStubs(text: string, documentDir: string | null): string {
+function replaceUseWithStubs(
+  text: string,
+  documentDir: string | null,
+): StubReplacementResult {
   if (!symbolIndexReady || !documentDir) {
     // Fall back to commenting out use statements
-    return sanitizeUseStatements(text);
+    return { text: sanitizeUseStatements(text), lineOffset: 0 };
   }
 
   const lines = text.split(/\r?\n/);
+  const allStubs: string[] = [];
+
+  // First pass: collect all stubs and comment out use statements
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
     const match = line.match(/^\s*use\s+([^\s;]+)\s*;/);
@@ -659,15 +680,24 @@ function replaceUseWithStubs(text: string, documentDir: string | null): string {
       const usePath = match[1];
       const stubs = generateStubsForUse(usePath, documentDir);
       if (stubs) {
-        // Replace use statement with external stubs
-        lines[i] = `// ${line}\n${stubs}`;
-      } else {
-        // No stubs found, just comment out
-        lines[i] = `//${line}`;
+        allStubs.push(stubs);
       }
+      // Comment out the use statement in place (keeps line count same)
+      lines[i] = `//${line}`;
     }
   }
-  return lines.join("\n");
+
+  // Add all stubs at the top of the file
+  if (allStubs.length > 0) {
+    const stubBlock = allStubs.join("\n");
+    const stubLines = stubBlock.split("\n").length;
+    return {
+      text: stubBlock + "\n" + lines.join("\n"),
+      lineOffset: stubLines,
+    };
+  }
+
+  return { text: lines.join("\n"), lineOffset: 0 };
 }
 
 /**
@@ -935,8 +965,13 @@ function parseUmpleDiagnostics(
   stderr: string,
   stdout: string,
   document: TextDocument,
+  lineOffset: number = 0,
 ): Diagnostic[] {
-  const jsonDiagnostics = parseUmpleJsonDiagnostics(stderr, document);
+  const jsonDiagnostics = parseUmpleJsonDiagnostics(
+    stderr,
+    document,
+    lineOffset,
+  );
   if (jsonDiagnostics.length === 0 && stdout.includes("Success")) {
     connection.console.info("Umple compile succeeded.");
   }
@@ -979,6 +1014,7 @@ type ShadowWorkspaceState = {
 function parseUmpleJsonDiagnostics(
   stderr: string,
   document: TextDocument,
+  lineOffset: number = 0,
 ): Diagnostic[] {
   const trimmed = stderr.trim();
   if (!trimmed) {
@@ -997,9 +1033,19 @@ function parseUmpleJsonDiagnostics(
     }
 
     const lines = document.getText().split(/\r?\n/);
-    return parsed.results.map((result) => {
-      const lineNumber = Math.max(Number(result.line ?? "1") - 1, 0);
-      const lineText = lines[lineNumber] ?? "";
+    const diagnostics: Diagnostic[] = [];
+
+    for (const result of parsed.results) {
+      // Adjust line number by subtracting the stub offset
+      const rawLineNumber = Number(result.line ?? "1") - 1;
+
+      // Skip diagnostics that fall within the stub lines
+      if (rawLineNumber < lineOffset) {
+        continue;
+      }
+
+      const adjustedLineNumber = Math.max(rawLineNumber - lineOffset, 0);
+      const lineText = lines[adjustedLineNumber] ?? "";
       const firstNonSpace = lineText.search(/\S/);
       const startChar = firstNonSpace === -1 ? 0 : firstNonSpace;
       const severityValue = Number(result.severity ?? "3");
@@ -1016,16 +1062,18 @@ function parseUmpleJsonDiagnostics(
         result.message,
       ].filter(Boolean);
 
-      return {
+      diagnostics.push({
         severity,
         range: Range.create(
-          Position.create(lineNumber, startChar),
-          Position.create(lineNumber, lineText.length),
+          Position.create(adjustedLineNumber, startChar),
+          Position.create(adjustedLineNumber, lineText.length),
         ),
         message: details.join(": "),
         source: "umple",
-      };
-    });
+      });
+    }
+
+    return diagnostics;
   } catch {
     return [];
   }
