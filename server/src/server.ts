@@ -30,9 +30,7 @@ const modelCache = new Map<
   string,
   { version: number; items: CompletionItem[] }
 >();
-const shadowWorkspaces = new Map<string, ShadowWorkspaceState>();
 let workspaceRoots: string[] = [];
-let goToDefClient: GoToDefServerClient | null = null;
 
 let umpleSyncJarPath: string | undefined;
 let umpleSyncHost = "localhost";
@@ -41,7 +39,6 @@ let umpleSyncTimeoutMs = 50000;
 let jarWarningShown = false;
 let serverProcess: ChildProcess | undefined;
 let umpleJarPath: string | undefined;
-let umpleGoToDefClasspath: string | undefined;
 let treeSitterWasmPath: string | undefined;
 let symbolIndexReady = false;
 
@@ -67,14 +64,12 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
         umpleSyncPort?: number;
         umpleSyncTimeoutMs?: number;
         umpleJarPath?: string;
-        umpleGoToDefClasspath?: string;
       }
     | undefined;
   umpleSyncJarPath = initOptions?.umpleSyncJarPath;
   umpleSyncHost =
     initOptions?.umpleSyncHost || process.env.UMPLESYNC_HOST || "localhost";
   umpleJarPath = initOptions?.umpleJarPath;
-  umpleGoToDefClasspath = initOptions?.umpleGoToDefClasspath;
   if (typeof initOptions?.umpleSyncPort === "number") {
     umpleSyncPort = initOptions.umpleSyncPort;
   } else if (process.env.UMPLESYNC_PORT) {
@@ -153,7 +148,6 @@ connection.onDidOpenTextDocument((params) => {
   );
   documents.set(params.textDocument.uri, document);
   scheduleValidation(document);
-  void notifyGoToDefUpdate(document);
 
   // Update symbol index
   if (symbolIndexReady) {
@@ -179,7 +173,6 @@ connection.onDidChangeTextDocument((params) => {
   documents.set(params.textDocument.uri, updated);
   modelCache.delete(params.textDocument.uri);
   scheduleValidation(updated);
-  void notifyGoToDefUpdate(updated);
 
   // Update symbol index
   if (symbolIndexReady) {
@@ -280,71 +273,8 @@ connection.onDefinition(async (params) => {
     }
   }
 
-  // Slow path: fall back to Java-based go-to-definition
-  const settings = resolveGoToDefSettings();
-  if (!settings) {
-    return [];
-  }
-
-  const { jarPath, classpath } = settings;
-  const shadowInfo = await getOrCreateShadowWorkspace(document, "def");
-  const tempFileInfo = shadowInfo
-    ? null
-    : await writeTempUmpleFile(document, "def");
-  const tempFile = shadowInfo ? shadowInfo.filePath : tempFileInfo!.filePath;
-  if (!shadowInfo) {
-    let text = document.getText();
-    if (!text.endsWith("\n\n")) {
-      text = text.replace(/\n?$/, "\n\n");
-    }
-    await fs.promises.writeFile(tempFile, text, "utf8");
-  }
-
-  try {
-    const line = params.position.line + 1;
-    const col = params.position.character;
-    let def: GoToDefResult | null = null;
-    try {
-      const client = getGoToDefClient({ jarPath, classpath });
-      def = await client.request(tempFile, line, col);
-    } catch (error) {
-      // Fall back to one-shot execution if the daemon fails.
-      connection.console.warn(
-        `Go-to-definition daemon failed: ${String(error)}`,
-      );
-      def = await runGoToDefOnce(jarPath, classpath, tempFile, line, col);
-    }
-
-    if (!def?.found) {
-      return [];
-    }
-
-    const uri = resolveDefinitionUri(
-      def,
-      document,
-      tempFile,
-      shadowInfo?.shadowRoot,
-      shadowInfo?.workspaceRoot,
-    );
-    const defLine = Math.max((def.line ?? 1) - 1, 0);
-    const defCol = Math.max((def.col ?? 1) - 1, 0);
-    return [
-      Location.create(
-        uri,
-        Range.create(
-          Position.create(defLine, defCol),
-          Position.create(defLine, defCol),
-        ),
-      ),
-    ];
-  } catch (error) {
-    connection.console.warn(`Go to definition failed: ${String(error)}`);
-    return [];
-  } finally {
-    if (tempFileInfo) {
-      await tempFileInfo.cleanup();
-    }
-  }
+  // No definition found in symbol index
+  return [];
 });
 
 function scheduleValidation(document: TextDocument): void {
@@ -399,84 +329,6 @@ function resolveJarPath(): string | undefined {
   }
 
   return umpleSyncJarPath;
-}
-
-function resolveGoToDefSettings():
-  | { jarPath: string; classpath: string }
-  | undefined {
-  if (!umpleJarPath) {
-    connection.window.showWarningMessage(
-      "Umple jar path not set. Configure initializationOptions.umpleJarPath.",
-    );
-    return undefined;
-  }
-  if (!umpleGoToDefClasspath) {
-    connection.window.showWarningMessage(
-      "Go-to-definition classpath not set. Configure initializationOptions.umpleGoToDefClasspath.",
-    );
-    return undefined;
-  }
-  if (!fs.existsSync(umpleJarPath)) {
-    connection.window.showWarningMessage(
-      `Umple jar not found at ${umpleJarPath}.`,
-    );
-    return undefined;
-  }
-  if (!fs.existsSync(umpleGoToDefClasspath)) {
-    connection.window.showWarningMessage(
-      `Go-to-definition classpath not found at ${umpleGoToDefClasspath}.`,
-    );
-    return undefined;
-  }
-  return { jarPath: umpleJarPath, classpath: umpleGoToDefClasspath };
-}
-
-function getGoToDefClient(settings: {
-  jarPath: string;
-  classpath: string;
-}): GoToDefServerClient {
-  if (goToDefClient && goToDefClient.matches(settings)) {
-    return goToDefClient;
-  }
-  if (goToDefClient) {
-    goToDefClient.dispose();
-  }
-  goToDefClient = new GoToDefServerClient(settings);
-  return goToDefClient;
-}
-
-async function runGoToDefOnce(
-  jarPath: string,
-  classpath: string,
-  tempFile: string,
-  line: number,
-  col: number,
-): Promise<GoToDefResult | null> {
-  const classPath = [jarPath, classpath].join(path.delimiter);
-  const { stdout } = await execFileAsync(
-    "java",
-    ["-cp", classPath, "UmpleGoToDefJson", tempFile, String(line), String(col)],
-    { encoding: "utf8", timeout: 50000 },
-  );
-  return parseGoToDefOutput(stdout);
-}
-
-async function notifyGoToDefUpdate(document: TextDocument): Promise<void> {
-  // Send updated buffer content to the Java daemon.
-  const settings = resolveGoToDefSettings();
-  if (!settings) {
-    return;
-  }
-  const shadowPath = await updateShadowDocument(document, "def");
-  if (!shadowPath) {
-    return;
-  }
-  let text = document.getText();
-  if (!text.endsWith("\n\n")) {
-    text = text.replace(/\n?$/, "\n\n");
-  }
-  const client = getGoToDefClient(settings);
-  client.notifyUpdate(shadowPath, text, document.version);
 }
 
 async function runUmpleSyncAndParseDiagnostics(
@@ -949,146 +801,6 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-class GoToDefServerClient {
-  private process: ChildProcess | null = null;
-  private buffer = "";
-  private nextId = 1;
-  private pending = new Map<
-    number,
-    {
-      resolve: (value: GoToDefResult | null) => void;
-      reject: (error: Error) => void;
-    }
-  >();
-  private settings: { jarPath: string; classpath: string };
-
-  constructor(settings: { jarPath: string; classpath: string }) {
-    this.settings = settings;
-  }
-
-  matches(settings: { jarPath: string; classpath: string }): boolean {
-    return (
-      this.settings.jarPath === settings.jarPath &&
-      this.settings.classpath === settings.classpath
-    );
-  }
-
-  dispose(): void {
-    if (this.process) {
-      this.process.kill();
-      this.process = null;
-    }
-    this.pending.clear();
-  }
-
-  async request(
-    file: string,
-    line: number,
-    col: number,
-  ): Promise<GoToDefResult | null> {
-    this.ensureProcess();
-    const id = this.nextId++;
-    const payload = JSON.stringify({ id, file, line, col });
-
-    return new Promise((resolve, reject) => {
-      const process = this.process;
-      if (!process || !process.stdin) {
-        reject(new Error("Go-to-definition daemon not running"));
-        return;
-      }
-
-      this.pending.set(id, { resolve, reject });
-      // Send one request per line to the daemon.
-      process.stdin.write(`${payload}\n`, "utf8", (err) => {
-        if (err) {
-          this.pending.delete(id);
-          reject(err);
-        }
-      });
-    });
-  }
-
-  notifyUpdate(file: string, text: string, version: number): void {
-    this.ensureProcess();
-    const process = this.process;
-    if (!process || !process.stdin) {
-      return;
-    }
-    const payload = JSON.stringify({
-      type: "update",
-      file,
-      version,
-      textBase64: Buffer.from(text, "utf8").toString("base64"),
-    });
-    // Best-effort update; no response expected.
-    process.stdin.write(`${payload}\n`, "utf8");
-  }
-
-  private ensureProcess(): void {
-    if (this.process) {
-      return;
-    }
-    // Start the Java daemon once and reuse it.
-    const classPath = [this.settings.jarPath, this.settings.classpath].join(
-      path.delimiter,
-    );
-    const child = spawn(
-      "java",
-      ["-cp", classPath, "UmpleGoToDefJson", "--server"],
-      {
-        stdio: ["pipe", "pipe", "pipe"],
-      },
-    );
-    this.process = child;
-    child.stdout?.setEncoding("utf8");
-    child.stdout?.on("data", (chunk) => {
-      this.buffer += chunk;
-      this.flushBuffer();
-    });
-    child.stderr?.on("data", (chunk) => {
-      connection.console.warn(`Go-to-definition daemon stderr: ${chunk}`);
-    });
-    child.on("exit", (code) => {
-      const error = new Error(`Go-to-definition daemon exited: ${code}`);
-      for (const entry of this.pending.values()) {
-        entry.reject(error);
-      }
-      this.pending.clear();
-      this.process = null;
-    });
-  }
-
-  private flushBuffer(): void {
-    let newlineIndex = this.buffer.indexOf("\n");
-    while (newlineIndex !== -1) {
-      const line = this.buffer.slice(0, newlineIndex).trim();
-      this.buffer = this.buffer.slice(newlineIndex + 1);
-      if (line) {
-        this.handleResponseLine(line);
-      }
-      newlineIndex = this.buffer.indexOf("\n");
-    }
-  }
-
-  private handleResponseLine(line: string): void {
-    let parsed: GoToDefServerResponse | null = null;
-    try {
-      parsed = JSON.parse(line) as GoToDefServerResponse;
-    } catch {
-      connection.console.warn(
-        `Go-to-definition daemon sent invalid JSON: ${line}`,
-      );
-      return;
-    }
-    const pending = this.pending.get(parsed.id);
-    if (!pending) {
-      return;
-    }
-    this.pending.delete(parsed.id);
-    pending.resolve(parsed);
-  }
-}
-
 function parseUmpleDiagnostics(
   stderr: string,
   stdout: string,
@@ -1114,29 +826,6 @@ type UmpleJsonResult = {
   line?: string;
   filename?: string;
   message?: string;
-};
-
-type GoToDefResult = {
-  found: boolean;
-  kind?: string;
-  name?: string;
-  file?: string;
-  line?: number;
-  col?: number;
-};
-
-type GoToDefServerResponse = GoToDefResult & { id: number };
-
-type ShadowWorkspace = {
-  filePath: string;
-  shadowRoot: string;
-  workspaceRoot: string;
-};
-
-type ShadowWorkspaceState = {
-  shadowRoot: string;
-  workspaceRoot: string;
-  docVersions: Map<string, number>;
 };
 
 function parseUmpleJsonDiagnostics(
@@ -1207,68 +896,6 @@ function parseUmpleJsonDiagnostics(
   }
 }
 
-function parseGoToDefOutput(stdout: string): GoToDefResult | null {
-  const trimmed = stdout.trim();
-  if (!trimmed) {
-    return null;
-  }
-  try {
-    const parsed = JSON.parse(trimmed) as GoToDefResult;
-    if (typeof parsed?.found !== "boolean") {
-      return null;
-    }
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-function resolveDefinitionUri(
-  def: GoToDefResult,
-  document: TextDocument,
-  tempFile: string,
-  shadowRoot?: string,
-  workspaceRoot?: string,
-): string {
-  const docPath = getDocumentFilePath(document);
-  const docDir = docPath ? path.dirname(docPath) : null;
-  const rawFile = def.file?.trim();
-  let resolvedPath: string | null = null;
-
-  if (!rawFile) {
-    resolvedPath = docPath;
-  } else if (path.isAbsolute(rawFile)) {
-    resolvedPath = rawFile;
-  } else if (docDir) {
-    resolvedPath = path.join(docDir, rawFile);
-  } else {
-    resolvedPath = rawFile;
-  }
-
-  if (!resolvedPath) {
-    return document.uri;
-  }
-
-  const tempBase = path.basename(tempFile);
-  const resolvedBase = path.basename(resolvedPath);
-  if (resolvedPath === tempFile || resolvedBase === tempBase) {
-    return document.uri;
-  }
-  if (docPath && resolvedPath === docPath) {
-    return document.uri;
-  }
-
-  if (shadowRoot && workspaceRoot) {
-    const relative = path.relative(shadowRoot, resolvedPath);
-    if (!relative.startsWith("..") && !path.isAbsolute(relative)) {
-      resolvedPath = path.join(workspaceRoot, relative);
-      return pathToFileURL(resolvedPath).toString();
-    }
-  }
-
-  return pathToFileURL(resolvedPath).toString();
-}
-
 function resolveWorkspaceRoots(params: InitializeParams): string[] {
   const roots: string[] = [];
   if (Array.isArray(params.workspaceFolders)) {
@@ -1294,186 +921,6 @@ function resolveWorkspaceRoots(params: InitializeParams): string[] {
     }
   }
   return roots;
-}
-
-async function getOrCreateShadowWorkspace(
-  document: TextDocument,
-  label: string,
-): Promise<ShadowWorkspace | null> {
-  const docPath = getDocumentFilePath(document);
-  if (!docPath) {
-    return null;
-  }
-  const workspaceRoot = getWorkspaceRootForPath(docPath);
-  if (!workspaceRoot) {
-    return null;
-  }
-
-  const state = await getOrCreateShadowState(workspaceRoot, label);
-
-  await overlayOpenDocumentsCached(
-    workspaceRoot,
-    state.shadowRoot,
-    state.docVersions,
-  );
-
-  const relative = path.relative(workspaceRoot, docPath);
-  const filePath = path.join(state.shadowRoot, relative);
-  return {
-    filePath,
-    shadowRoot: state.shadowRoot,
-    workspaceRoot,
-  };
-}
-
-async function getOrCreateShadowState(
-  workspaceRoot: string,
-  label: string,
-): Promise<ShadowWorkspaceState> {
-  let state = shadowWorkspaces.get(workspaceRoot);
-  if (!state) {
-    const shadowRoot = await fs.promises.mkdtemp(
-      path.join(os.tmpdir(), `umple-shadow-${label}-`),
-    );
-    await mirrorWorkspaceUmpleFiles(workspaceRoot, shadowRoot);
-    state = {
-      shadowRoot,
-      workspaceRoot,
-      docVersions: new Map(),
-    };
-    shadowWorkspaces.set(workspaceRoot, state);
-  }
-  return state;
-}
-
-async function updateShadowDocument(
-  document: TextDocument,
-  label: string,
-): Promise<string | null> {
-  // Keep a shadow copy of the current document on disk.
-  const docPath = getDocumentFilePath(document);
-  if (!docPath) {
-    return null;
-  }
-  const workspaceRoot = getWorkspaceRootForPath(docPath);
-  if (!workspaceRoot) {
-    return null;
-  }
-  const state = await getOrCreateShadowState(workspaceRoot, label);
-  const cachedVersion = state.docVersions.get(document.uri);
-  if (cachedVersion === document.version) {
-    const relative = path.relative(workspaceRoot, docPath);
-    return path.join(state.shadowRoot, relative);
-  }
-
-  const relative = path.relative(workspaceRoot, docPath);
-  const target = path.join(state.shadowRoot, relative);
-  await fs.promises.mkdir(path.dirname(target), { recursive: true });
-  // Remove any existing symlink before writing, otherwise we'd write through
-  // the symlink to the original file!
-  await fs.promises.rm(target, { force: true });
-  let text = document.getText();
-  if (!text.endsWith("\n\n")) {
-    text = text.replace(/\n?$/, "\n\n");
-  }
-  await fs.promises.writeFile(target, text, "utf8");
-  state.docVersions.set(document.uri, document.version);
-  return target;
-}
-
-function getWorkspaceRootForPath(filePath: string): string | null {
-  for (const root of workspaceRoots) {
-    if (isPathInside(filePath, root)) {
-      return root;
-    }
-  }
-  return null;
-}
-
-function isPathInside(filePath: string, root: string): boolean {
-  const relative = path.relative(root, filePath);
-  return !relative.startsWith("..") && !path.isAbsolute(relative);
-}
-
-async function overlayOpenDocumentsCached(
-  workspaceRoot: string,
-  shadowRoot: string,
-  docVersions: Map<string, number>,
-): Promise<void> {
-  for (const doc of documents.values()) {
-    const docPath = getDocumentFilePath(doc);
-    if (!docPath || !isPathInside(docPath, workspaceRoot)) {
-      continue;
-    }
-    const currentVersion = doc.version;
-    const cachedVersion = docVersions.get(doc.uri);
-    if (cachedVersion === currentVersion) {
-      continue;
-    }
-    const relative = path.relative(workspaceRoot, docPath);
-    const target = path.join(shadowRoot, relative);
-    await fs.promises.mkdir(path.dirname(target), { recursive: true });
-    await fs.promises.rm(target, { force: true });
-    let text = doc.getText();
-    if (!text.endsWith("\n\n")) {
-      text = text.replace(/\n?$/, "\n\n");
-    }
-    await fs.promises.writeFile(target, text, "utf8");
-    docVersions.set(doc.uri, currentVersion);
-  }
-}
-
-async function mirrorWorkspaceUmpleFiles(
-  workspaceRoot: string,
-  shadowRoot: string,
-): Promise<void> {
-  await walkUmpleFiles(workspaceRoot, async (filePath) => {
-    const relative = path.relative(workspaceRoot, filePath);
-    const target = path.join(shadowRoot, relative);
-    await fs.promises.mkdir(path.dirname(target), { recursive: true });
-    try {
-      await fs.promises.symlink(filePath, target);
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code === "EEXIST") {
-        return;
-      }
-      if (code === "EPERM" || code === "EACCES") {
-        await fs.promises.copyFile(filePath, target);
-        return;
-      }
-      throw error;
-    }
-  });
-}
-
-const SKIP_DIRS = new Set([
-  ".git",
-  "node_modules",
-  "out",
-  "dist",
-  "build",
-  ".vscode",
-  ".idea",
-]);
-
-async function walkUmpleFiles(
-  dir: string,
-  onFile: (filePath: string) => Promise<void>,
-): Promise<void> {
-  const entries = await fs.promises.readdir(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    if (entry.isDirectory()) {
-      if (SKIP_DIRS.has(entry.name)) {
-        continue;
-      }
-      await walkUmpleFiles(path.join(dir, entry.name), onFile);
-      continue;
-    }
-    if (entry.isFile() && entry.name.endsWith(".ump")) {
-      await onFile(path.join(dir, entry.name));
-    }
-  }
 }
 
 async function writeTempUmpleFile(
