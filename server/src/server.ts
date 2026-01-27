@@ -233,6 +233,20 @@ connection.onDefinition(async (params) => {
 
   // Fast path: try symbol index first, filtered by reachable files
   if (symbolIndexReady) {
+    // Skip if cursor is inside a comment
+    const docPath = getDocumentFilePath(document);
+    if (
+      docPath &&
+      symbolIndex.isPositionInComment(
+        docPath,
+        document.getText(),
+        params.position.line,
+        params.position.character,
+      )
+    ) {
+      return [];
+    }
+
     const word = getWordAtPosition(document, params.position);
     if (word) {
       const allSymbols = symbolIndex.findDefinition(word);

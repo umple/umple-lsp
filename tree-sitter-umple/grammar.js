@@ -66,11 +66,16 @@ module.exports = grammar({
         $.depend_statement,
         $.singleton,
         $.attribute_declaration,
+        $.constraint,
         $.association_inline,
         $.state_machine,
         $.method_declaration,
         $.before_after,
       ),
+
+    // Constraints: [pre: condition], [name != ""], etc.
+    constraint: ($) =>
+      seq("[", optional(seq($.identifier, ":")), /[^\]]+/, "]", optional(";")),
 
     // =====================
     // INTERFACE DEFINITION

@@ -1,5 +1,5 @@
 ; Tree-sitter highlight queries for Umple
-; See :h treesitter-highlight-groups for standard capture names
+; Only uses node types that exist in the grammar
 
 ; =============
 ; KEYWORDS
@@ -50,14 +50,12 @@
 [
   "before"
   "after"
-  "mixset"
 ] @keyword.directive
 
 [
   "entry"
   "exit"
   "do"
-  "trace"
 ] @keyword
 
 [
@@ -83,24 +81,12 @@
 (external_definition
   name: (identifier) @type.definition)
 
-(type
+(type_name
   (qualified_name) @type)
 
-(parameterized_type
-  (identifier) @type)
-
-(inline_association
-  right_type: (identifier) @type)
-
-(association_member
-  left_type: (identifier) @type)
-
-(association_member
-  right_type: (identifier) @type)
-
 (isa_declaration
-  (identifier_list
-    (identifier) @type))
+  (type_list
+    (type_name) @type))
 
 ; Built-in types
 ((identifier) @type.builtin
@@ -124,41 +110,21 @@
 (method_signature
   name: (identifier) @function)
 
-(event
+(event_spec
   (identifier) @function.method)
 
 ; =============
 ; VARIABLES & PARAMETERS
 ; =============
 
-(attribute
+(attribute_declaration
   name: (identifier) @variable.member)
 
-(const_attribute
+(const_declaration
   name: (identifier) @constant)
 
-(derived_attribute
-  name: (identifier) @variable.member)
-
-(parameter
+(param
   name: (identifier) @variable.parameter)
-
-; Role names in associations
-(inline_association
-  left_role: (identifier) @variable.member)
-
-(inline_association
-  right_role: (identifier) @variable.member)
-
-(association_member
-  left_role: (identifier) @variable.member)
-
-(association_member
-  right_role: (identifier) @variable.member)
-
-; Enum values
-(enum_values
-  (identifier) @constant)
 
 ; =============
 ; STATE MACHINES
@@ -184,7 +150,7 @@
   path: (_) @string.special.path)
 
 (depend_statement
-  package: (qualified_name) @module)
+  package: (_) @module)
 
 ; =============
 ; OPERATORS & PUNCTUATION
@@ -205,37 +171,21 @@
   ";"
   ","
   "."
-  ":"
 ] @punctuation.delimiter
 
 [
   "{"
   "}"
-] @punctuation.bracket
-
-[
   "("
   ")"
-] @punctuation.bracket
-
-[
   "["
   "]"
-] @punctuation.bracket
-
-[
   "<"
   ">"
 ] @punctuation.bracket
 
 ; Multiplicity
 (multiplicity) @number
-
-(multiplicity_part) @number
-
-"*" @number
-
-".." @operator
 
 ; =============
 ; LITERALS
@@ -245,9 +195,11 @@
 
 (string_literal) @string
 
-(boolean_literal) @boolean
+(boolean) @boolean
 
-(null_literal) @constant.builtin
+"null" @constant.builtin
+"true" @boolean
+"false" @boolean
 
 ; =============
 ; COMMENTS
@@ -262,13 +214,3 @@
 ; =============
 
 (constraint) @string.special
-
-(constraint_name
-  (identifier) @label)
-
-; =============
-; LANGUAGE TAGS (Java, Python, etc.)
-; =============
-
-(method_declaration
-  language: (identifier) @attribute)
