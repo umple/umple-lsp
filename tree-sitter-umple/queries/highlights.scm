@@ -140,6 +140,33 @@
   target: (identifier) @constant)
 
 ; =============
+; ASSOCIATIONS
+; =============
+
+; Inline association type (e.g., "1 -- * Address addresses;")
+(association_inline
+  right_type: (identifier) @type)
+
+(association_inline
+  right_role: (identifier) @variable.member)
+
+(association_inline
+  left_role: (identifier) @variable.member)
+
+; Standalone association types (e.g., "0..1 Mentor -- * Student;")
+(association_member
+  left_type: (identifier) @type)
+
+(association_member
+  right_type: (identifier) @type)
+
+(association_member
+  left_role: (identifier) @variable.member)
+
+(association_member
+  right_role: (identifier) @variable.member)
+
+; =============
 ; NAMESPACE & IMPORTS
 ; =============
 

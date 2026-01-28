@@ -23,9 +23,6 @@
 ; States can create nested scopes
 (state) @local.scope
 
-; Code blocks create scopes
-(code_block_content) @local.scope
-
 ; =============
 ; DEFINITIONS
 ; =============
@@ -47,11 +44,11 @@
   name: (identifier) @local.definition.type)
 
 ; Attribute names are definitions
-(attribute
+(attribute_declaration
   name: (identifier) @local.definition.field)
 
-; Const attribute names are definitions
-(const_attribute
+; Const names are definitions
+(const_declaration
   name: (identifier) @local.definition.constant)
 
 ; Method names are definitions
@@ -59,7 +56,7 @@
   name: (identifier) @local.definition.function)
 
 ; Method parameters are definitions
-(parameter
+(param
   name: (identifier) @local.definition.parameter)
 
 ; State machine names are definitions
@@ -70,30 +67,26 @@
 (state
   name: (identifier) @local.definition.constant)
 
-; Enum values are definitions
-(enum_values
-  (identifier) @local.definition.constant)
-
 ; =============
 ; REFERENCES
 ; =============
 
 ; isA references types
 (isa_declaration
-  (identifier_list
-    (identifier) @local.reference))
+  (type_list
+    (type_name
+      (qualified_name) @local.reference)))
 
 ; Type usage references types
-(type
-  (qualified_name
-    (identifier) @local.reference))
+(type_name
+  (qualified_name) @local.reference)
 
 ; Transition targets reference states
 (transition
   target: (identifier) @local.reference)
 
-; Association right type references classes
-(inline_association
+; Inline association references classes
+(association_inline
   right_type: (identifier) @local.reference)
 
 ; Association member types reference classes
