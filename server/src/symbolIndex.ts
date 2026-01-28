@@ -37,6 +37,11 @@ export interface SymbolEntry {
   parent?: string; // For nested symbols (attributes in class, states in statemachine)
 }
 
+export interface UseStatementWithPosition {
+  path: string; // Original path from use statement (e.g., "Teacher" or "Teacher.ump")
+  line: number; // 0-indexed line number
+}
+
 export interface FileIndex {
   symbols: SymbolEntry[];
   tree: Tree | null;
@@ -338,6 +343,64 @@ export class SymbolIndex {
 
     visit(tree.rootNode);
     return usePaths;
+  }
+
+  /**
+   * Extract use statement paths with their positions from a file using tree-sitter.
+   * @param filePath Path to the file
+   * @param content File content (optional, will be read from disk if not provided)
+   * @returns Array of use statements with path and line number
+   */
+  extractUseStatementsWithPositions(
+    filePath: string,
+    content?: string,
+  ): UseStatementWithPosition[] {
+    if (!this.initialized || !this.parser) {
+      return [];
+    }
+
+    const fileContent = content ?? this.readFileSafe(filePath);
+    if (!fileContent) {
+      return [];
+    }
+
+    // Use cached tree if available and content matches
+    const fileIndex = this.files.get(filePath);
+    let tree: Tree;
+    if (fileIndex?.tree && !content) {
+      tree = fileIndex.tree;
+    } else {
+      tree = this.parser.parse(fileContent);
+    }
+
+    const useStatements: UseStatementWithPosition[] = [];
+    const visit = (node: SyntaxNode) => {
+      if (node.type === "use_statement") {
+        const pathNode = node.childForFieldName("path");
+        if (pathNode) {
+          let pathText = pathNode.text;
+          // Remove quotes if present
+          if (
+            (pathText.startsWith('"') && pathText.endsWith('"')) ||
+            (pathText.startsWith("'") && pathText.endsWith("'"))
+          ) {
+            pathText = pathText.slice(1, -1);
+          }
+          useStatements.push({
+            path: pathText,
+            line: node.startPosition.row,
+          });
+        }
+      } else {
+        for (let i = 0; i < node.childCount; i++) {
+          const child = node.child(i);
+          if (child) visit(child);
+        }
+      }
+    };
+
+    visit(tree.rootNode);
+    return useStatements;
   }
 
   /**

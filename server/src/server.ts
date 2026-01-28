@@ -21,16 +21,59 @@ import {
 } from "vscode-languageserver/node";
 import { TextDocument } from "vscode-languageserver-textdocument";
 import { ALL_KEYWORDS, KEYWORDS } from "./keywords";
-import { symbolIndex, SymbolEntry } from "./symbolIndex";
+import {
+  symbolIndex,
+  SymbolEntry,
+  UseStatementWithPosition,
+} from "./symbolIndex";
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new Map<string, TextDocument>();
 const pendingValidations = new Map<string, NodeJS.Timeout>();
+const pendingIndexUpdates = new Map<string, NodeJS.Timeout>();
 const modelCache = new Map<
   string,
   { version: number; items: CompletionItem[] }
 >();
 let workspaceRoots: string[] = [];
+
+/**
+ * Normalize a file URI to a consistent key for the documents map.
+ * Converts URI to file path and back to ensure consistent encoding.
+ */
+function normalizeUri(uri: string): string {
+  if (!uri.startsWith("file:")) {
+    return uri;
+  }
+  try {
+    // Convert to path and back to normalize encoding
+    const filePath = fileURLToPath(uri);
+    return pathToFileURL(filePath).toString();
+  } catch {
+    return uri;
+  }
+}
+
+/**
+ * Get a document by URI, using normalized lookup.
+ */
+function getDocument(uri: string): TextDocument | undefined {
+  return documents.get(normalizeUri(uri));
+}
+
+/**
+ * Set a document by URI, using normalized key.
+ */
+function setDocument(uri: string, document: TextDocument): void {
+  documents.set(normalizeUri(uri), document);
+}
+
+/**
+ * Delete a document by URI, using normalized key.
+ */
+function deleteDocument(uri: string): void {
+  documents.delete(normalizeUri(uri));
+}
 
 let umpleSyncJarPath: string | undefined;
 let umpleSyncHost = "localhost";
@@ -146,7 +189,7 @@ connection.onDidOpenTextDocument((params) => {
     params.textDocument.version,
     params.textDocument.text,
   );
-  documents.set(params.textDocument.uri, document);
+  setDocument(params.textDocument.uri, document);
   scheduleValidation(document);
 
   // Update symbol index
@@ -161,7 +204,7 @@ connection.onDidOpenTextDocument((params) => {
 });
 
 connection.onDidChangeTextDocument((params) => {
-  const document = documents.get(params.textDocument.uri);
+  const document = getDocument(params.textDocument.uri);
   if (!document) {
     return;
   }
@@ -170,29 +213,37 @@ connection.onDidChangeTextDocument((params) => {
     params.contentChanges,
     params.textDocument.version,
   );
-  documents.set(params.textDocument.uri, updated);
-  modelCache.delete(params.textDocument.uri);
+  setDocument(params.textDocument.uri, updated);
+  modelCache.delete(normalizeUri(params.textDocument.uri));
   scheduleValidation(updated);
 
-  // Update symbol index
-  if (symbolIndexReady) {
-    try {
-      const filePath = fileURLToPath(params.textDocument.uri);
-      symbolIndex.updateFile(filePath, updated.getText());
-    } catch {
-      // Ignore errors for non-file URIs
-    }
-  }
+  // Update symbol index (debounced)
+  scheduleIndexUpdate(params.textDocument.uri, updated);
+
+  // Re-validate other open documents that might depend on this file
+  scheduleDependentValidation(params.textDocument.uri);
 });
 
 connection.onDidCloseTextDocument((params) => {
-  documents.delete(params.textDocument.uri);
-  modelCache.delete(params.textDocument.uri);
+  const normalizedUri = normalizeUri(params.textDocument.uri);
+  deleteDocument(params.textDocument.uri);
+  modelCache.delete(normalizedUri);
+  // Cancel any pending updates for this document
+  const pendingIndex = pendingIndexUpdates.get(normalizedUri);
+  if (pendingIndex) {
+    clearTimeout(pendingIndex);
+    pendingIndexUpdates.delete(normalizedUri);
+  }
+  const pendingValidation = pendingValidations.get(normalizedUri);
+  if (pendingValidation) {
+    clearTimeout(pendingValidation);
+    pendingValidations.delete(normalizedUri);
+  }
   connection.sendDiagnostics({ uri: params.textDocument.uri, diagnostics: [] });
 });
 
 connection.onCompletion(async (params): Promise<CompletionItem[]> => {
-  const document = documents.get(params.textDocument.uri);
+  const document = getDocument(params.textDocument.uri);
   if (!document) {
     return KEYWORD_COMPLETIONS;
   }
@@ -221,7 +272,7 @@ connection.onCompletion(async (params): Promise<CompletionItem[]> => {
 });
 
 connection.onDefinition(async (params) => {
-  const document = documents.get(params.textDocument.uri);
+  const document = getDocument(params.textDocument.uri);
   if (!document) {
     return [];
   }
@@ -307,6 +358,106 @@ function scheduleValidation(document: TextDocument): void {
   pendingValidations.set(document.uri, handle);
 }
 
+/**
+ * Schedule a debounced symbol index update.
+ * This avoids re-parsing the file on every keystroke.
+ */
+function scheduleIndexUpdate(uri: string, document: TextDocument): void {
+  if (!symbolIndexReady) {
+    return;
+  }
+
+  const existing = pendingIndexUpdates.get(uri);
+  if (existing) {
+    clearTimeout(existing);
+  }
+
+  const handle = setTimeout(() => {
+    pendingIndexUpdates.delete(uri);
+    try {
+      const filePath = fileURLToPath(uri);
+      symbolIndex.updateFile(filePath, document.getText());
+    } catch {
+      // Ignore errors for non-file URIs
+    }
+  }, 200); // Slightly shorter than validation since it's faster
+
+  pendingIndexUpdates.set(uri, handle);
+}
+
+// Debounce key for dependent validation
+const dependentValidationKey = "__dependent__";
+
+/**
+ * Schedule re-validation for open documents that actually import the changed file.
+ * Uses a longer debounce time to avoid excessive re-validation.
+ */
+function scheduleDependentValidation(changedUri: string): void {
+  // Clear any existing dependent validation timer
+  const existing = pendingValidations.get(dependentValidationKey);
+  if (existing) {
+    clearTimeout(existing);
+  }
+
+  const normalizedChangedUri = normalizeUri(changedUri);
+
+  const handle = setTimeout(() => {
+    pendingValidations.delete(dependentValidationKey);
+
+    // Get the changed file's basename for matching
+    let changedFilename: string | null = null;
+    try {
+      const changedPath = fileURLToPath(changedUri);
+      changedFilename = path.basename(changedPath);
+    } catch {
+      return; // Can't process non-file URIs
+    }
+
+    // Re-validate open documents that import the changed file
+    for (const [uri, doc] of documents) {
+      if (uri === normalizedChangedUri || !uri.endsWith(".ump")) {
+        continue;
+      }
+
+      // Check if this document imports the changed file
+      if (documentImportsFile(doc, changedFilename)) {
+        scheduleValidation(doc);
+      }
+    }
+  }, 500); // Longer debounce for dependent files
+
+  pendingValidations.set(dependentValidationKey, handle);
+}
+
+/**
+ * Check if a document imports a specific file (directly or transitively).
+ */
+function documentImportsFile(
+  document: TextDocument,
+  targetFilename: string,
+): boolean {
+  const docPath = getDocumentFilePath(document);
+  if (!docPath) {
+    return false;
+  }
+
+  const docDir = path.dirname(docPath);
+  const reachableFiles = collectReachableFiles(
+    docPath,
+    document.getText(),
+    docDir,
+  );
+
+  // Check if any reachable file matches the target filename
+  for (const filePath of reachableFiles) {
+    if (path.basename(filePath) === targetFilename) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 async function validateTextDocument(document: TextDocument): Promise<void> {
   const jarPath = resolveJarPath();
   if (!jarPath) {
@@ -353,24 +504,126 @@ async function runUmpleSyncAndParseDiagnostics(
   jarPath: string,
   document: TextDocument,
 ): Promise<Diagnostic[]> {
-  const tempFileInfo = await writeTempUmpleFile(document, "diag");
-  const tempFile = tempFileInfo.filePath;
-
-  let text = document.getText();
-  // Umple needs two trailing newlines to report end-of-file errors on the last line.
-  if (!text.endsWith("\n\n")) {
-    text = text.replace(/\n?$/, "\n\n");
+  const docPath = getDocumentFilePath(document);
+  if (!docPath) {
+    return [];
   }
-  await fs.promises.writeFile(tempFile, text, "utf8");
+
+  // Create shadow workspace with all unsaved documents
+  const shadow = await createShadowWorkspace(docPath);
+  if (!shadow) {
+    return [];
+  }
 
   try {
-    const commandLine = `-generate nothing ${formatUmpleArg(tempFile)}`;
+    // Write current document to shadow workspace with trailing newlines
+    let text = document.getText();
+    if (!text.endsWith("\n\n")) {
+      text = text.replace(/\n?$/, "\n\n");
+    }
+    await fs.promises.writeFile(shadow.targetFile, text, "utf8");
+
+    const commandLine = `-generate nothing ${formatUmpleArg(shadow.targetFile)}`;
     const { stdout, stderr } = await sendUmpleSyncCommand(jarPath, commandLine);
-    const tempFilename = path.basename(tempFile);
-    return parseUmpleDiagnostics(stderr, stdout, document, tempFilename);
+    const tempFilename = path.basename(shadow.targetFile);
+    const documentDir = getDocumentDirectory(document);
+    return parseUmpleDiagnostics(
+      stderr,
+      stdout,
+      document,
+      tempFilename,
+      documentDir,
+    );
   } finally {
-    await tempFileInfo.cleanup();
+    await shadow.cleanup();
   }
+}
+
+interface ShadowWorkspace {
+  shadowDir: string;
+  targetFile: string; // Path to the main document in shadow workspace
+  cleanup: () => Promise<void>;
+}
+
+/**
+ * Create a shadow workspace that mirrors the document's directory structure
+ * with unsaved document content overlaid on top of symlinked files.
+ */
+async function createShadowWorkspace(
+  documentPath: string,
+): Promise<ShadowWorkspace | null> {
+  const documentDir = path.dirname(documentPath);
+  const documentName = path.basename(documentPath);
+
+  // Create shadow directory
+  const shadowDir = await fs.promises.mkdtemp(
+    path.join(os.tmpdir(), "umple-shadow-"),
+  );
+
+  try {
+    // Find all .ump files in the document's directory and subdirectories
+    const umpFiles = findUmpFilesSync(documentDir);
+
+    // Create directory structure and symlink/copy files
+    for (const filePath of umpFiles) {
+      const relativePath = path.relative(documentDir, filePath);
+      const shadowPath = path.join(shadowDir, relativePath);
+      const shadowFileDir = path.dirname(shadowPath);
+
+      // Create directory structure
+      await fs.promises.mkdir(shadowFileDir, { recursive: true });
+
+      // Check if this file is open in the editor with unsaved changes
+      const fileUri = pathToFileURL(filePath).toString();
+      const openDoc = getDocument(fileUri);
+
+      if (openDoc) {
+        // Write unsaved content
+        await fs.promises.writeFile(shadowPath, openDoc.getText(), "utf8");
+      } else {
+        // Symlink to original file
+        await fs.promises.symlink(filePath, shadowPath);
+      }
+    }
+
+    const targetFile = path.join(shadowDir, documentName);
+
+    return {
+      shadowDir,
+      targetFile,
+      cleanup: async () => {
+        await fs.promises.rm(shadowDir, { recursive: true, force: true });
+      },
+    };
+  } catch (error) {
+    // Cleanup on error
+    await fs.promises.rm(shadowDir, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+/**
+ * Synchronously find all .ump files in a directory (recursive).
+ */
+function findUmpFilesSync(dir: string): string[] {
+  const results: string[] = [];
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      // Skip hidden files/directories and the shadow directory itself
+      if (entry.name.startsWith(".")) continue;
+
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        results.push(...findUmpFilesSync(fullPath));
+      } else if (entry.isFile() && entry.name.endsWith(".ump")) {
+        results.push(fullPath);
+      }
+    }
+  } catch {
+    // Ignore permission errors, etc.
+  }
+  return results;
 }
 
 async function sendUmpleSyncCommand(
@@ -598,11 +851,13 @@ function parseUmpleDiagnostics(
   stdout: string,
   document: TextDocument,
   tempFilename: string,
+  documentDir: string | null,
 ): Diagnostic[] {
   const jsonDiagnostics = parseUmpleJsonDiagnostics(
     stderr,
     document,
     tempFilename,
+    documentDir,
   );
   if (jsonDiagnostics.length === 0 && stdout.includes("Success")) {
     connection.console.info("Umple compile succeeded.");
@@ -620,10 +875,113 @@ type UmpleJsonResult = {
   message?: string;
 };
 
+/**
+ * Build a map of direct import filename → use statement line number.
+ * Also builds a transitive map: direct filename → set of all transitive filenames.
+ */
+function buildImportMaps(
+  useStatements: UseStatementWithPosition[],
+  documentDir: string,
+): {
+  directImports: Map<string, number>;
+  transitiveMap: Map<string, Set<string>>;
+} {
+  const directImports = new Map<string, number>();
+  const transitiveMap = new Map<string, Set<string>>();
+
+  for (const useStmt of useStatements) {
+    // Resolve the use path to a filename
+    let resolvedPath = useStmt.path;
+    if (!path.isAbsolute(resolvedPath)) {
+      resolvedPath = path.resolve(documentDir, resolvedPath);
+    }
+    if (!resolvedPath.endsWith(".ump")) {
+      resolvedPath += ".ump";
+    }
+    const filename = path.basename(resolvedPath);
+
+    // Map direct import filename to line
+    directImports.set(filename, useStmt.line);
+
+    // Collect transitive imports for this direct import
+    const transitiveFiles = new Set<string>();
+    transitiveFiles.add(filename); // Include the direct import itself
+    collectTransitiveFilenames(resolvedPath, transitiveFiles);
+    transitiveMap.set(filename, transitiveFiles);
+  }
+
+  return { directImports, transitiveMap };
+}
+
+/**
+ * Recursively collect all filenames transitively imported by a file.
+ */
+function collectTransitiveFilenames(
+  filePath: string,
+  collected: Set<string>,
+  visited: Set<string> = new Set(),
+): void {
+  const normalizedPath = path.normalize(filePath);
+  if (visited.has(normalizedPath)) {
+    return; // Avoid cycles
+  }
+  visited.add(normalizedPath);
+
+  if (!fs.existsSync(filePath)) {
+    return;
+  }
+
+  try {
+    const content = fs.readFileSync(filePath, "utf8");
+    const fileDir = path.dirname(filePath);
+    const useStatements = symbolIndex.extractUseStatements(filePath, content);
+
+    for (const usePath of useStatements) {
+      let resolvedPath = usePath;
+      if (!path.isAbsolute(resolvedPath)) {
+        resolvedPath = path.resolve(fileDir, resolvedPath);
+      }
+      if (!resolvedPath.endsWith(".ump")) {
+        resolvedPath += ".ump";
+      }
+      const filename = path.basename(resolvedPath);
+      collected.add(filename);
+      collectTransitiveFilenames(resolvedPath, collected, visited);
+    }
+  } catch {
+    // Ignore read errors
+  }
+}
+
+/**
+ * Find the use statement line for an error from an imported file.
+ * Returns the line number if found, or undefined if the error doesn't match any import.
+ */
+function findUseLineForError(
+  errorFilename: string,
+  directImports: Map<string, number>,
+  transitiveMap: Map<string, Set<string>>,
+): number | undefined {
+  // Check if it's a direct import
+  if (directImports.has(errorFilename)) {
+    return directImports.get(errorFilename);
+  }
+
+  // Check transitive imports
+  for (const [directFilename, transitiveFiles] of transitiveMap) {
+    if (transitiveFiles.has(errorFilename)) {
+      return directImports.get(directFilename);
+    }
+  }
+
+  return undefined;
+}
+
 function parseUmpleJsonDiagnostics(
   stderr: string,
   document: TextDocument,
   tempFilename: string,
+  documentDir: string | null,
 ): Diagnostic[] {
   const trimmed = stderr.trim();
   if (!trimmed) {
@@ -644,26 +1002,68 @@ function parseUmpleJsonDiagnostics(
     const lines = document.getText().split(/\r?\n/);
     const diagnostics: Diagnostic[] = [];
 
-    for (const result of parsed.results) {
-      // Only include errors from the temp file (current document)
-      // Skip errors from imported files (via use statements)
-      if (result.filename && result.filename !== tempFilename) {
-        continue;
-      }
+    // Build import maps for mapping imported file errors to use statement lines
+    const docPath = getDocumentFilePath(document);
+    let directImports = new Map<string, number>();
+    let transitiveMap = new Map<string, Set<string>>();
 
-      const lineNumber = Math.max(Number(result.line ?? "1") - 1, 0);
-      const lineText = lines[lineNumber] ?? "";
-      const firstNonSpace = lineText.search(/\S/);
-      const startChar = firstNonSpace === -1 ? 0 : firstNonSpace;
+    if (docPath && documentDir) {
+      const useStatements = symbolIndex.extractUseStatementsWithPositions(
+        docPath,
+        document.getText(),
+      );
+      const maps = buildImportMaps(useStatements, documentDir);
+      directImports = maps.directImports;
+      transitiveMap = maps.transitiveMap;
+    }
+
+    for (const result of parsed.results) {
       const severityValue = Number(result.severity ?? "3");
       const severity =
         severityValue > 2
           ? DiagnosticSeverity.Warning
           : DiagnosticSeverity.Error;
 
+      // Check if error is from an imported file
+      if (result.filename && result.filename !== tempFilename) {
+        // Find the use statement line for this imported file error
+        const useLine = findUseLineForError(
+          result.filename,
+          directImports,
+          transitiveMap,
+        );
+        if (useLine !== undefined) {
+          const useLineText = lines[useLine] ?? "";
+          const errorCode = result.errorCode
+            ? (severity === DiagnosticSeverity.Warning ? "W" : "E") +
+              result.errorCode
+            : "";
+          const message = errorCode
+            ? `In imported file (${result.filename}:${result.line}): ${errorCode}: ${result.message}`
+            : `In imported file (${result.filename}:${result.line}): ${result.message}`;
+
+          diagnostics.push({
+            severity,
+            range: Range.create(
+              Position.create(useLine, 0),
+              Position.create(useLine, useLineText.length),
+            ),
+            message,
+            source: "umple",
+          });
+        }
+        continue;
+      }
+
+      // Error in current file
+      const lineNumber = Math.max(Number(result.line ?? "1") - 1, 0);
+      const lineText = lines[lineNumber] ?? "";
+      const firstNonSpace = lineText.search(/\S/);
+      const startChar = firstNonSpace === -1 ? 0 : firstNonSpace;
+
       const details = [
         result.errorCode
-          ? (severity == DiagnosticSeverity.Warning ? "W" : "E") +
+          ? (severity === DiagnosticSeverity.Warning ? "W" : "E") +
             result.errorCode
           : undefined,
         result.message,

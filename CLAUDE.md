@@ -35,7 +35,8 @@ class GarageDoor {
   }
 }
 
-use "OtherFile.ump";         // Include another Umple file
+use "OtherFile.ump";         // Include another Umple file (semicolon optional)
+use AnotherFile.ump          // Also valid without quotes or semicolon
 ```
 
 ## Project Overview
@@ -70,6 +71,29 @@ npx tree-sitter build --wasm
 npx tree-sitter parse ../test/Student.ump
 ```
 
+**Files in tree-sitter-umple/:**
+
+| File | Type | Description |
+|------|------|-------------|
+| `grammar.js` | Manual | Grammar definition - edit this to change parsing rules |
+| `queries/highlights.scm` | Manual | Syntax highlighting queries |
+| `queries/locals.scm` | Manual | Scope and definition tracking |
+| `src/parser.c` | Generated | C parser (regenerate with `tree-sitter generate`) |
+| `src/grammar.json` | Generated | JSON representation of grammar |
+| `src/node-types.json` | Generated | All valid node types (useful for writing queries) |
+| `tree-sitter-umple.wasm` | Generated | WebAssembly parser (regenerate with `tree-sitter build --wasm`) |
+
+**Workflow after editing grammar.js:**
+
+```bash
+cd tree-sitter-umple
+npx tree-sitter generate      # Regenerate src/parser.c
+npx tree-sitter build --wasm  # Rebuild .wasm for LSP
+cd ..
+npm run compile               # Recompile TypeScript
+# In Neovim: :TSInstall umple  # Reinstall native parser
+```
+
 ## Testing
 
 No automated test framework is configured. Testing is done manually via VS Code's Extension Development Host:
@@ -92,10 +116,11 @@ Client (client/src/extension.ts)
 
 Tree-sitter Grammar (tree-sitter-umple/)
     │
-    ├─ grammar.js           → Grammar definition (manually written)
-    ├─ queries/highlights.scm → Syntax highlighting (manually written)
-    ├─ src/parser.c         → Generated parser
-    └─ tree-sitter-umple.wasm → WebAssembly parser for LSP
+    ├─ grammar.js              → Grammar definition (manual)
+    ├─ queries/highlights.scm  → Syntax highlighting (manual)
+    ├─ queries/locals.scm      → Scope tracking (manual)
+    ├─ src/parser.c            → Generated parser
+    └─ tree-sitter-umple.wasm  → WebAssembly parser for LSP
 ```
 
 ### Key Components
@@ -113,18 +138,11 @@ Tree-sitter Grammar (tree-sitter-umple/)
 
 - Parses `.ump` files incrementally using web-tree-sitter (WASM)
 - Maintains in-memory index of all symbol definitions (classes, interfaces, traits, enums, attributes, methods, state machines, states, associations)
+- Extracts `use` statements for transitive dependency resolution
 - Content hash caching for efficient re-indexing
 - Comment detection to prevent go-to-definition inside comments
 
 **Keywords (`server/src/keywords.ts`)**: Keyword database organized by context (topLevel, classLevel, statemachine, etc.) for context-aware completion.
-
-**Tree-sitter Grammar (`tree-sitter-umple/`)**: Custom tree-sitter grammar for Umple:
-
-- `grammar.js` - Grammar rules (manually written)
-- `queries/highlights.scm` - Syntax highlighting queries (manually written)
-- `queries/locals.scm` - Scope tracking (manually written)
-- `src/` - Generated parser files (auto-generated)
-- `tree-sitter-umple.wasm` - WebAssembly parser (auto-generated)
 
 ### External Dependencies
 
@@ -136,19 +154,32 @@ Tree-sitter Grammar (tree-sitter-umple/)
 The go-to-definition feature uses tree-sitter for fast, accurate symbol lookup:
 
 1. **Symbol Indexing**: On workspace open, all `.ump` files are parsed and symbols extracted
-2. **Transitive Use Resolution**: When validating, `use` statements are resolved transitively to find all dependent files
+2. **Transitive Use Resolution**: `use` statements are resolved transitively to find all dependent files
 3. **Scoped Lookup**: Go-to-definition only returns symbols from files reachable via `use` statements from the current file
-4. **Comment Detection**: Go-to-definition is disabled when cursor is inside a comment
+4. **Use Statement Navigation**: Go-to-definition on a `use` statement opens the referenced file
+5. **Comment Detection**: Go-to-definition is disabled when cursor is inside a comment
 
-### Diagnostics with Stub Insertion
+### Diagnostics
 
-For accurate diagnostics, the server replaces `use` statements with stub declarations:
+Diagnostics are provided via UmpleSync.jar, which runs as a socket server.
 
-1. Extracts `use` statements from the current file
-2. Recursively resolves transitive dependencies
-3. Collects class/interface/trait/enum symbols from all reachable files
-4. Replaces `use` statements with stub declarations (e.g., `external Foo {}`)
-5. Tracks line offset to adjust diagnostic line numbers back to original positions
+**Shadow Workspace**: For accurate cross-file diagnostics, the server creates a temporary shadow workspace that:
+1. Symlinks all `.ump` files from the document's directory
+2. Overlays unsaved document content from open editors
+3. Runs UmpleSync on the shadow workspace
+4. Cleans up after compilation
+
+This ensures diagnostics reflect unsaved changes across all open files.
+
+**Import Error Handling** (similar to clangd):
+- Errors in directly imported files appear on the `use` statement line
+- Errors in transitively imported files (A uses B, B uses C, C has error) appear on the direct `use` line (the `use B.ump` line in A)
+- Message format: `"In imported file (filename:line): error message"`
+
+**Dependent File Validation**:
+- When a file is modified, all open files that import it (directly or transitively) are automatically re-validated
+- Uses debouncing (500ms) to avoid excessive re-validation during rapid edits
+- Only re-validates files that actually depend on the changed file
 
 ## Configuration
 
@@ -162,6 +193,18 @@ Environment variable overrides: `UMPLESYNC_HOST`, `UMPLESYNC_PORT`, `UMPLESYNC_T
 ## Neovim Integration
 
 To use the tree-sitter grammar with Neovim:
+
+### How It Works
+
+Neovim's nvim-treesitter uses a naming convention to match parsers with filetypes:
+
+1. **Filetype**: When you open `.ump` file, Neovim sets `filetype=umple`
+2. **Parser**: nvim-treesitter looks for a parser named `umple`
+3. **Queries**: Loaded from `~/.local/share/nvim/queries/umple/` (or plugin directories)
+
+The parser name in your Neovim config (`parser_config.umple`) must match the query folder name.
+
+### Setup Steps
 
 1. Register the parser in your Neovim config:
 
@@ -179,6 +222,7 @@ parser_config.umple = {
 2. Symlink queries to Neovim runtime:
 
 ```bash
+mkdir -p ~/.local/share/nvim/queries
 ln -s /path/to/umple-lsp/tree-sitter-umple/queries ~/.local/share/nvim/queries/umple
 ```
 
@@ -187,3 +231,26 @@ ln -s /path/to/umple-lsp/tree-sitter-umple/queries ~/.local/share/nvim/queries/u
 ```lua
 vim.filetype.add({ extension = { ump = "umple" } })
 ```
+
+4. Install the parser:
+
+```vim
+:TSInstall umple
+```
+
+### Updating After Grammar Changes
+
+After modifying `grammar.js`:
+
+```bash
+cd tree-sitter-umple
+npx tree-sitter generate
+```
+
+Then in Neovim, reinstall the parser to recompile from `src/parser.c`:
+
+```vim
+:TSInstall umple
+```
+
+Note: The `.wasm` file is only used by the LSP server, not by Neovim. Neovim compiles a native `.so` from `src/parser.c`.
