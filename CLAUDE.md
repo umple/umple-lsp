@@ -5,10 +5,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Umple Language Reference
 
 Before working on this project, familiarize yourself with Umple syntax:
+
 - **User Manual**: https://cruise.umple.org/umple/GettingStarted.html
 - **Try Online**: https://try.umple.org
 
 Key syntax patterns:
+
 ```umple
 class Person {
   name;                      // Attribute (String by default)
@@ -71,6 +73,7 @@ npx tree-sitter parse ../test/Student.ump
 ## Testing
 
 No automated test framework is configured. Testing is done manually via VS Code's Extension Development Host:
+
 - Press F5 in VS Code to launch a new window with the extension loaded
 - Open `.ump` files in the test window to verify functionality
 
@@ -100,12 +103,14 @@ Tree-sitter Grammar (tree-sitter-umple/)
 **Client (`client/src/extension.ts`)**: VS Code extension entry point. Launches the language server and passes initialization options (JAR paths, port configuration).
 
 **Server (`server/src/server.ts`)**: Core LSP implementation handling:
+
 - Document synchronization (open/change/close events)
 - Diagnostics via UmpleSync.jar socket connection with debounced validation
 - Context-aware code completion (detects if cursor is in class/statemachine/association/enum)
 - Go-to-definition using tree-sitter symbol index with transitive `use` statement resolution
 
 **Symbol Index (`server/src/symbolIndex.ts`)**: Tree-sitter based symbol indexing:
+
 - Parses `.ump` files incrementally using web-tree-sitter (WASM)
 - Maintains in-memory index of all symbol definitions (classes, interfaces, traits, enums, attributes, methods, state machines, states, associations)
 - Content hash caching for efficient re-indexing
@@ -114,6 +119,7 @@ Tree-sitter Grammar (tree-sitter-umple/)
 **Keywords (`server/src/keywords.ts`)**: Keyword database organized by context (topLevel, classLevel, statemachine, etc.) for context-aware completion.
 
 **Tree-sitter Grammar (`tree-sitter-umple/`)**: Custom tree-sitter grammar for Umple:
+
 - `grammar.js` - Grammar rules (manually written)
 - `queries/highlights.scm` - Syntax highlighting queries (manually written)
 - `queries/locals.scm` - Scope tracking (manually written)
@@ -147,6 +153,7 @@ For accurate diagnostics, the server replaces `use` statements with stub declara
 ## Configuration
 
 Server initialization options (passed from client):
+
 - `umpleSyncJarPath`, `umpleJarPath`: JAR locations
 - `umpleSyncPort` (default 5556), `umpleSyncHost`, `umpleSyncTimeoutMs`: Socket configuration
 
@@ -157,6 +164,7 @@ Environment variable overrides: `UMPLESYNC_HOST`, `UMPLESYNC_PORT`, `UMPLESYNC_T
 To use the tree-sitter grammar with Neovim:
 
 1. Register the parser in your Neovim config:
+
 ```lua
 local parser_config = require("nvim-treesitter.parsers").get_parser_configs()
 parser_config.umple = {
@@ -169,11 +177,13 @@ parser_config.umple = {
 ```
 
 2. Symlink queries to Neovim runtime:
+
 ```bash
 ln -s /path/to/umple-lsp/tree-sitter-umple/queries ~/.local/share/nvim/queries/umple
 ```
 
 3. Set filetype for `.ump` files:
+
 ```lua
 vim.filetype.add({ extension = { ump = "umple" } })
 ```
