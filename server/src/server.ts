@@ -355,13 +355,8 @@ async function runUmpleSyncAndParseDiagnostics(
 ): Promise<Diagnostic[]> {
   const tempFileInfo = await writeTempUmpleFile(document, "diag");
   const tempFile = tempFileInfo.filePath;
-  const originalText = document.getText();
-  const documentDir = getDocumentDirectory(document);
-  const { text: processedText, lineOffset } = replaceUseWithStubs(
-    originalText,
-    documentDir,
-  );
-  let text = processedText;
+
+  let text = document.getText();
   // Umple needs two trailing newlines to report end-of-file errors on the last line.
   if (!text.endsWith("\n\n")) {
     text = text.replace(/\n?$/, "\n\n");
@@ -371,7 +366,8 @@ async function runUmpleSyncAndParseDiagnostics(
   try {
     const commandLine = `-generate nothing ${formatUmpleArg(tempFile)}`;
     const { stdout, stderr } = await sendUmpleSyncCommand(jarPath, commandLine);
-    return parseUmpleDiagnostics(stderr, stdout, document, lineOffset);
+    const tempFilename = path.basename(tempFile);
+    return parseUmpleDiagnostics(stderr, stdout, document, tempFilename);
   } finally {
     await tempFileInfo.cleanup();
   }
@@ -517,158 +513,6 @@ function splitUmpleSyncOutput(raw: string): { stdout: string; stderr: string } {
   return { stdout, stderr };
 }
 
-function sanitizeUseStatements(text: string): string {
-  const lines = text.split(/\r?\n/);
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i];
-    if (/^\s*use\b/.test(line)) {
-      lines[i] = `//${line}`;
-    }
-  }
-  return lines.join("\n");
-}
-
-/**
- * Result of replacing use statements with stubs.
- */
-interface StubReplacementResult {
-  text: string;
-  lineOffset: number; // Number of stub lines added at the top
-}
-
-/**
- * Replace `use` statements with external stubs from the symbol index.
- * This allows diagnostics to run without compiling referenced files,
- * while still recognizing imported symbols.
- *
- * Stubs are added at the TOP of the file, and use statements are commented out
- * in place. This makes line number adjustment straightforward.
- *
- * Example:
- *   use Person.ump;  →  // use Person.ump; (stubs added at top)
- */
-function replaceUseWithStubs(
-  text: string,
-  documentDir: string | null,
-): StubReplacementResult {
-  if (!symbolIndexReady || !documentDir) {
-    // Fall back to commenting out use statements
-    return { text: sanitizeUseStatements(text), lineOffset: 0 };
-  }
-
-  const lines = text.split(/\r?\n/);
-  const allStubs: string[] = [];
-
-  // First pass: collect all stubs and comment out use statements
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i];
-    const match = line.match(/^\s*use\s+([^\s;]+)\s*;/);
-    if (match) {
-      const usePath = match[1];
-      const stubs = generateStubsForUse(usePath, documentDir);
-      if (stubs) {
-        allStubs.push(stubs);
-      }
-      // Comment out the use statement in place (keeps line count same)
-      lines[i] = `//${line}`;
-    }
-  }
-
-  // Add all stubs at the top of the file
-  if (allStubs.length > 0) {
-    const stubBlock = allStubs.join("\n");
-    const stubLines = stubBlock.split("\n").length;
-    return {
-      text: stubBlock + "\n" + lines.join("\n"),
-      lineOffset: stubLines,
-    };
-  }
-
-  return { text: lines.join("\n"), lineOffset: 0 };
-}
-
-/**
- * Generate external stub declarations for a use path.
- * Recursively resolves transitive use statements with cycle detection.
- */
-function generateStubsForUse(
-  usePath: string,
-  documentDir: string,
-): string | null {
-  const allSymbols = collectTransitiveSymbols(usePath, documentDir, new Set());
-  if (allSymbols.length === 0) {
-    return null;
-  }
-  return generateStubDeclarations(allSymbols);
-}
-
-/**
- * Recursively collect symbols from a use path and all its transitive dependencies.
- * Uses a visited set for cycle detection.
- */
-function collectTransitiveSymbols(
-  usePath: string,
-  documentDir: string,
-  visited: Set<string>,
-): SymbolEntry[] {
-  // Resolve the file path
-  let resolvedPath: string;
-  if (path.isAbsolute(usePath)) {
-    resolvedPath = usePath;
-  } else {
-    resolvedPath = path.resolve(documentDir, usePath);
-  }
-
-  // Ensure .ump extension
-  if (!resolvedPath.endsWith(".ump")) {
-    resolvedPath += ".ump";
-  }
-
-  // Normalize path for cycle detection
-  const normalizedPath = path.normalize(resolvedPath);
-  if (visited.has(normalizedPath)) {
-    return []; // Already processed, avoid cycle
-  }
-  visited.add(normalizedPath);
-
-  // Get symbols from this file
-  let symbols = symbolIndex.getFileSymbols(resolvedPath);
-  if (symbols.length === 0) {
-    // File not indexed yet, try to index it now
-    if (fs.existsSync(resolvedPath)) {
-      symbolIndex.indexFile(resolvedPath);
-      symbols = symbolIndex.getFileSymbols(resolvedPath);
-    }
-  }
-
-  const allSymbols: SymbolEntry[] = [...symbols];
-
-  // Parse the file to find its use statements and recursively resolve them
-  if (fs.existsSync(resolvedPath)) {
-    try {
-      const fileContent = fs.readFileSync(resolvedPath, "utf8");
-      const fileDir = path.dirname(resolvedPath);
-      const useStatements = symbolIndex.extractUseStatements(
-        resolvedPath,
-        fileContent,
-      );
-
-      for (const nestedUsePath of useStatements) {
-        const nestedSymbols = collectTransitiveSymbols(
-          nestedUsePath,
-          fileDir,
-          visited,
-        );
-        allSymbols.push(...nestedSymbols);
-      }
-    } catch {
-      // Ignore read errors
-    }
-  }
-
-  return allSymbols;
-}
-
 /**
  * Collect all file paths reachable via transitive use statements.
  * Used to filter go-to-definition results to only show symbols from imported files.
@@ -693,8 +537,6 @@ function collectReachableFilesRecursive(
   visited: Set<string>,
 ): void {
   const useStatements = symbolIndex.extractUseStatements(filePath, content);
-  console.log("filepath: ", useStatements);
-
   for (const usePath of useStatements) {
     // Resolve the file path
     let resolvedPath: string;
@@ -733,70 +575,6 @@ function collectReachableFilesRecursive(
   }
 }
 
-/**
- * Generate class/interface declarations with attributes for a list of symbols.
- * Instead of using `external`, we generate full class stubs with attributes
- * so that constraints and other references to attributes work correctly.
- */
-function generateStubDeclarations(symbols: SymbolEntry[]): string {
-  const stubs: string[] = [];
-  const seen = new Set<string>();
-
-  // Group symbols by parent (to find attributes belonging to each class)
-  const attributesByParent = new Map<string, SymbolEntry[]>();
-  for (const sym of symbols) {
-    if (
-      sym.parent &&
-      (sym.kind === "attribute" || sym.kind === "statemachine")
-    ) {
-      const attrs = attributesByParent.get(sym.parent) ?? [];
-      attrs.push(sym);
-      attributesByParent.set(sym.parent, attrs);
-    }
-  }
-
-  for (const sym of symbols) {
-    // Only generate stubs for top-level types (no parent)
-    if (sym.parent) continue;
-
-    // Skip duplicates
-    if (seen.has(sym.name)) continue;
-    seen.add(sym.name);
-
-    // Get attributes for this class/interface (deduplicated)
-    const attributes = attributesByParent.get(sym.name) ?? [];
-    const seenAttrs = new Set<string>();
-    const attrStubs = attributes
-      .filter((a) => a.kind === "attribute")
-      .filter((a) => {
-        if (seenAttrs.has(a.name)) return false;
-        seenAttrs.add(a.name);
-        return true;
-      })
-      .map((a) => `  ${a.name};`)
-      .join("\n");
-
-    const body = attrStubs ? `\n${attrStubs}\n` : "";
-
-    switch (sym.kind) {
-      case "class":
-      case "trait":
-        // Generate a real class stub with attributes
-        stubs.push(`class ${sym.name} {${body}}`);
-        break;
-      case "interface":
-        stubs.push(`interface ${sym.name} {${body}}`);
-        break;
-      case "enum":
-        // Enums - just use external since we don't track enum values
-        stubs.push(`external ${sym.name} {}`);
-        break;
-    }
-  }
-
-  return stubs.join("\n");
-}
-
 function isConnectionError(error: unknown): boolean {
   if (!error || typeof error !== "object") {
     return false;
@@ -819,12 +597,12 @@ function parseUmpleDiagnostics(
   stderr: string,
   stdout: string,
   document: TextDocument,
-  lineOffset: number = 0,
+  tempFilename: string,
 ): Diagnostic[] {
   const jsonDiagnostics = parseUmpleJsonDiagnostics(
     stderr,
     document,
-    lineOffset,
+    tempFilename,
   );
   if (jsonDiagnostics.length === 0 && stdout.includes("Success")) {
     connection.console.info("Umple compile succeeded.");
@@ -845,7 +623,7 @@ type UmpleJsonResult = {
 function parseUmpleJsonDiagnostics(
   stderr: string,
   document: TextDocument,
-  lineOffset: number = 0,
+  tempFilename: string,
 ): Diagnostic[] {
   const trimmed = stderr.trim();
   if (!trimmed) {
@@ -867,16 +645,14 @@ function parseUmpleJsonDiagnostics(
     const diagnostics: Diagnostic[] = [];
 
     for (const result of parsed.results) {
-      // Adjust line number by subtracting the stub offset
-      const rawLineNumber = Number(result.line ?? "1") - 1;
-
-      // Skip diagnostics that fall within the stub lines
-      if (rawLineNumber < lineOffset) {
+      // Only include errors from the temp file (current document)
+      // Skip errors from imported files (via use statements)
+      if (result.filename && result.filename !== tempFilename) {
         continue;
       }
 
-      const adjustedLineNumber = Math.max(rawLineNumber - lineOffset, 0);
-      const lineText = lines[adjustedLineNumber] ?? "";
+      const lineNumber = Math.max(Number(result.line ?? "1") - 1, 0);
+      const lineText = lines[lineNumber] ?? "";
       const firstNonSpace = lineText.search(/\S/);
       const startChar = firstNonSpace === -1 ? 0 : firstNonSpace;
       const severityValue = Number(result.severity ?? "3");
@@ -896,8 +672,8 @@ function parseUmpleJsonDiagnostics(
       diagnostics.push({
         severity,
         range: Range.create(
-          Position.create(adjustedLineNumber, startChar),
-          Position.create(adjustedLineNumber, lineText.length),
+          Position.create(lineNumber, startChar),
+          Position.create(lineNumber, lineText.length),
         ),
         message: details.join(": "),
         source: "umple",
