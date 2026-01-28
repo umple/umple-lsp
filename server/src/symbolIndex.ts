@@ -288,6 +288,115 @@ export class SymbolIndex {
     return false;
   }
 
+  /**
+   * Extract use statement paths from a file using tree-sitter.
+   * @param filePath Path to the file
+   * @param content File content (optional, will be read from disk if not provided)
+   * @returns Array of use paths (without quotes)
+   */
+  extractUseStatements(filePath: string, content?: string): string[] {
+    if (!this.initialized || !this.parser) {
+      return [];
+    }
+
+    const fileContent = content ?? this.readFileSafe(filePath);
+    if (!fileContent) {
+      return [];
+    }
+
+    // Use cached tree if available and content matches
+    const fileIndex = this.files.get(filePath);
+    let tree: Tree;
+    if (fileIndex?.tree && !content) {
+      tree = fileIndex.tree;
+    } else {
+      tree = this.parser.parse(fileContent);
+    }
+
+    const usePaths: string[] = [];
+    const visit = (node: SyntaxNode) => {
+      if (node.type === "use_statement") {
+        const pathNode = node.childForFieldName("path");
+        if (pathNode) {
+          let pathText = pathNode.text;
+          // Remove quotes if present
+          if (
+            (pathText.startsWith('"') && pathText.endsWith('"')) ||
+            (pathText.startsWith("'") && pathText.endsWith("'"))
+          ) {
+            pathText = pathText.slice(1, -1);
+          }
+          usePaths.push(pathText);
+        }
+      } else {
+        for (let i = 0; i < node.childCount; i++) {
+          const child = node.child(i);
+          if (child) visit(child);
+        }
+      }
+    };
+
+    visit(tree.rootNode);
+    return usePaths;
+  }
+
+  /**
+   * Get the use path at a specific position, if the cursor is on a use statement.
+   * @param filePath Path to the file
+   * @param content File content
+   * @param line 0-indexed line number
+   * @param column 0-indexed column number
+   * @returns The use path (without quotes) or null if not on a use statement
+   */
+  getUsePathAtPosition(
+    filePath: string,
+    content: string,
+    line: number,
+    column: number,
+  ): string | null {
+    if (!this.initialized || !this.parser) {
+      return null;
+    }
+
+    // Use cached tree if available
+    const fileIndex = this.files.get(filePath);
+    let tree: Tree;
+    if (fileIndex?.tree && fileIndex.contentHash === this.hashContent(content)) {
+      tree = fileIndex.tree;
+    } else {
+      tree = this.parser.parse(content);
+    }
+
+    // Get the node at the position
+    const node = tree.rootNode.descendantForPosition({ row: line, column });
+    if (!node) {
+      return null;
+    }
+
+    // Walk up to find if we're inside a use_statement
+    let current = node;
+    while (current) {
+      if (current.type === "use_statement") {
+        const pathNode = current.childForFieldName("path");
+        if (pathNode) {
+          let pathText = pathNode.text;
+          // Remove quotes if present
+          if (
+            (pathText.startsWith('"') && pathText.endsWith('"')) ||
+            (pathText.startsWith("'") && pathText.endsWith("'"))
+          ) {
+            pathText = pathText.slice(1, -1);
+          }
+          return pathText;
+        }
+        return null;
+      }
+      current = current.parent;
+    }
+
+    return null;
+  }
+
   // =====================
   // Private methods
   // =====================

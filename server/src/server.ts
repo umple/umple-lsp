@@ -254,7 +254,11 @@ connection.onDefinition(async (params) => {
         // Get the set of files reachable via use statements
         const docPath = getDocumentFilePath(document);
         const reachableFiles = docPath
-          ? collectReachableFiles(document.getText(), path.dirname(docPath))
+          ? collectReachableFiles(
+              docPath,
+              document.getText(),
+              path.dirname(docPath),
+            )
           : new Set<string>();
 
         // Also include the current file
@@ -644,7 +648,10 @@ function collectTransitiveSymbols(
     try {
       const fileContent = fs.readFileSync(resolvedPath, "utf8");
       const fileDir = path.dirname(resolvedPath);
-      const useStatements = extractUseStatements(fileContent);
+      const useStatements = symbolIndex.extractUseStatements(
+        resolvedPath,
+        fileContent,
+      );
 
       for (const nestedUsePath of useStatements) {
         const nestedSymbols = collectTransitiveSymbols(
@@ -663,30 +670,16 @@ function collectTransitiveSymbols(
 }
 
 /**
- * Extract use statement paths from file content.
- */
-function extractUseStatements(content: string): string[] {
-  const usePaths: string[] = [];
-  const lines = content.split(/\r?\n/);
-  for (const line of lines) {
-    const match = line.match(/^\s*use\s+([^\s;]+)\s*;?/);
-    if (match) {
-      usePaths.push(match[1]);
-    }
-  }
-  return usePaths;
-}
-
-/**
  * Collect all file paths reachable via transitive use statements.
  * Used to filter go-to-definition results to only show symbols from imported files.
  */
 function collectReachableFiles(
+  filePath: string,
   content: string,
   documentDir: string,
 ): Set<string> {
   const visited = new Set<string>();
-  collectReachableFilesRecursive(content, documentDir, visited);
+  collectReachableFilesRecursive(filePath, content, documentDir, visited);
   return visited;
 }
 
@@ -694,11 +687,13 @@ function collectReachableFiles(
  * Recursively collect reachable file paths.
  */
 function collectReachableFilesRecursive(
+  filePath: string,
   content: string,
   documentDir: string,
   visited: Set<string>,
 ): void {
-  const useStatements = extractUseStatements(content);
+  const useStatements = symbolIndex.extractUseStatements(filePath, content);
+  console.log("filepath: ", useStatements);
 
   for (const usePath of useStatements) {
     // Resolve the file path
@@ -725,7 +720,12 @@ function collectReachableFilesRecursive(
       try {
         const fileContent = fs.readFileSync(resolvedPath, "utf8");
         const fileDir = path.dirname(resolvedPath);
-        collectReachableFilesRecursive(fileContent, fileDir, visited);
+        collectReachableFilesRecursive(
+          resolvedPath,
+          fileContent,
+          fileDir,
+          visited,
+        );
       } catch {
         // Ignore read errors
       }
@@ -994,20 +994,23 @@ function resolveUseDefinitionFromLine(
   if (!docPath) {
     return null;
   }
-  const lines = document.getText().split(/\r?\n/);
-  const lineText = lines[position.line] ?? "";
-  const trimmed = lineText.trim();
-  if (!trimmed.startsWith("use")) {
+
+  // Use tree-sitter to find the use path at this position
+  const usePath = symbolIndex.getUsePathAtPosition(
+    docPath,
+    document.getText(),
+    position.line,
+    position.character,
+  );
+
+  if (!usePath) {
     return null;
   }
-  const cleaned = lineText.split("//")[0];
-  const match = cleaned.match(/\buse\s+([^;]+);/);
-  if (!match) {
-    return null;
-  }
-  const fileRef = extractUmpleFilename(match[1]);
-  if (!fileRef) {
-    return null;
+
+  // Ensure .ump extension
+  let fileRef = usePath;
+  if (!fileRef.endsWith(".ump")) {
+    fileRef += ".ump";
   }
 
   const baseDir = path.dirname(docPath);
@@ -1019,16 +1022,6 @@ function resolveUseDefinitionFromLine(
     uri,
     Range.create(Position.create(0, 0), Position.create(0, 0)),
   );
-}
-
-function extractUmpleFilename(text: string): string | null {
-  const trimmed = text.trim();
-  if (!trimmed) {
-    return null;
-  }
-  const cleaned = trimmed.replace(/^[\"']+/, "").replace(/[\"';]+$/, "");
-  const match = cleaned.match(/([A-Za-z0-9_./\\-]+\.ump)/);
-  return match ? match[1] : null;
 }
 
 function getCompletionPrefix(

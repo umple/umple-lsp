@@ -39,9 +39,10 @@ module.exports = grammar({
     namespace_declaration: ($) =>
       seq("namespace", field("name", $.qualified_name), ";"),
 
-    use_statement: ($) => seq("use", field("path", $.use_path), ";"),
+    use_statement: ($) =>
+      prec.right(seq("use", field("path", $.use_path), optional(";"))),
 
-    use_path: ($) => /[a-zA-Z_][a-zA-Z0-9_.\/]*/,
+    use_path: ($) => choice(/"[^"]*"/, /[a-zA-Z_][a-zA-Z0-9_.\/]*/),
 
     generate_statement: ($) =>
       seq("generate", field("language", $.identifier), ";"),
@@ -180,11 +181,11 @@ module.exports = grammar({
     association_inline: ($) =>
       seq(
         $.multiplicity,
-        optional($.identifier),
+        optional(field("left_role", $.identifier)),
         $.arrow,
         $.multiplicity,
-        $.identifier,
-        optional($.identifier),
+        field("right_type", $.identifier),
+        optional(field("right_role", $.identifier)),
         ";",
       ),
 
@@ -207,12 +208,12 @@ module.exports = grammar({
     association_member: ($) =>
       seq(
         $.multiplicity,
-        $.identifier,
-        optional($.identifier),
+        field("left_type", $.identifier),
+        optional(field("left_role", $.identifier)),
         $.arrow,
         $.multiplicity,
-        $.identifier,
-        optional($.identifier),
+        field("right_type", $.identifier),
+        optional(field("right_role", $.identifier)),
         ";",
       ),
 
