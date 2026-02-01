@@ -1,10 +1,9 @@
-import { ChildProcess, execFile, spawn } from "child_process";
+import { ChildProcess, spawn } from "child_process";
 import * as fs from "fs";
 import * as net from "net";
 import * as os from "os";
 import * as path from "path";
 import { fileURLToPath, pathToFileURL } from "url";
-import { promisify } from "util";
 import {
   CompletionItem,
   CompletionItemKind,
@@ -21,11 +20,7 @@ import {
 } from "vscode-languageserver/node";
 import { TextDocument } from "vscode-languageserver-textdocument";
 import { ALL_KEYWORDS, KEYWORDS } from "./keywords";
-import {
-  symbolIndex,
-  SymbolEntry,
-  UseStatementWithPosition,
-} from "./symbolIndex";
+import { symbolIndex, UseStatementWithPosition } from "./symbolIndex";
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new Map<string, TextDocument>();
@@ -81,11 +76,9 @@ let umpleSyncPort = 5555;
 let umpleSyncTimeoutMs = 50000;
 let jarWarningShown = false;
 let serverProcess: ChildProcess | undefined;
-let umpleJarPath: string | undefined;
 let treeSitterWasmPath: string | undefined;
 let symbolIndexReady = false;
 
-const execFileAsync = promisify(execFile);
 const DEFAULT_UMPLESYNC_TIMEOUT_MS = 50000;
 
 const KEYWORD_COMPLETIONS: CompletionItem[] =
@@ -106,13 +99,11 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
         umpleSyncHost?: string;
         umpleSyncPort?: number;
         umpleSyncTimeoutMs?: number;
-        umpleJarPath?: string;
       }
     | undefined;
   umpleSyncJarPath = initOptions?.umpleSyncJarPath;
   umpleSyncHost =
     initOptions?.umpleSyncHost || process.env.UMPLESYNC_HOST || "localhost";
-  umpleJarPath = initOptions?.umpleJarPath;
   if (typeof initOptions?.umpleSyncPort === "number") {
     umpleSyncPort = initOptions.umpleSyncPort;
   } else if (process.env.UMPLESYNC_PORT) {
