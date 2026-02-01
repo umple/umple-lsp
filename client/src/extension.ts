@@ -6,11 +6,25 @@ import {
   ServerOptions,
   TransportKind,
 } from "vscode-languageclient/node";
+import { checkJava, updateUmpleSyncJar } from "./utils/umpleSync";
 
 let client: LanguageClient | undefined;
 
 // Start the client with server side attached
-export function activate(context: vscode.ExtensionContext): void {
+export async function activate(
+  context: vscode.ExtensionContext,
+): Promise<void> {
+  // Check for Java
+  if (!checkJava()) {
+    vscode.window.showErrorMessage(
+      "Java is required for Umple LSP. Please install Java and restart VS Code.",
+    );
+    return;
+  }
+
+  // Update umplesync.jar if needed
+  await updateUmpleSyncJar(context.extensionPath);
+
   const serverModule = context.asAbsolutePath(
     path.join("server", "out", "server.js"),
   );
@@ -29,8 +43,6 @@ export function activate(context: vscode.ExtensionContext): void {
     initializationOptions: {
       umpleSyncJarPath: context.asAbsolutePath("umplesync.jar"),
       umpleSyncPort: 5556,
-      umpleJarPath: context.asAbsolutePath("umple.jar"),
-      umpleGoToDefClasspath: context.asAbsolutePath("java-tools"),
     },
     synchronize: {
       fileEvents: vscode.workspace.createFileSystemWatcher("**/*.ump"),
@@ -45,7 +57,6 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   client.start();
-  // context.subscriptions.push();
 }
 
 export function deactivate(): Thenable<void> | undefined {
