@@ -73,7 +73,6 @@ export class SymbolIndex {
       this.parser.setLanguage(this.language);
 
       this.initialized = true;
-      console.log("Symbol index initialized with tree-sitter");
       return true;
     } catch (err) {
       console.error("Failed to initialize tree-sitter parser:", err);
@@ -205,24 +204,6 @@ export class SymbolIndex {
   clear(): void {
     this.files.clear();
     this.symbolsByName.clear();
-  }
-
-  /**
-   * Index all .ump files in a directory.
-   */
-  indexDirectory(dirPath: string): number {
-    let count = 0;
-    const files = this.findUmpFiles(dirPath);
-    for (const file of files) {
-      try {
-        if (this.indexFile(file)) {
-          count++;
-        }
-      } catch (err) {
-        console.error(`Failed to index ${file}:`, err);
-      }
-    }
-    return count;
   }
 
   /**
@@ -502,24 +483,6 @@ export class SymbolIndex {
       hash = hash & hash; // Convert to 32bit integer
     }
     return hash.toString(16);
-  }
-
-  private findUmpFiles(dirPath: string): string[] {
-    const results: string[] = [];
-    try {
-      const entries = fs.readdirSync(dirPath, { withFileTypes: true });
-      for (const entry of entries) {
-        const fullPath = path.join(dirPath, entry.name);
-        if (entry.isDirectory() && !entry.name.startsWith(".")) {
-          results.push(...this.findUmpFiles(fullPath));
-        } else if (entry.isFile() && entry.name.endsWith(".ump")) {
-          results.push(fullPath);
-        }
-      }
-    } catch {
-      // Ignore errors (permission denied, etc.)
-    }
-    return results;
   }
 
   private extractSymbols(

@@ -70,6 +70,17 @@ function deleteDocument(uri: string): void {
   documents.delete(normalizeUri(uri));
 }
 
+/**
+ * Safely read a file, returning null if it fails.
+ */
+function readFileSafe(filePath: string): string | null {
+  try {
+    return fs.readFileSync(filePath, "utf8");
+  } catch {
+    return null;
+  }
+}
+
 let umpleSyncJarPath: string | undefined;
 let umpleSyncHost = "localhost";
 let umpleSyncPort = 5555;
@@ -78,6 +89,7 @@ let jarWarningShown = false;
 let serverProcess: ChildProcess | undefined;
 let treeSitterWasmPath: string | undefined;
 let symbolIndexReady = false;
+const pendingDocumentsToIndex: Array<{ filePath: string; text: string }> = [];
 
 const DEFAULT_UMPLESYNC_TIMEOUT_MS = 50000;
 
@@ -156,11 +168,12 @@ connection.onInitialized(async () => {
       symbolIndexReady = await symbolIndex.initialize(treeSitterWasmPath);
       if (symbolIndexReady) {
         connection.console.info("Symbol index initialized with tree-sitter.");
-        // Index workspace files in background
-        for (const root of workspaceRoots) {
-          const count = symbolIndex.indexDirectory(root);
-          connection.console.info(`Indexed ${count} files in ${root}`);
+
+        // Process documents that were opened before index was ready
+        for (const pending of pendingDocumentsToIndex) {
+          indexDocumentAndReferences(pending.filePath, pending.text);
         }
+        pendingDocumentsToIndex.length = 0;
       }
     } catch (err) {
       connection.console.warn(`Failed to initialize symbol index: ${err}`);
@@ -183,16 +196,39 @@ connection.onDidOpenTextDocument((params) => {
   setDocument(params.textDocument.uri, document);
   scheduleValidation(document);
 
-  // Update symbol index
-  if (symbolIndexReady) {
-    try {
-      const filePath = fileURLToPath(params.textDocument.uri);
-      symbolIndex.updateFile(filePath, params.textDocument.text);
-    } catch {
-      // Ignore errors for non-file URIs
+  // Update symbol index for this file and all files it references
+  try {
+    const filePath = fileURLToPath(params.textDocument.uri);
+    if (symbolIndexReady) {
+      indexDocumentAndReferences(filePath, params.textDocument.text);
+    } else {
+      // Queue for processing once symbol index is ready
+      pendingDocumentsToIndex.push({
+        filePath,
+        text: params.textDocument.text,
+      });
     }
+  } catch {
+    // Ignore errors for non-file URIs
   }
 });
+
+/**
+ * Index a document and all files it references via use statements.
+ */
+function indexDocumentAndReferences(filePath: string, text: string): void {
+  const docDir = path.dirname(filePath);
+
+  // Index the current file
+  symbolIndex.updateFile(filePath, text);
+
+  // Index all files reachable via use statements (for go-to-definition)
+  const reachableFiles = collectReachableFiles(filePath, text, docDir);
+  for (const reachableFile of reachableFiles) {
+    if (!fs.existsSync(reachableFile)) continue;
+    symbolIndex.indexFile(reachableFile);
+  }
+}
 
 connection.onDidChangeTextDocument((params) => {
   const document = getDocument(params.textDocument.uri);
@@ -537,8 +573,8 @@ interface ShadowWorkspace {
 }
 
 /**
- * Create a shadow workspace that mirrors the document's directory structure
- * with unsaved document content overlaid on top of symlinked files.
+ * Create a shadow workspace with only the files needed for compilation:
+ * the current document and all files it imports via `use` statements.
  */
 async function createShadowWorkspace(
   documentPath: string,
@@ -546,17 +582,35 @@ async function createShadowWorkspace(
   const documentDir = path.dirname(documentPath);
   const documentName = path.basename(documentPath);
 
+  // Get document content (from open doc or disk)
+  const fileUri = pathToFileURL(documentPath).toString();
+  const openDoc = getDocument(fileUri);
+  const documentContent = openDoc?.getText() ?? readFileSafe(documentPath);
+
+  if (!documentContent) {
+    return null;
+  }
+
   // Create shadow directory
   const shadowDir = await fs.promises.mkdtemp(
     path.join(os.tmpdir(), "umple-shadow-"),
   );
 
   try {
-    // Find all .ump files in the document's directory and subdirectories
-    const umpFiles = findUmpFilesSync(documentDir);
+    // Find only files reachable via use statements (lazy approach)
+    const reachableFiles = collectReachableFiles(
+      documentPath,
+      documentContent,
+      documentDir,
+    );
+
+    // Also include the current document
+    reachableFiles.add(path.normalize(documentPath));
 
     // Create directory structure and symlink/copy files
-    for (const filePath of umpFiles) {
+    for (const filePath of reachableFiles) {
+      if (!fs.existsSync(filePath)) continue;
+
       const relativePath = path.relative(documentDir, filePath);
       const shadowPath = path.join(shadowDir, relativePath);
       const shadowFileDir = path.dirname(shadowPath);
@@ -565,12 +619,12 @@ async function createShadowWorkspace(
       await fs.promises.mkdir(shadowFileDir, { recursive: true });
 
       // Check if this file is open in the editor with unsaved changes
-      const fileUri = pathToFileURL(filePath).toString();
-      const openDoc = getDocument(fileUri);
+      const uri = pathToFileURL(filePath).toString();
+      const doc = getDocument(uri);
 
-      if (openDoc) {
+      if (doc) {
         // Write unsaved content
-        await fs.promises.writeFile(shadowPath, openDoc.getText(), "utf8");
+        await fs.promises.writeFile(shadowPath, doc.getText(), "utf8");
       } else {
         // Symlink to original file
         await fs.promises.symlink(filePath, shadowPath);
@@ -591,30 +645,6 @@ async function createShadowWorkspace(
     await fs.promises.rm(shadowDir, { recursive: true, force: true });
     throw error;
   }
-}
-
-/**
- * Synchronously find all .ump files in a directory (recursive).
- */
-function findUmpFilesSync(dir: string): string[] {
-  const results: string[] = [];
-  try {
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      // Skip hidden files/directories and the shadow directory itself
-      if (entry.name.startsWith(".")) continue;
-
-      const fullPath = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        results.push(...findUmpFilesSync(fullPath));
-      } else if (entry.isFile() && entry.name.endsWith(".ump")) {
-        results.push(fullPath);
-      }
-    }
-  } catch {
-    // Ignore permission errors, etc.
-  }
-  return results;
 }
 
 async function sendUmpleSyncCommand(
