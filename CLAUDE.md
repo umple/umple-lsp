@@ -136,9 +136,10 @@ Tree-sitter Grammar (tree-sitter-umple/)
 
 **Symbol Index (`server/src/symbolIndex.ts`)**: Tree-sitter based symbol indexing:
 
-- Parses `.ump` files incrementally using web-tree-sitter (WASM)
-- Maintains in-memory index of all symbol definitions (classes, interfaces, traits, enums, attributes, methods, state machines, states, associations)
-- Extracts `use` statements for transitive dependency resolution
+- Parses `.ump` files using web-tree-sitter (WASM)
+- **Lazy indexing**: Files are indexed on-demand when opened, not upfront
+- When a file is opened, it and all files it references via `use` statements are indexed
+- Maintains in-memory index of symbol definitions (classes, interfaces, traits, enums, attributes, methods, state machines, states, associations)
 - Content hash caching for efficient re-indexing
 - Comment detection to prevent go-to-definition inside comments
 
@@ -147,14 +148,13 @@ Tree-sitter Grammar (tree-sitter-umple/)
 ### External Dependencies
 
 - `umplesync.jar`: Compiler wrapper running as socket server for diagnostics
-- `umple.jar`: Core Umple compiler for code generation
 
 ### Go-To-Definition
 
 The go-to-definition feature uses tree-sitter for fast, accurate symbol lookup:
 
-1. **Symbol Indexing**: On workspace open, all `.ump` files are parsed and symbols extracted
-2. **Transitive Use Resolution**: `use` statements are resolved transitively to find all dependent files
+1. **Lazy Indexing**: Files are indexed when opened (not on workspace open)
+2. **Transitive Use Resolution**: When a file is opened, all files it imports via `use` statements are also indexed
 3. **Scoped Lookup**: Go-to-definition only returns symbols from files reachable via `use` statements from the current file
 4. **Use Statement Navigation**: Go-to-definition on a `use` statement opens the referenced file
 5. **Comment Detection**: Go-to-definition is disabled when cursor is inside a comment
@@ -164,12 +164,12 @@ The go-to-definition feature uses tree-sitter for fast, accurate symbol lookup:
 Diagnostics are provided via UmpleSync.jar, which runs as a socket server.
 
 **Shadow Workspace**: For accurate cross-file diagnostics, the server creates a temporary shadow workspace that:
-1. Symlinks all `.ump` files from the document's directory
+1. Includes only files reachable via `use` statements (lazy approach)
 2. Overlays unsaved document content from open editors
 3. Runs UmpleSync on the shadow workspace
 4. Cleans up after compilation
 
-This ensures diagnostics reflect unsaved changes across all open files.
+This ensures diagnostics reflect unsaved changes while keeping the workspace minimal.
 
 **Import Error Handling** (similar to clangd):
 - Errors in directly imported files appear on the `use` statement line
@@ -185,7 +185,7 @@ This ensures diagnostics reflect unsaved changes across all open files.
 
 Server initialization options (passed from client):
 
-- `umpleSyncJarPath`, `umpleJarPath`: JAR locations
+- `umpleSyncJarPath`: Path to umplesync.jar
 - `umpleSyncPort` (default 5556), `umpleSyncHost`, `umpleSyncTimeoutMs`: Socket configuration
 
 Environment variable overrides: `UMPLESYNC_HOST`, `UMPLESYNC_PORT`, `UMPLESYNC_TIMEOUT_MS`
