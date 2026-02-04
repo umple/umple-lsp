@@ -3,7 +3,11 @@
   "displayName": "umple-language-server",
   "description": "Language server for the Umple modeling language",
   "version": "0.0.1",
-  "private": true,
+  "publisher": "umple",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DraftTin/umple-lsp"
+  },
   "engines": {
     "vscode": "^1.108.0"
   },
