@@ -880,6 +880,7 @@ function parseUmpleDiagnostics(
     tempFilename,
     documentDir,
   );
+
   if (jsonDiagnostics.length === 0 && stdout.includes("Success")) {
     connection.console.info("Umple compile succeeded.");
   }
@@ -1015,7 +1016,9 @@ function parseUmpleJsonDiagnostics(
   }
 
   try {
-    const parsed = JSON.parse(jsonText) as { results?: UmpleJsonResult[] };
+    // Sanitize invalid JSON escapes from umplesync (e.g. \' is not valid JSON)
+    const sanitized = jsonText.replace(/\\'/g, "'");
+    const parsed = JSON.parse(sanitized) as { results?: UmpleJsonResult[] };
     if (!Array.isArray(parsed.results)) {
       return [];
     }
