@@ -19,17 +19,17 @@ import {
   Range,
 } from "vscode-languageserver/node";
 import { TextDocument } from "vscode-languageserver-textdocument";
-import { ALL_KEYWORDS, KEYWORDS } from "./keywords";
-import { symbolIndex, UseStatementWithPosition } from "./symbolIndex";
+import { COMPLETION_KEYWORDS } from "./keywords";
+import {
+  symbolIndex,
+  UseStatementWithPosition,
+  CompletionContext,
+  SymbolKind,
+} from "./symbolIndex";
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new Map<string, TextDocument>();
 const pendingValidations = new Map<string, NodeJS.Timeout>();
-const pendingIndexUpdates = new Map<string, NodeJS.Timeout>();
-const modelCache = new Map<
-  string,
-  { version: number; items: CompletionItem[] }
->();
 let workspaceRoots: string[] = [];
 
 /**
@@ -89,20 +89,8 @@ let jarWarningShown = false;
 let serverProcess: ChildProcess | undefined;
 let treeSitterWasmPath: string | undefined;
 let symbolIndexReady = false;
-const pendingDocumentsToIndex: Array<{ filePath: string; text: string }> = [];
 
 const DEFAULT_UMPLESYNC_TIMEOUT_MS = 50000;
-
-const KEYWORD_COMPLETIONS: CompletionItem[] =
-  buildKeywordCompletions(ALL_KEYWORDS);
-
-type CompletionContext =
-  | "top"
-  | "class"
-  | "statemachine"
-  | "association"
-  | "enum"
-  | "unknown";
 
 connection.onInitialize((params: InitializeParams): InitializeResult => {
   const initOptions = params.initializationOptions as
@@ -168,12 +156,6 @@ connection.onInitialized(async () => {
       symbolIndexReady = await symbolIndex.initialize(treeSitterWasmPath);
       if (symbolIndexReady) {
         connection.console.info("Symbol index initialized with tree-sitter.");
-
-        // Process documents that were opened before index was ready
-        for (const pending of pendingDocumentsToIndex) {
-          indexDocumentAndReferences(pending.filePath, pending.text);
-        }
-        pendingDocumentsToIndex.length = 0;
       }
     } catch (err) {
       connection.console.warn(`Failed to initialize symbol index: ${err}`);
@@ -196,38 +178,40 @@ connection.onDidOpenTextDocument((params) => {
   setDocument(params.textDocument.uri, document);
   scheduleValidation(document);
 
-  // Update symbol index for this file and all files it references
-  try {
-    const filePath = fileURLToPath(params.textDocument.uri);
-    if (symbolIndexReady) {
-      indexDocumentAndReferences(filePath, params.textDocument.text);
-    } else {
-      // Queue for processing once symbol index is ready
-      pendingDocumentsToIndex.push({
-        filePath,
-        text: params.textDocument.text,
-      });
+  // Index current file only; imports are indexed on-demand by
+  // ensureImportsIndexed() when completion or go-to-definition is triggered
+  if (symbolIndexReady) {
+    try {
+      const filePath = fileURLToPath(params.textDocument.uri);
+      symbolIndex.updateFile(filePath, params.textDocument.text);
+    } catch {
+      // Ignore errors for non-file URIs
     }
-  } catch {
-    // Ignore errors for non-file URIs
   }
 });
 
 /**
- * Index a document and all files it references via use statements.
+ * Ensure all files reachable via use statements are indexed, and return
+ * the set of reachable file paths (including the current file).
+ * Used by both completion and go-to-definition.
  */
-function indexDocumentAndReferences(filePath: string, text: string): void {
-  const docDir = path.dirname(filePath);
+function ensureImportsIndexed(docPath: string, text: string): Set<string> {
+  const docDir = path.dirname(docPath);
+  const reachableFiles = collectReachableFiles(docPath, text, docDir);
+  reachableFiles.add(path.normalize(docPath));
 
-  // Index the current file
-  symbolIndex.updateFile(filePath, text);
-
-  // Index all files reachable via use statements (for go-to-definition)
-  const reachableFiles = collectReachableFiles(filePath, text, docDir);
-  for (const reachableFile of reachableFiles) {
-    if (!fs.existsSync(reachableFile)) continue;
-    symbolIndex.indexFile(reachableFile);
+  for (const file of reachableFiles) {
+    // Prefer unsaved content from open editors over saved disk content
+    const uri = pathToFileURL(file).toString();
+    const openDoc = getDocument(uri);
+    if (openDoc) {
+      symbolIndex.updateFile(file, openDoc.getText());
+    } else if (fs.existsSync(file)) {
+      symbolIndex.indexFile(file);
+    }
   }
+
+  return reachableFiles;
 }
 
 connection.onDidChangeTextDocument((params) => {
@@ -241,11 +225,7 @@ connection.onDidChangeTextDocument((params) => {
     params.textDocument.version,
   );
   setDocument(params.textDocument.uri, updated);
-  modelCache.delete(normalizeUri(params.textDocument.uri));
   scheduleValidation(updated);
-
-  // Update symbol index (debounced)
-  scheduleIndexUpdate(params.textDocument.uri, updated);
 
   // Re-validate other open documents that might depend on this file
   scheduleDependentValidation(params.textDocument.uri);
@@ -254,13 +234,6 @@ connection.onDidChangeTextDocument((params) => {
 connection.onDidCloseTextDocument((params) => {
   const normalizedUri = normalizeUri(params.textDocument.uri);
   deleteDocument(params.textDocument.uri);
-  modelCache.delete(normalizedUri);
-  // Cancel any pending updates for this document
-  const pendingIndex = pendingIndexUpdates.get(normalizedUri);
-  if (pendingIndex) {
-    clearTimeout(pendingIndex);
-    pendingIndexUpdates.delete(normalizedUri);
-  }
   const pendingValidation = pendingValidations.get(normalizedUri);
   if (pendingValidation) {
     clearTimeout(pendingValidation);
@@ -272,47 +245,56 @@ connection.onDidCloseTextDocument((params) => {
 connection.onCompletion(async (params): Promise<CompletionItem[]> => {
   const document = getDocument(params.textDocument.uri);
   if (!document) {
-    return KEYWORD_COMPLETIONS;
+    return [];
   }
 
-  // Check for use statement file completion
   const docPath = getDocumentFilePath(document);
+
+  // Determine context using dummy identifier trick
+  let context: CompletionContext = "unknown";
   if (docPath && symbolIndexReady) {
-    const usePrefix = symbolIndex.getUseCompletionPrefix(
+    context = symbolIndex.getCompletionContext(
       docPath,
       document.getText(),
       params.position.line,
-      Math.max(0, params.position.character - 1),
+      params.position.character,
     );
-    if (usePrefix !== null) {
-      return getUseFileCompletions(
-        document,
-        usePrefix,
-        params.position.line,
-        params.position.character,
-      );
-    }
   }
 
-  const context = detectContext(
-    document,
-    params.position.line,
-    params.position.character,
-  );
+  // Suppress completions in comments
+  if (context === "comment") {
+    return [];
+  }
+
+  // Use path completion: offer .ump file names
+  if (context === "use_path") {
+    const prefix = getUsePathPrefix(
+      document,
+      params.position.line,
+      params.position.character,
+    );
+    return getUseFileCompletions(
+      document,
+      prefix,
+      params.position.line,
+      params.position.character,
+    );
+  }
+
+  // Ensure imported files are indexed so their symbols appear in completions
+  let reachableFiles: Set<string> | undefined;
+  if (docPath && symbolIndexReady) {
+    reachableFiles = ensureImportsIndexed(docPath, document.getText());
+  }
+
+  // All other contexts: keyword + symbol completions
   const prefix = getCompletionPrefix(
     document,
     params.position.line,
     params.position.character,
   );
-  const keywordItems = filterCompletions(
-    buildKeywordCompletions(getKeywordsForContext(context)),
-    prefix,
-  );
-  const modelItems = await getModelCompletions(document);
-  return dedupeCompletions([
-    ...keywordItems,
-    ...filterCompletions(modelItems, prefix),
-  ]);
+
+  return buildCompletionsForContext(context, prefix, reachableFiles);
 });
 
 connection.onDefinition(async (params) => {
@@ -326,12 +308,15 @@ connection.onDefinition(async (params) => {
     return [useLocation];
   }
 
-  // Fast path: try symbol index first, filtered by reachable files
+  // Try symbol index, filtered by reachable files
   if (symbolIndexReady) {
-    // Skip if cursor is inside a comment
     const docPath = getDocumentFilePath(document);
+    if (!docPath) {
+      return [];
+    }
+
+    // Skip if cursor is inside a comment
     if (
-      docPath &&
       symbolIndex.isPositionInComment(
         docPath,
         document.getText(),
@@ -344,44 +329,27 @@ connection.onDefinition(async (params) => {
 
     const word = getWordAtPosition(document, params.position);
     if (word) {
+      // Ensure imports are indexed and get reachable file set
+      const reachableFiles = ensureImportsIndexed(docPath, document.getText());
+
       const allSymbols = symbolIndex.findDefinition(word);
-      if (allSymbols.length > 0) {
-        // Get the set of files reachable via use statements
-        const docPath = getDocumentFilePath(document);
-        const reachableFiles = docPath
-          ? collectReachableFiles(
-              docPath,
-              document.getText(),
-              path.dirname(docPath),
-            )
-          : new Set<string>();
+      // Filter symbols to only those in reachable files
+      const filteredSymbols = allSymbols.filter((sym) =>
+        reachableFiles.has(path.normalize(sym.file)),
+      );
 
-        // Also include the current file
-        if (docPath) {
-          reachableFiles.add(path.normalize(docPath));
-        }
-
-        // Filter symbols to only those in reachable files
-        const filteredSymbols = allSymbols.filter((sym) =>
-          reachableFiles.has(path.normalize(sym.file)),
-        );
-
-        if (filteredSymbols.length > 0) {
-          const results: Location[] = filteredSymbols.map((sym) => {
-            const uri = pathToFileURL(sym.file).toString();
-            return Location.create(
-              uri,
-              Range.create(
-                Position.create(sym.line, sym.column),
-                Position.create(sym.endLine, sym.endColumn),
-              ),
-            );
-          });
-          connection.console.info(
-            `Fast go-to-definition for "${word}": found ${results.length} result(s) (filtered from ${allSymbols.length})`,
+      if (filteredSymbols.length > 0) {
+        const results: Location[] = filteredSymbols.map((sym) => {
+          const uri = pathToFileURL(sym.file).toString();
+          return Location.create(
+            uri,
+            Range.create(
+              Position.create(sym.line, sym.column),
+              Position.create(sym.endLine, sym.endColumn),
+            ),
           );
-          return results;
-        }
+        });
+        return results;
       }
     }
   }
@@ -400,33 +368,6 @@ function scheduleValidation(document: TextDocument): void {
     void validateTextDocument(document);
   }, 300);
   pendingValidations.set(document.uri, handle);
-}
-
-/**
- * Schedule a debounced symbol index update.
- * This avoids re-parsing the file on every keystroke.
- */
-function scheduleIndexUpdate(uri: string, document: TextDocument): void {
-  if (!symbolIndexReady) {
-    return;
-  }
-
-  const existing = pendingIndexUpdates.get(uri);
-  if (existing) {
-    clearTimeout(existing);
-  }
-
-  const handle = setTimeout(() => {
-    pendingIndexUpdates.delete(uri);
-    try {
-      const filePath = fileURLToPath(uri);
-      symbolIndex.updateFile(filePath, document.getText());
-    } catch {
-      // Ignore errors for non-file URIs
-    }
-  }, 200); // Slightly shorter than validation since it's faster
-
-  pendingIndexUpdates.set(uri, handle);
 }
 
 // Debounce key for dependent validation
@@ -1154,36 +1095,6 @@ function resolveWorkspaceRoots(params: InitializeParams): string[] {
   return roots;
 }
 
-async function writeTempUmpleFile(
-  document: TextDocument,
-  label: string,
-): Promise<{ filePath: string; cleanup: () => Promise<void> }> {
-  const baseDir = getDocumentDirectory(document);
-  if (baseDir) {
-    const filePath = path.join(
-      baseDir,
-      `.umple-lsp-${label}-${process.pid}-${Date.now()}.ump`,
-    );
-    return {
-      filePath,
-      cleanup: async () => {
-        await fs.promises.rm(filePath, { force: true });
-      },
-    };
-  }
-
-  const tempDir = await fs.promises.mkdtemp(
-    path.join(os.tmpdir(), `umple-lsp-${label}-`),
-  );
-  const filePath = path.join(tempDir, "document.ump");
-  return {
-    filePath,
-    cleanup: async () => {
-      await fs.promises.rm(tempDir, { recursive: true, force: true });
-    },
-  };
-}
-
 function getDocumentDirectory(document: TextDocument): string | null {
   const docPath = getDocumentFilePath(document);
   if (!docPath) {
@@ -1254,6 +1165,21 @@ function getCompletionPrefix(
 }
 
 /**
+ * Get the prefix for use-path completion (allows dots, slashes, underscores).
+ */
+function getUsePathPrefix(
+  document: TextDocument,
+  line: number,
+  character: number,
+): string {
+  const lineText = document.getText(
+    Range.create(Position.create(line, 0), Position.create(line, character)),
+  );
+  const match = lineText.match(/[A-Za-z_][A-Za-z0-9_.\/]*$/);
+  return match ? match[0] : "";
+}
+
+/**
  * Get the word (identifier) at the given position.
  * Used for go-to-definition symbol lookup.
  */
@@ -1307,180 +1233,193 @@ function filterCompletions(
   );
 }
 
-function buildKeywordCompletions(keywords: string[]): CompletionItem[] {
-  return Array.from(new Set(keywords)).map((label) => ({
-    label,
-    kind: CompletionItemKind.Keyword,
-  }));
-}
+/**
+ * Build completion items for a given tree-sitter based context.
+ * Combines context-specific keywords with symbol-based completions.
+ */
+function buildCompletionsForContext(
+  context: CompletionContext,
+  prefix: string,
+  reachableFiles?: Set<string>,
+): CompletionItem[] {
+  const items: CompletionItem[] = [];
+  const seen = new Set<string>();
 
-function getKeywordsForContext(context: CompletionContext): string[] {
-  switch (context) {
-    case "top":
-      return [
-        ...KEYWORDS.topLevel,
-        ...KEYWORDS.testing,
-        ...KEYWORDS.tracing,
-        ...KEYWORDS.misc,
-      ];
-    case "class":
-      return [
-        ...KEYWORDS.classLevel,
-        ...KEYWORDS.attribute,
-        ...KEYWORDS.method,
-        ...KEYWORDS.constraints,
-        ...KEYWORDS.modelConstraints,
-        ...KEYWORDS.tracing,
-        ...KEYWORDS.testing,
-      ];
-    case "statemachine":
-      return [...KEYWORDS.statemachine, ...KEYWORDS.constraints];
-    case "association":
-      return [...KEYWORDS.constraints];
-    case "enum":
-      return [];
-    default:
-      return ALL_KEYWORDS;
-  }
-}
-
-function detectContext(
-  document: TextDocument,
-  line: number,
-  character: number,
-): CompletionContext {
-  const range = Range.create(
-    Position.create(0, 0),
-    Position.create(line, character),
-  );
-  let text = document.getText(range);
-  if (text.length > 20000) {
-    text = text.slice(text.length - 20000);
-  }
-
-  const stack: string[] = [];
-  const keywordContext: Record<string, CompletionContext> = {
-    class: "class",
-    trait: "class",
-    interface: "class",
-    association: "association",
-    associationClass: "class",
-    statemachine: "statemachine",
-    enum: "enum",
-    mixset: "top",
-    filter: "top",
+  // Helper: get symbols of a kind, filtered to reachable files
+  const getSymbols = (kind: SymbolKind) => {
+    const all = symbolIndex.getSymbolsByKind(kind);
+    if (!reachableFiles) return all;
+    return all.filter((sym) => reachableFiles.has(path.normalize(sym.file)));
   };
 
-  let lastKeyword: string | null = null;
-  let inLineComment = false;
-  let inBlockComment = false;
-  let inString = false;
-
-  for (let i = 0; i < text.length; i += 1) {
-    const ch = text[i];
-    const next = text[i + 1];
-
-    if (inLineComment) {
-      if (ch === "\n") {
-        inLineComment = false;
-      }
-      continue;
-    }
-    if (inBlockComment) {
-      if (ch === "*" && next === "/") {
-        inBlockComment = false;
-        i += 1;
-      }
-      continue;
-    }
-    if (inString) {
-      if (ch === "\\") {
-        i += 1;
-        continue;
-      }
-      if (ch === '"') {
-        inString = false;
-      }
-      continue;
-    }
-
-    if (ch === "/" && next === "/") {
-      inLineComment = true;
-      i += 1;
-      continue;
-    }
-    if (ch === "/" && next === "*") {
-      inBlockComment = true;
-      i += 1;
-      continue;
-    }
-    if (ch === '"') {
-      inString = true;
-      continue;
-    }
-
-    if (/[A-Za-z_]/.test(ch)) {
-      let j = i + 1;
-      while (j < text.length && /[A-Za-z0-9_]/.test(text[j])) {
-        j += 1;
-      }
-      const word = text.slice(i, j);
-      if (word in keywordContext) {
-        lastKeyword = word;
-      }
-      // lastKeyword = keywordContext[word] ? word : null;
-      i = j - 1;
-      continue;
-    }
-
-    if (ch === "{") {
-      if (lastKeyword && keywordContext[lastKeyword]) {
-        stack.push(keywordContext[lastKeyword]);
-      } else {
-        stack.push("block");
-      }
-      lastKeyword = null;
-      continue;
-    }
-
-    if (ch === "}") {
-      if (stack.length > 0) {
-        stack.pop();
-      }
-      lastKeyword = null;
+  // Add context-specific keywords
+  const keywords =
+    COMPLETION_KEYWORDS[context as keyof typeof COMPLETION_KEYWORDS] ?? [];
+  for (const kw of keywords) {
+    if (!seen.has(`kw:${kw}`)) {
+      seen.add(`kw:${kw}`);
+      items.push({ label: kw, kind: CompletionItemKind.Keyword });
     }
   }
 
-  for (let i = stack.length - 1; i >= 0; i -= 1) {
-    const ctx = stack[i];
-    if (
-      ctx === "statemachine" ||
-      ctx === "association" ||
-      ctx === "class" ||
-      ctx === "enum"
-    ) {
-      return ctx;
+  // Add symbol-based completions depending on context
+  if (symbolIndexReady) {
+    switch (context) {
+      case "top":
+        // No symbol completions at top level
+        break;
+
+      case "class_body": {
+        // Offer attribute modifiers and types
+        for (const mod of COMPLETION_KEYWORDS.attribute_modifiers) {
+          if (!seen.has(`kw:${mod}`)) {
+            seen.add(`kw:${mod}`);
+            items.push({ label: mod, kind: CompletionItemKind.Keyword });
+          }
+        }
+        for (const typ of COMPLETION_KEYWORDS.attribute_types) {
+          if (!seen.has(`type:${typ}`)) {
+            seen.add(`type:${typ}`);
+            items.push({
+              label: typ,
+              kind: CompletionItemKind.TypeParameter,
+              detail: "type",
+            });
+          }
+        }
+        // Offer class/interface/trait names (for isA, type references)
+        for (const sym of getSymbols("class")) {
+          if (!seen.has(`sym:${sym.name}`)) {
+            seen.add(`sym:${sym.name}`);
+            items.push({
+              label: sym.name,
+              kind: CompletionItemKind.Class,
+              detail: "class",
+            });
+          }
+        }
+        for (const sym of getSymbols("interface")) {
+          if (!seen.has(`sym:${sym.name}`)) {
+            seen.add(`sym:${sym.name}`);
+            items.push({
+              label: sym.name,
+              kind: CompletionItemKind.Interface,
+              detail: "interface",
+            });
+          }
+        }
+        for (const sym of getSymbols("trait")) {
+          if (!seen.has(`sym:${sym.name}`)) {
+            seen.add(`sym:${sym.name}`);
+            items.push({
+              label: sym.name,
+              kind: CompletionItemKind.Class,
+              detail: "trait",
+            });
+          }
+        }
+        break;
+      }
+
+      case "isa_type": {
+        // After "isA" keyword: only offer class/interface/trait names
+        for (const sym of getSymbols("class")) {
+          if (!seen.has(`sym:${sym.name}`)) {
+            seen.add(`sym:${sym.name}`);
+            items.push({
+              label: sym.name,
+              kind: CompletionItemKind.Class,
+              detail: "class",
+            });
+          }
+        }
+        for (const sym of getSymbols("interface")) {
+          if (!seen.has(`sym:${sym.name}`)) {
+            seen.add(`sym:${sym.name}`);
+            items.push({
+              label: sym.name,
+              kind: CompletionItemKind.Interface,
+              detail: "interface",
+            });
+          }
+        }
+        for (const sym of getSymbols("trait")) {
+          if (!seen.has(`sym:${sym.name}`)) {
+            seen.add(`sym:${sym.name}`);
+            items.push({
+              label: sym.name,
+              kind: CompletionItemKind.Class,
+              detail: "trait",
+            });
+          }
+        }
+        break;
+      }
+
+      case "transition_target": {
+        // After "->" in state: only offer state names
+        for (const sym of getSymbols("state")) {
+          if (!seen.has(`sym:${sym.name}`)) {
+            seen.add(`sym:${sym.name}`);
+            items.push({
+              label: sym.name,
+              kind: CompletionItemKind.EnumMember,
+              detail: "state",
+            });
+          }
+        }
+        break;
+      }
+
+      case "association_type": {
+        // Type position in association: only offer class names
+        for (const sym of getSymbols("class")) {
+          if (!seen.has(`sym:${sym.name}`)) {
+            seen.add(`sym:${sym.name}`);
+            items.push({
+              label: sym.name,
+              kind: CompletionItemKind.Class,
+              detail: "class",
+            });
+          }
+        }
+        break;
+      }
+
+      case "state_machine":
+      case "state": {
+        // Offer state names from the index
+        for (const sym of getSymbols("state")) {
+          if (!seen.has(`sym:${sym.name}`)) {
+            seen.add(`sym:${sym.name}`);
+            items.push({
+              label: sym.name,
+              kind: CompletionItemKind.EnumMember,
+              detail: "state",
+            });
+          }
+        }
+        break;
+      }
+
+      case "association": {
+        // Offer class names for association endpoints
+        for (const sym of getSymbols("class")) {
+          if (!seen.has(`sym:${sym.name}`)) {
+            seen.add(`sym:${sym.name}`);
+            items.push({
+              label: sym.name,
+              kind: CompletionItemKind.Class,
+              detail: "class",
+            });
+          }
+        }
+        break;
+      }
+
+      // depend_package, enum, method, comment, unknown: no additional symbol completions
     }
   }
-
-  return "top";
-}
-
-function getClassNameCompletions(prefix: string): CompletionItem[] {
-  const classNames = new Set<string>();
-  for (const document of documents.values()) {
-    const text = document.getText();
-    const regex = /\b(class|trait)\s+([A-Za-z_][A-Za-z0-9_]*)/g;
-    let match: RegExpExecArray | null;
-    while ((match = regex.exec(text)) !== null) {
-      classNames.add(match[2]);
-    }
-  }
-
-  const items = Array.from(classNames).map((name) => ({
-    label: name,
-    kind: CompletionItemKind.Class,
-  }));
 
   return filterCompletions(items, prefix);
 }
@@ -1522,200 +1461,6 @@ function getUseFileCompletions(
       detail: "Umple file",
       textEdit: { range: replaceRange, newText: f },
     }));
-}
-
-async function getModelCompletions(
-  document: TextDocument,
-): Promise<CompletionItem[]> {
-  const cached = modelCache.get(document.uri);
-  if (cached && cached.version === document.version) {
-    return cached.items;
-  }
-
-  let items: CompletionItem[] = [];
-  try {
-    const modelJson = await generateModelJson(document);
-    if (modelJson) {
-      items = buildModelCompletions(modelJson);
-    }
-  } catch (error) {
-    connection.console.warn(
-      `Failed to build model completions: ${String(error)}`,
-    );
-  }
-  modelCache.set(document.uri, { version: document.version, items });
-
-  return items;
-}
-
-async function generateModelJson(
-  document: TextDocument,
-): Promise<unknown | null> {
-  const jarPath = resolveJarPath();
-  if (!jarPath) {
-    return null;
-  }
-
-  const tempFileInfo = await writeTempUmpleFile(document, "model");
-  const tempFile = tempFileInfo.filePath;
-  let text = document.getText();
-  if (!text.endsWith("\n\n")) {
-    text = text.replace(/\n?$/, "\n\n");
-  }
-  await fs.promises.writeFile(tempFile, text, "utf8");
-
-  try {
-    const commandLine = `-generate JsonMixed ${formatUmpleArg(tempFile)}`;
-    const { stdout } = await sendUmpleSyncCommand(jarPath, commandLine);
-    const jsonText = extractJson(stdout);
-    if (!jsonText) {
-      return null;
-    }
-    return JSON.parse(jsonText);
-  } finally {
-    await tempFileInfo.cleanup();
-  }
-}
-
-function buildModelCompletions(modelJson: unknown): CompletionItem[] {
-  const items: CompletionItem[] = [];
-  const seen = new Set<string>();
-  const model = modelJson as {
-    umpleClasses?: Array<{
-      name?: string;
-      attributes?: Array<{ name?: string; type?: string }>;
-      stateMachines?: Array<{
-        name?: string;
-        states?: Array<{ name?: string }>;
-        transitions?: Array<{
-          labels?: Array<{
-            attrs?: { text?: { text?: string } };
-          }>;
-        }>;
-      }>;
-    }>;
-    umpleAssociations?: Array<{
-      name?: string;
-      classOneId?: string;
-      classTwoId?: string;
-    }>;
-  };
-
-  // umple classes
-  for (const umpleClass of model.umpleClasses ?? []) {
-    // class name
-    const className = umpleClass.name;
-    if (className) {
-      addCompletion(items, seen, {
-        label: className,
-        kind: CompletionItemKind.Class,
-        detail: "class",
-      });
-    }
-    // attributes
-    for (const attr of umpleClass.attributes ?? []) {
-      if (!attr.name) {
-        continue;
-      }
-      const detail = attr.type ? `${attr.type} attribute` : "attribute";
-      addCompletion(items, seen, {
-        label: attr.name,
-        kind: CompletionItemKind.Field,
-        detail: className ? `${detail} in ${className}` : detail,
-      });
-    }
-
-    // statemachines
-    for (const sm of umpleClass.stateMachines ?? []) {
-      // state names
-      for (const state of sm.states ?? []) {
-        if (!state.name) {
-          continue;
-        }
-        addCompletion(items, seen, {
-          label: state.name,
-          kind: CompletionItemKind.EnumMember,
-          detail: "state",
-        });
-      }
-
-      // transition
-      for (const transition of sm.transitions ?? []) {
-        for (const label of transition.labels ?? []) {
-          const text = label?.attrs?.text?.text;
-          const eventName = extractEventName(text);
-          if (!eventName) {
-            continue;
-          }
-          addCompletion(items, seen, {
-            label: eventName,
-            kind: CompletionItemKind.Event,
-            detail: "event",
-          });
-        }
-      }
-    }
-  }
-
-  for (const assoc of model.umpleAssociations ?? []) {
-    const name =
-      assoc.name ??
-      (assoc.classOneId && assoc.classTwoId
-        ? `${assoc.classOneId}__${assoc.classTwoId}`
-        : undefined);
-    if (!name) {
-      continue;
-    }
-    addCompletion(items, seen, {
-      label: name,
-      kind: CompletionItemKind.Property,
-      detail: "association",
-    });
-  }
-
-  return items;
-}
-
-function extractEventName(labelText: string | undefined): string | null {
-  if (!labelText) {
-    return null;
-  }
-  const trimmed = labelText.trim();
-  if (!trimmed) {
-    return null;
-  }
-  const stopIndex = trimmed.search(/\s*\[|\s*\/\s*/);
-  if (stopIndex === -1) {
-    return trimmed;
-  }
-  return trimmed.slice(0, stopIndex).trim();
-}
-
-function addCompletion(
-  items: CompletionItem[],
-  seen: Set<string>,
-  item: CompletionItem,
-): void {
-  const key = `${item.kind ?? "text"}:${item.label}`;
-  if (seen.has(key)) {
-    return;
-  }
-  seen.add(key);
-  items.push(item);
-}
-
-function dedupeCompletions(items: CompletionItem[]): CompletionItem[] {
-  const seen = new Set<string>();
-  const result: CompletionItem[] = [];
-  for (const item of items) {
-    const key = `${item.kind ?? "text"}:${item.label}`;
-    if (seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    result.push(item);
-  }
-  return result;
 }
 
 function extractJson(text: string): string | null {
