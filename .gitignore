@@ -4,13 +4,10 @@ node_modules
 out/
 .vscode/
 umple/
+CLAUDE.md
 
 # Tree-sitter native build output
 packages/tree-sitter-umple/build/
 
 # Build artifact: WASM copied from tree-sitter package into server package
 packages/server/tree-sitter-umple.wasm
-
-# Copied into vscode package during vsce:prepublish
-packages/vscode/README.md
-packages/vscode/LICENSE

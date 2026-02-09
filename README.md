@@ -11,13 +11,13 @@ A Language Server Protocol implementation for the [Umple](https://www.umple.org)
 - **Cross-file support** - Transitive `use` statement resolution and cross-file diagnostics
 - **Import error reporting** - Errors in imported files shown on the `use` statement line
 
-## Supported Editors
+## Editor Plugins
 
-| Editor | Diagnostics | Go-to-def | Completion | Syntax Highlighting |
-|--------|-------------|-----------|------------|---------------------|
-| [VS Code](#vs-code) | Yes | Yes | Yes | TextMate + tree-sitter |
-| [Neovim](editors/neovim/) | Yes | Yes | Yes | tree-sitter |
-| [Sublime Text](editors/sublime/) | Yes | Yes | Yes | Basic regex |
+| Editor | Repo |
+|--------|------|
+| VS Code | [umple.vscode](https://github.com/DraftTin/umple.vscode) |
+| Neovim | [umple.nvim](https://github.com/DraftTin/umple.nvim) |
+| Sublime Text | [Setup guide](editors/sublime/) (config only, no plugin needed) |
 
 ## Prerequisites
 
@@ -32,45 +32,28 @@ npm run compile
 npm run download-jar
 ```
 
-Then follow the setup guide for your editor below.
-
-## VS Code
-
-1. Open this project in VS Code
-2. Press `F5` to launch the Extension Development Host
-3. Open a `.ump` file in the new window
-
-## Other Editors
-
-See the [editors/](editors/) directory for setup guides:
-
-- [Neovim](editors/neovim/) - tree-sitter highlighting + LSP via lspconfig
-- [Sublime Text](editors/sublime/) - LSP package + basic syntax highlighting
-
-All editors connect to the same LSP server (`packages/server/out/server.js`) via stdio.
+Then install the plugin for your editor (see table above).
 
 ## Architecture
 
 ```
 umple-lsp/
 ├── packages/
-│   ├── server/              # Standalone LSP server (npm-publishable)
-│   ├── vscode/              # VS Code extension client
+│   ├── server/              # Standalone LSP server (npm: umple-lsp-server)
 │   └── tree-sitter-umple/   # Tree-sitter grammar & queries
-├── editors/                 # Neovim, Sublime Text configs
+├── editors/                 # Setup guides for Sublime, manual Neovim config
 └── test/                    # Sample .ump files
 ```
 
 ```
-Editor
+Editor Plugin (separate repos)
   |
   +-- (stdio) --> server.js --> umplesync.jar (diagnostics)
                     |
                     +-- tree-sitter (go-to-definition, symbol indexing)
 ```
 
-- **Server** (`packages/server/`) - LSP server (editor-agnostic, npm-publishable as `umple-lsp-server`)
-- **VS Code Client** (`packages/vscode/`) - VS Code extension entry point
+- **Server** (`packages/server/`) - Editor-agnostic LSP server (npm-publishable as `umple-lsp-server`)
 - **Tree-sitter grammar** (`packages/tree-sitter-umple/`) - Parser and syntax highlighting queries
 
 The server uses lazy indexing: files are only parsed when opened, and only files reachable via `use` statements are indexed. This keeps startup fast regardless of workspace size.
@@ -105,11 +88,11 @@ Use different ports if running multiple editor instances simultaneously.
 ## Development
 
 ```bash
-npm run compile    # Build server and VS Code client
+npm run compile    # Build server
 npm run watch      # Watch mode
 ```
 
-Test by pressing `F5` in VS Code or by running the server directly:
+Test by running the server directly:
 
 ```bash
 node packages/server/out/server.js --stdio

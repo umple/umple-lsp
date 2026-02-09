@@ -1,42 +1,31 @@
 # Editor Integrations
 
-This directory contains setup guides and configuration files for using the Umple Language Server with various editors.
+Editors with full plugin support have their own repos. Editors that only need LSP client config have setup guides here.
 
-## Supported Editors
-
-| Editor | Status | Diagnostics | Go-to-def | Completion | Syntax Highlighting |
-|--------|--------|-------------|-----------|------------|---------------------|
-| [VS Code](../README.md) | Full support | ✅ | ✅ | ✅ | ✅ (TextMate + tree-sitter) |
-| [Neovim](neovim/) | Full support | ✅ | ✅ | ✅ | ✅ (tree-sitter) |
-| [Sublime Text](sublime/) | LSP only | ✅ | ✅ | ✅ | ⚠️ (basic regex) |
+| Editor | Setup | Diagnostics | Go-to-def | Completion | Syntax Highlighting |
+|--------|-------|-------------|-----------|------------|---------------------|
+| [VS Code](vscode/) | [Separate repo](https://github.com/DraftTin/umple.vscode) | ✅ | ✅ | ✅ | ✅ (TextMate) |
+| [Neovim](neovim/) | [Separate repo](https://github.com/DraftTin/umple.nvim) | ✅ | ✅ | ✅ | ✅ (tree-sitter) |
+| [Zed](zed/) | [Separate repo](https://github.com/DraftTin/umple.zed) | ✅ | ✅ | ✅ | ✅ |
+| [Sublime Text](sublime/) | Config in this repo | ✅ | ✅ | ✅ | ⚠️ (basic regex) |
 
 ## Prerequisites (All Editors)
-
-Before setting up any editor, ensure you have:
 
 1. **Node.js 18+**: Required to run the LSP server
 2. **Java 11+**: Required for umplesync.jar (Umple compiler)
 
-## Quick Start
+Build the LSP server first:
 
 ```bash
-# 1. Build the LSP server (from umple-lsp directory)
+cd umple-lsp
 npm install
 npm run compile
 npm run download-jar
-
-# 2. Follow the setup guide for your editor
 ```
 
 ## Architecture
 
-All editors connect to the same LSP server (`packages/server/out/server.js`). The server:
-
-- Runs as a Node.js process
-- Communicates via stdio
-- Uses umplesync.jar for diagnostics
-- Uses tree-sitter for symbol indexing (lazy - indexes on file open)
-- Only indexes files reachable via `use` statements for fast startup
+All editors connect to the same LSP server (`packages/server/out/server.js`) via stdio.
 
 ```
 Your Editor
@@ -46,20 +35,9 @@ Your Editor
                      └─ tree-sitter (go-to-definition, lazy indexing)
 ```
 
-## Adding Support for a New Editor
-
-To add support for a new editor:
-
-1. Create a new folder: `editors/<editor-name>/`
-2. Add a `README.md` with setup instructions
-3. Include any editor-specific configuration files
-4. Test all features: diagnostics, go-to-definition, completion
-
-The LSP server is editor-agnostic and follows the LSP specification, so any editor with LSP support should work.
-
 ## Initialization Options
 
-When configuring the LSP client, you can pass these initialization options:
+When configuring an LSP client, pass these initialization options:
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
@@ -68,4 +46,9 @@ When configuring the LSP client, you can pass these initialization options:
 | `umpleSyncHost` | string | "localhost" | Host for umplesync connection |
 | `umpleSyncTimeoutMs` | number | 30000 | Timeout for umplesync requests |
 
-**Note:** Use different ports for each editor if running multiple instances simultaneously.
+Use different ports for each editor if running multiple instances simultaneously.
+
+## Adding Support for a New Editor
+
+1. If the editor needs a plugin/extension with its own build step → create a separate repo (e.g., `umple.zed`)
+2. If the editor just needs LSP client config → add a folder here with a `README.md` and any config files
