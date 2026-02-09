@@ -81,6 +81,18 @@ function readFileSafe(filePath: string): string | null {
   }
 }
 
+/**
+ * Return the first path from candidates that exists on disk, or undefined.
+ */
+function findFile(candidates: string[]): string | undefined {
+  for (const p of candidates) {
+    if (fs.existsSync(p)) {
+      return p;
+    }
+  }
+  return undefined;
+}
+
 let umpleSyncJarPath: string | undefined;
 let umpleSyncHost = "localhost";
 let umpleSyncPort = 5555;
@@ -101,7 +113,8 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
         umpleSyncTimeoutMs?: number;
       }
     | undefined;
-  umpleSyncJarPath = initOptions?.umpleSyncJarPath;
+  umpleSyncJarPath =
+    initOptions?.umpleSyncJarPath || process.env.UMPLESYNC_JAR_PATH;
   umpleSyncHost =
     initOptions?.umpleSyncHost || process.env.UMPLESYNC_HOST || "localhost";
   if (typeof initOptions?.umpleSyncPort === "number") {
@@ -142,16 +155,20 @@ connection.onInitialized(async () => {
 
   // Initialize tree-sitter symbol index for fast go-to-definition
   treeSitterWasmPath =
+    process.env.UMPLE_TREE_SITTER_WASM_PATH ||
     treeSitterWasmPath ||
-    path.join(
-      __dirname,
-      "..",
-      "..",
-      "tree-sitter-umple",
-      "tree-sitter-umple.wasm",
-    );
+    findFile([
+      path.join(__dirname, "..", "tree-sitter-umple.wasm"), // npm package (wasm copied to server root)
+      path.join(
+        __dirname,
+        "..",
+        "..",
+        "tree-sitter-umple",
+        "tree-sitter-umple.wasm",
+      ), // monorepo dev
+    ]);
 
-  if (fs.existsSync(treeSitterWasmPath)) {
+  if (treeSitterWasmPath && fs.existsSync(treeSitterWasmPath)) {
     try {
       symbolIndexReady = await symbolIndex.initialize(treeSitterWasmPath);
       if (symbolIndexReady) {
@@ -162,7 +179,7 @@ connection.onInitialized(async () => {
     }
   } else {
     connection.console.info(
-      `Tree-sitter WASM not found at ${treeSitterWasmPath}, using fallback go-to-definition.`,
+      `Tree-sitter WASM not found at ${treeSitterWasmPath ?? "(no path configured)"}, using fallback go-to-definition.`,
     );
   }
 });

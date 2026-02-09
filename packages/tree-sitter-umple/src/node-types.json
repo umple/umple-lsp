@@ -52,17 +52,44 @@
   {
     "type": "association_inline",
     "named": true,
-    "fields": {},
+    "fields": {
+      "left_role": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "right_role": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "right_type": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    },
     "children": {
       "multiple": true,
       "required": true,
       "types": [
         {
           "type": "arrow",
-          "named": true
-        },
-        {
-          "type": "identifier",
           "named": true
         },
         {
@@ -75,17 +102,54 @@
   {
     "type": "association_member",
     "named": true,
-    "fields": {},
+    "fields": {
+      "left_role": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "left_type": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "right_role": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "right_type": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    },
     "children": {
       "multiple": true,
       "required": true,
       "types": [
         {
           "type": "arrow",
-          "named": true
-        },
-        {
-          "type": "identifier",
           "named": true
         },
         {
@@ -220,6 +284,10 @@
           "named": true
         },
         {
+          "type": "constraint",
+          "named": true
+        },
+        {
           "type": "depend_statement",
           "named": true
         },
@@ -327,6 +395,21 @@
         },
         {
           "type": "string_literal",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "constraint",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": false,
+      "types": [
+        {
+          "type": "identifier",
           "named": true
         }
       ]
@@ -867,6 +950,10 @@
           "named": true
         },
         {
+          "type": "constraint",
+          "named": true
+        },
+        {
           "type": "depend_statement",
           "named": true
         },
@@ -1037,6 +1124,10 @@
   },
   {
     "type": "/",
+    "named": false
+  },
+  {
+    "type": ":",
     "named": false
   },
   {

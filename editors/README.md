@@ -30,7 +30,7 @@ npm run download-jar
 
 ## Architecture
 
-All editors connect to the same LSP server (`server/out/server.js`). The server:
+All editors connect to the same LSP server (`packages/server/out/server.js`). The server:
 
 - Runs as a Node.js process
 - Communicates via stdio

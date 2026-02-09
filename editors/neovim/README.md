@@ -2,21 +2,23 @@
 
 This guide explains how to set up the Umple Language Server with Neovim.
 
+For a plug-and-play lazy.nvim plugin, see [umple-lsp.nvim](https://github.com/DraftTin/umple-lsp.nvim) (coming soon).
+
 ## Prerequisites
 
 - Neovim 0.8+ (with built-in LSP support)
 - Node.js 18+
 - Java 11+ (for umplesync.jar)
-- [nvim-lspconfig](https://github.com/neovim/nvim-lspconfig) (recommended)
+- [nvim-lspconfig](https://github.com/neovim/nvim-lspconfig)
 - [nvim-treesitter](https://github.com/nvim-treesitter/nvim-treesitter) (for syntax highlighting)
 
 ## Installation
 
 ### 1. Build the LSP server
 
-From the umple-lsp directory:
-
 ```bash
+git clone https://github.com/DraftTin/umple-lsp.git
+cd umple-lsp
 npm install
 npm run compile
 npm run download-jar
@@ -24,37 +26,30 @@ npm run download-jar
 
 ### 2. Add LSP configuration to Neovim
 
-Add the following to your `init.lua` (or create a separate file in `~/.config/nvim/lua/`):
+Add to your `init.lua` (update the path):
 
 ```lua
--- Option A: Copy the contents of umple.lua to your config
--- Option B: Source this file directly:
--- dofile('/path/to/umple-lsp/editors/neovim/umple.lua')
+dofile('/path/to/umple-lsp/editors/neovim/umple.lua')
 ```
 
-See `umple.lua` for the complete configuration.
+Or copy the contents of `umple.lua` into your config. Update `UMPLE_LSP_PATH` at the top.
 
-### 3. Install the tree-sitter parser (for syntax highlighting)
+### 3. Install tree-sitter parser
 
-```lua
--- Add to your nvim-treesitter config
-local parser_config = require("nvim-treesitter.parsers").get_parser_configs()
-parser_config.umple = {
-  install_info = {
-    url = "/path/to/umple-lsp/tree-sitter-umple",
-    files = { "src/parser.c" },
-  },
-  filetype = "umple",
-}
+Run in Neovim:
+
+```vim
+:TSInstall umple
 ```
-
-Then run `:TSInstall umple` in Neovim.
 
 ### 4. Symlink highlight queries
 
 ```bash
-mkdir -p ~/.local/share/nvim/queries
-ln -s /path/to/umple-lsp/tree-sitter-umple/queries ~/.local/share/nvim/queries/umple
+# For standard nvim-treesitter:
+ln -s /path/to/umple-lsp/packages/tree-sitter-umple/queries ~/.local/share/nvim/queries/umple
+
+# For lazy.nvim users:
+ln -s /path/to/umple-lsp/packages/tree-sitter-umple/queries ~/.local/share/nvim/lazy/nvim-treesitter/queries/umple
 ```
 
 ## Features
@@ -63,23 +58,6 @@ ln -s /path/to/umple-lsp/tree-sitter-umple/queries ~/.local/share/nvim/queries/u
 - **Go-to-definition**: Jump to class, attribute, state definitions
 - **Code completion**: Context-aware keyword and symbol completion
 - **Syntax highlighting**: Via tree-sitter grammar
-
-## Troubleshooting
-
-### LSP not starting
-
-1. Check if Java is installed: `java -version`
-2. Check if the server runs manually:
-   ```bash
-   node /path/to/umple-lsp/server/out/server.js --stdio
-   ```
-3. Check Neovim LSP logs: `:LspLog`
-
-### No syntax highlighting
-
-1. Ensure tree-sitter parser is installed: `:TSInstallInfo`
-2. Check if queries are symlinked correctly
-3. Verify filetype is set: `:set filetype?` (should show `umple`)
 
 ## Updating
 
@@ -92,6 +70,24 @@ npm run download-jar
 ```
 
 In Neovim, reinstall the tree-sitter parser if grammar changed:
+
 ```vim
 :TSInstall umple
 ```
+
+## Troubleshooting
+
+### LSP not starting
+
+1. Check if Java is installed: `java -version`
+2. Check if the server runs manually:
+   ```bash
+   node /path/to/umple-lsp/packages/server/out/server.js --stdio
+   ```
+3. Check Neovim LSP logs: `:LspLog`
+
+### No syntax highlighting
+
+1. Ensure tree-sitter parser is installed: `:TSInstallInfo`
+2. Verify filetype is set: `:set filetype?` (should show `umple`)
+3. Check if queries are linked correctly

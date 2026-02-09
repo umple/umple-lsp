@@ -41,25 +41,60 @@ use AnotherFile.ump          // Also valid without quotes or semicolon
 
 ## Project Overview
 
-This is a VS Code Language Server Protocol (LSP) extension for the Umple modeling language. It provides IDE features including diagnostics, code completion, and go-to-definition for `.ump` files. Also includes a tree-sitter grammar for syntax highlighting in editors like Neovim.
+This is a monorepo for the Umple Language Server and editor clients. It provides IDE features including diagnostics, code completion, and go-to-definition for `.ump` files across multiple editors (VS Code, Neovim, Sublime Text).
+
+### Monorepo Structure
+
+```
+umple-lsp/
+├── packages/
+│   ├── server/                  # Standalone LSP server (npm-publishable)
+│   │   ├── src/server.ts        # Core LSP implementation
+│   │   ├── src/symbolIndex.ts   # Tree-sitter symbol indexing
+│   │   ├── src/keywords.ts      # Completion keywords
+│   │   ├── src/bin.ts           # CLI entry point
+│   │   └── bin/umple-lsp-server # Shebang wrapper
+│   │
+│   ├── vscode/                  # VS Code extension client
+│   │   ├── src/extension.ts     # VS Code extension entry point
+│   │   ├── src/utils/umpleSync.ts
+│   │   ├── syntaxes/            # TextMate grammar
+│   │   └── language-configuration.json
+│   │
+│   └── tree-sitter-umple/       # Tree-sitter grammar
+│       ├── grammar.js           # Grammar definition (manual)
+│       ├── queries/             # Highlight & scope queries (manual)
+│       ├── src/parser.c         # Generated parser
+│       └── tree-sitter-umple.wasm # Generated WASM parser
+│
+├── editors/                     # Non-VS-Code editor configs
+│   ├── neovim/
+│   └── sublime/
+├── test/                        # Sample .ump files
+├── package.json                 # Monorepo root (workspaces)
+└── tsconfig.json                # TypeScript project references
+```
 
 ## Build Commands
 
 ```bash
-# Compile both client and server
+# Install all dependencies (also copies WASM to server package)
+npm install
+
+# Compile both server and VS Code client
 npm run compile
 
 # Watch mode for development
 npm run watch
 
-# Install all dependencies (runs automatically via postinstall)
-npm run postinstall
+# Download umplesync.jar (for diagnostics)
+npm run download-jar
 ```
 
 ### Tree-sitter Grammar
 
 ```bash
-cd tree-sitter-umple
+cd packages/tree-sitter-umple
 
 # Regenerate parser after grammar.js changes
 npx tree-sitter generate
@@ -68,10 +103,10 @@ npx tree-sitter generate
 npx tree-sitter build --wasm
 
 # Test parsing
-npx tree-sitter parse ../test/Student.ump
+npx tree-sitter parse ../../test/Student.ump
 ```
 
-**Files in tree-sitter-umple/:**
+**Files in packages/tree-sitter-umple/:**
 
 | File | Type | Description |
 |------|------|-------------|
@@ -86,11 +121,11 @@ npx tree-sitter parse ../test/Student.ump
 **Workflow after editing grammar.js:**
 
 ```bash
-cd tree-sitter-umple
+cd packages/tree-sitter-umple
 npx tree-sitter generate      # Regenerate src/parser.c
 npx tree-sitter build --wasm  # Rebuild .wasm for LSP
-cd ..
-npm run compile               # Recompile TypeScript
+cd ../..
+npm run compile               # Recompile TypeScript (also copies .wasm)
 # In Neovim: :TSInstall umple  # Reinstall native parser
 ```
 
@@ -106,15 +141,15 @@ Sample test files are in the `/test/` directory.
 ## Architecture
 
 ```
-Client (client/src/extension.ts)
+Client (packages/vscode/src/extension.ts)
     │
-    └─ Launches → Server (server/src/server.ts)
+    └─ Launches → Server (packages/server/src/server.ts)
                       │
                       ├─ Diagnostics   → UmpleSync.jar (socket server, port 5556)
                       ├─ Completion    → Keywords (keywords.ts) + context detection
                       └─ Go-To-Def     → SymbolIndex (tree-sitter based)
 
-Tree-sitter Grammar (tree-sitter-umple/)
+Tree-sitter Grammar (packages/tree-sitter-umple/)
     │
     ├─ grammar.js              → Grammar definition (manual)
     ├─ queries/highlights.scm  → Syntax highlighting (manual)
@@ -125,16 +160,16 @@ Tree-sitter Grammar (tree-sitter-umple/)
 
 ### Key Components
 
-**Client (`client/src/extension.ts`)**: VS Code extension entry point. Launches the language server and passes initialization options (JAR paths, port configuration).
+**Client (`packages/vscode/src/extension.ts`)**: VS Code extension entry point. Launches the language server and passes initialization options (JAR paths, port configuration). Resolves the server via `require.resolve("umple-lsp-server/...")`.
 
-**Server (`server/src/server.ts`)**: Core LSP implementation handling:
+**Server (`packages/server/src/server.ts`)**: Core LSP implementation handling:
 
 - Document synchronization (open/change/close events)
 - Diagnostics via UmpleSync.jar socket connection with debounced validation
 - Context-aware code completion (detects if cursor is in class/statemachine/association/enum)
 - Go-to-definition using tree-sitter symbol index with transitive `use` statement resolution
 
-**Symbol Index (`server/src/symbolIndex.ts`)**: Tree-sitter based symbol indexing:
+**Symbol Index (`packages/server/src/symbolIndex.ts`)**: Tree-sitter based symbol indexing:
 
 - Parses `.ump` files using web-tree-sitter (WASM)
 - **Lazy indexing**: Files are indexed on-demand when opened, not upfront
@@ -143,11 +178,11 @@ Tree-sitter Grammar (tree-sitter-umple/)
 - Content hash caching for efficient re-indexing
 - Comment detection to prevent go-to-definition inside comments
 
-**Keywords (`server/src/keywords.ts`)**: Keyword database organized by context (topLevel, classLevel, statemachine, etc.) for context-aware completion.
+**Keywords (`packages/server/src/keywords.ts`)**: Keyword database organized by context (topLevel, classLevel, statemachine, etc.) for context-aware completion.
 
 ### External Dependencies
 
-- `umplesync.jar`: Compiler wrapper running as socket server for diagnostics
+- `umplesync.jar`: Compiler wrapper running as socket server for diagnostics (downloaded into `packages/server/`)
 
 ### Go-To-Definition
 
@@ -188,7 +223,7 @@ Server initialization options (passed from client):
 - `umpleSyncJarPath`: Path to umplesync.jar
 - `umpleSyncPort` (default 5556), `umpleSyncHost`, `umpleSyncTimeoutMs`: Socket configuration
 
-Environment variable overrides: `UMPLESYNC_HOST`, `UMPLESYNC_PORT`, `UMPLESYNC_TIMEOUT_MS`
+Environment variable overrides: `UMPLESYNC_HOST`, `UMPLESYNC_PORT`, `UMPLESYNC_TIMEOUT_MS`, `UMPLESYNC_JAR_PATH`, `UMPLE_TREE_SITTER_WASM_PATH`
 
 ## Neovim Integration
 
@@ -212,7 +247,7 @@ The parser name in your Neovim config (`parser_config.umple`) must match the que
 local parser_config = require("nvim-treesitter.parsers").get_parser_configs()
 parser_config.umple = {
   install_info = {
-    url = "/path/to/umple-lsp/tree-sitter-umple",
+    url = "/path/to/umple-lsp/packages/tree-sitter-umple",
     files = { "src/parser.c" },
   },
   filetype = "umple",
@@ -223,7 +258,7 @@ parser_config.umple = {
 
 ```bash
 mkdir -p ~/.local/share/nvim/queries
-ln -s /path/to/umple-lsp/tree-sitter-umple/queries ~/.local/share/nvim/queries/umple
+ln -s /path/to/umple-lsp/packages/tree-sitter-umple/queries ~/.local/share/nvim/queries/umple
 ```
 
 3. Set filetype for `.ump` files:
@@ -243,7 +278,7 @@ vim.filetype.add({ extension = { ump = "umple" } })
 After modifying `grammar.js`:
 
 ```bash
-cd tree-sitter-umple
+cd packages/tree-sitter-umple
 npx tree-sitter generate
 ```
 

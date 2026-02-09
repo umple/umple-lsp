@@ -78,10 +78,10 @@ Add the Umple client configuration:
   "clients": {
     "umple": {
       "enabled": true,
-      "command": ["node", "/path/to/umple-lsp/server/out/server.js", "--stdio"],
+      "command": ["node", "/path/to/umple-lsp/packages/server/out/server.js", "--stdio"],
       "selector": "source.umple",
       "initializationOptions": {
-        "umpleSyncJarPath": "/path/to/umple-lsp/umplesync.jar",
+        "umpleSyncJarPath": "/path/to/umple-lsp/packages/server/umplesync.jar",
         "umpleSyncPort": 5558
       }
     }
@@ -125,7 +125,7 @@ If you use Vintage mode, add this to your keybindings (`Preferences` > `Key Bind
 1. Verify Java is installed: `java -version`
 2. Test the server manually:
    ```bash
-   node "/path/to/umple-lsp/server/out/server.js" --stdio
+   node "/path/to/umple-lsp/packages/server/out/server.js" --stdio
    ```
 3. Open the Sublime console (`View` > `Show Console`) for errors
 4. Check the LSP log panel: `Cmd+Shift+P` > "LSP: Toggle Log Panel"

@@ -9,19 +9,16 @@
 		"rootDir": "src",
 		"sourceMap": true
 	},
-	"include": [
-		"src"
-	],
+	"include": [],
 	"exclude": [
-		"node_modules",
-		".vscode-test"
+		"node_modules"
 	],
 	"references": [
 		{
-			"path": "./client"
+			"path": "./packages/server"
 		},
 		{
-			"path": "./server"
+			"path": "./packages/vscode"
 		}
 	]
 }

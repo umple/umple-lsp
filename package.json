@@ -1,66 +1,21 @@
 {
-  "name": "umple-lsp",
-  "displayName": "umple-language-server",
-  "description": "Language server for the Umple modeling language",
-  "version": "0.0.1",
-  "publisher": "umple",
+  "name": "umple-lsp-monorepo",
+  "private": true,
+  "description": "Monorepo for Umple Language Server and editor clients",
   "repository": {
     "type": "git",
     "url": "https://github.com/DraftTin/umple-lsp"
   },
-  "engines": {
-    "vscode": "^1.108.0"
-  },
-  "main": "./client/out/extension",
-  "categories": [
-    "Programming Languages"
-  ],
   "workspaces": [
-    "client",
-    "server"
+    "packages/tree-sitter-umple",
+    "packages/server",
+    "packages/vscode"
   ],
   "scripts": {
-    "vscode:prepublish": "npm run compile",
     "compile": "tsc -b",
     "watch": "tsc -b -w",
-    "download-jar": "curl -# -L https://try.umple.org/scripts/umplesync.jar --output umplesync.jar"
-  },
-  "contributes": {
-    "configuration": {
-      "title": "Umple",
-      "properties": {
-        "umple.autoUpdate": {
-          "type": "boolean",
-          "default": true,
-          "description": "Automatically update umplesync.jar to the latest version on startup."
-        }
-      }
-    },
-    "languages": [
-      {
-        "id": "umple",
-        "aliases": [
-          "Umple",
-          "umple"
-        ],
-        "extensions": [
-          ".ump"
-        ],
-        "configuration": "./language-configuration.json"
-      }
-    ],
-    "grammars": [
-      {
-        "language": "umple",
-        "scopeName": "source.umple",
-        "path": "./syntaxes/umple.tmLanguage"
-      }
-    ],
-    "snippets": [
-      {
-        "language": "umple",
-        "path": "./snippets/umple.json"
-      }
-    ]
+    "postinstall": "npm run copy-wasm",
+    "copy-wasm": "cp packages/tree-sitter-umple/tree-sitter-umple.wasm packages/server/tree-sitter-umple.wasm",
+    "download-jar": "curl -# -L https://try.umple.org/scripts/umplesync.jar --output packages/server/umplesync.jar"
   }
 }

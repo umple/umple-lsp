@@ -47,9 +47,19 @@ See the [editors/](editors/) directory for setup guides:
 - [Neovim](editors/neovim/) - tree-sitter highlighting + LSP via lspconfig
 - [Sublime Text](editors/sublime/) - LSP package + basic syntax highlighting
 
-All editors connect to the same LSP server (`server/out/server.js`) via stdio.
+All editors connect to the same LSP server (`packages/server/out/server.js`) via stdio.
 
 ## Architecture
+
+```
+umple-lsp/
+├── packages/
+│   ├── server/              # Standalone LSP server (npm-publishable)
+│   ├── vscode/              # VS Code extension client
+│   └── tree-sitter-umple/   # Tree-sitter grammar & queries
+├── editors/                 # Neovim, Sublime Text configs
+└── test/                    # Sample .ump files
+```
 
 ```
 Editor
@@ -59,20 +69,20 @@ Editor
                     +-- tree-sitter (go-to-definition, symbol indexing)
 ```
 
-- **Client** (`client/`) - VS Code extension entry point
-- **Server** (`server/`) - LSP server (editor-agnostic)
-- **Tree-sitter grammar** (`tree-sitter-umple/`) - Parser and syntax highlighting queries
+- **Server** (`packages/server/`) - LSP server (editor-agnostic, npm-publishable as `umple-lsp-server`)
+- **VS Code Client** (`packages/vscode/`) - VS Code extension entry point
+- **Tree-sitter grammar** (`packages/tree-sitter-umple/`) - Parser and syntax highlighting queries
 
 The server uses lazy indexing: files are only parsed when opened, and only files reachable via `use` statements are indexed. This keeps startup fast regardless of workspace size.
 
 ## Tree-sitter Grammar
 
-The tree-sitter grammar in `tree-sitter-umple/` is used by both the LSP server (for symbol indexing) and editors like Neovim (for syntax highlighting).
+The tree-sitter grammar in `packages/tree-sitter-umple/` is used by both the LSP server (for symbol indexing) and editors like Neovim (for syntax highlighting).
 
 After editing `grammar.js`:
 
 ```bash
-cd tree-sitter-umple
+cd packages/tree-sitter-umple
 npx tree-sitter generate      # Regenerate parser
 npx tree-sitter build --wasm  # Rebuild WASM for LSP server
 ```
@@ -88,17 +98,19 @@ The LSP server accepts these initialization options:
 | `umpleSyncHost` | string | "localhost" | Host for umplesync connection |
 | `umpleSyncTimeoutMs` | number | 30000 | Timeout for umplesync requests |
 
+Environment variables: `UMPLESYNC_JAR_PATH`, `UMPLESYNC_HOST`, `UMPLESYNC_PORT`, `UMPLESYNC_TIMEOUT_MS`, `UMPLE_TREE_SITTER_WASM_PATH`
+
 Use different ports if running multiple editor instances simultaneously.
 
 ## Development
 
 ```bash
-npm run compile    # Build client and server
+npm run compile    # Build server and VS Code client
 npm run watch      # Watch mode
 ```
 
 Test by pressing `F5` in VS Code or by running the server directly:
 
 ```bash
-node server/out/server.js --stdio
+node packages/server/out/server.js --stdio
 ```
