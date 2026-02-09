@@ -22,12 +22,15 @@ export async function activate(
     return;
   }
 
-  // Update umplesync.jar if needed
-  await updateUmpleSyncJar(context.extensionPath);
-
-  const serverModule = context.asAbsolutePath(
-    path.join("server", "out", "server.js"),
+  // Resolve server package directory
+  const serverDir = path.dirname(
+    require.resolve("umple-lsp-server/package.json"),
   );
+
+  // Update umplesync.jar if needed (downloads into server package dir)
+  await updateUmpleSyncJar(serverDir);
+
+  const serverModule = require.resolve("umple-lsp-server/out/server.js");
 
   const serverOptions: ServerOptions = {
     run: { module: serverModule, transport: TransportKind.stdio },
@@ -41,7 +44,7 @@ export async function activate(
   const clientOptions: LanguageClientOptions = {
     documentSelector: [{ scheme: "file", language: "umple" }],
     initializationOptions: {
-      umpleSyncJarPath: context.asAbsolutePath("umplesync.jar"),
+      umpleSyncJarPath: path.join(serverDir, "umplesync.jar"),
       umpleSyncPort: 5556,
     },
     synchronize: {
