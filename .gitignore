@@ -3,6 +3,7 @@ node_modules
 .env
 out/
 .vscode/
+.zed/
 umple/
 CLAUDE.md
 
