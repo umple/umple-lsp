@@ -13,11 +13,14 @@ A Language Server Protocol implementation for the [Umple](https://www.umple.org)
 
 ## Editor Plugins
 
-| Editor | Repo |
-|--------|------|
-| VS Code | [umple.vscode](https://github.com/umple/umple.vscode) |
-| Neovim | [umple.nvim](https://github.com/umple/umple.nvim) |
-| Sublime Text | [Setup guide](editors/sublime/) (config only, no plugin needed) |
+| Editor | Repo | Auto-installs server? |
+|--------|------|-----------------------|
+| VS Code | [umple.vscode](https://github.com/umple/umple.vscode) | Yes |
+| Zed | [umple.zed](https://github.com/umple/umple.zed) | Yes |
+| Neovim | [umple.nvim](https://github.com/umple/umple.nvim) | Yes |
+| Sublime Text | [Setup guide](editors/sublime/) (config only) | No (manual build) |
+
+The LSP server is also available as an npm package: [`umple-lsp-server`](https://www.npmjs.com/package/umple-lsp-server)
 
 ## Prerequisites
 

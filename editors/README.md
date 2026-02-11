@@ -9,12 +9,12 @@ Editors with full plugin support have their own repos. Editors that only need LS
 | [Zed](zed/) | [Separate repo](https://github.com/umple/umple.zed) | ✅ | ✅ | ✅ | ✅ |
 | [Sublime Text](sublime/) | Config in this repo | ✅ | ✅ | ✅ | ⚠️ (basic regex) |
 
-## Prerequisites (All Editors)
+## Prerequisites
 
-1. **Node.js 18+**: Required to run the LSP server
-2. **Java 11+**: Required for umplesync.jar (Umple compiler)
+- **Node.js 18+**: Required to run the LSP server
+- **Java 11+**: Required for umplesync.jar (Umple compiler diagnostics)
 
-Build the LSP server first:
+VS Code, Zed, and Neovim plugins auto-install the server from npm. For Sublime Text or manual setup, build the server first:
 
 ```bash
 cd umple-lsp
