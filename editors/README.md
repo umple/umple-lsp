@@ -4,9 +4,9 @@ Editors with full plugin support have their own repos. Editors that only need LS
 
 | Editor | Setup | Diagnostics | Go-to-def | Completion | Syntax Highlighting |
 |--------|-------|-------------|-----------|------------|---------------------|
-| [VS Code](vscode/) | [Separate repo](https://github.com/DraftTin/umple.vscode) | ✅ | ✅ | ✅ | ✅ (TextMate) |
-| [Neovim](neovim/) | [Separate repo](https://github.com/DraftTin/umple.nvim) | ✅ | ✅ | ✅ | ✅ (tree-sitter) |
-| [Zed](zed/) | [Separate repo](https://github.com/DraftTin/umple.zed) | ✅ | ✅ | ✅ | ✅ |
+| [VS Code](vscode/) | [Separate repo](https://github.com/umple/umple.vscode) | ✅ | ✅ | ✅ | ✅ (TextMate) |
+| [Neovim](neovim/) | [Separate repo](https://github.com/umple/umple.nvim) | ✅ | ✅ | ✅ | ✅ (tree-sitter) |
+| [Zed](zed/) | [Separate repo](https://github.com/umple/umple.zed) | ✅ | ✅ | ✅ | ✅ |
 | [Sublime Text](sublime/) | Config in this repo | ✅ | ✅ | ✅ | ⚠️ (basic regex) |
 
 ## Prerequisites (All Editors)

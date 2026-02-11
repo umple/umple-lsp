@@ -15,8 +15,8 @@ A Language Server Protocol implementation for the [Umple](https://www.umple.org)
 
 | Editor | Repo |
 |--------|------|
-| VS Code | [umple.vscode](https://github.com/DraftTin/umple.vscode) |
-| Neovim | [umple.nvim](https://github.com/DraftTin/umple.nvim) |
+| VS Code | [umple.vscode](https://github.com/umple/umple.vscode) |
+| Neovim | [umple.nvim](https://github.com/umple/umple.nvim) |
 | Sublime Text | [Setup guide](editors/sublime/) (config only, no plugin needed) |
 
 ## Prerequisites
