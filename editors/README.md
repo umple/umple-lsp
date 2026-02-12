@@ -8,6 +8,7 @@ Editors with full plugin support have their own repos. Editors that only need LS
 | [Neovim](neovim/) | [Separate repo](https://github.com/umple/umple.nvim) | ✅ | ✅ | ✅ | ✅ (tree-sitter) |
 | [Zed](zed/) | [Separate repo](https://github.com/umple/umple.zed) | ✅ | ✅ | ✅ | ✅ |
 | [Sublime Text](sublime/) | Config in this repo | ✅ | ✅ | ✅ | ⚠️ (basic regex) |
+| [BBEdit](bbedit/) | Config in this repo | ✅ | ✅ | ✅ | ⚠️ (codeless language module) |
 
 ## Prerequisites
 
