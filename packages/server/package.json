@@ -1,10 +1,14 @@
 {
   "name": "umple-lsp-server",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Language Server Protocol implementation for the Umple modeling language",
   "main": "out/server.js",
+  "bin": {
+    "umple-lsp-server": "bin/umple-lsp-server"
+  },
   "files": [
     "out/",
+    "bin/",
     "tree-sitter-umple.wasm"
   ],
   "scripts": {
