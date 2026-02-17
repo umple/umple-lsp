@@ -23,6 +23,12 @@
 ; States can create nested scopes
 (state) @local.scope
 
+; New constructs create scopes
+(mixset_definition) @local.scope
+(association_class_definition) @local.scope
+(requirement_definition) @local.scope
+(statemachine_definition) @local.scope
+
 ; =============
 ; DEFINITIONS
 ; =============
@@ -67,6 +73,19 @@
 (state
   name: (identifier) @local.definition.constant)
 
+; New construct definitions
+(mixset_definition
+  name: (identifier) @local.definition.type)
+
+(association_class_definition
+  name: (identifier) @local.definition.type)
+
+(requirement_definition
+  name: (identifier) @local.definition.type)
+
+(statemachine_definition
+  name: (identifier) @local.definition.field)
+
 ; =============
 ; REFERENCES
 ; =============
@@ -95,3 +114,14 @@
 
 (association_member
   right_type: (identifier) @local.reference)
+
+; Single association end type references classes
+(single_association_end
+  type: (identifier) @local.reference)
+
+; Standalone transition references states
+(standalone_transition
+  from_state: (identifier) @local.reference)
+
+(standalone_transition
+  to_state: (identifier) @local.reference)

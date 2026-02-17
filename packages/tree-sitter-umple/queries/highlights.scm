@@ -12,6 +12,10 @@
   "enum"
   "association"
   "external"
+  "req"
+  "mixset"
+  "associationClass"
+  "statemachine"
 ] @keyword.type
 
 [
@@ -23,6 +27,7 @@
 
 [
   "isA"
+  "implementsReq"
 ] @keyword.modifier
 
 [
@@ -62,6 +67,13 @@
   "new"
 ] @keyword.operator
 
+[
+  "displayColor"
+  "displayColour"
+  "key"
+  "self"
+] @keyword
+
 ; =============
 ; TYPES
 ; =============
@@ -79,6 +91,15 @@
   name: (identifier) @type.definition)
 
 (external_definition
+  name: (identifier) @type.definition)
+
+(requirement_definition
+  name: (identifier) @type.definition)
+
+(mixset_definition
+  name: (identifier) @type.definition)
+
+(association_class_definition
   name: (identifier) @type.definition)
 
 (type_name
@@ -126,6 +147,10 @@
 (param
   name: (identifier) @variable.parameter)
 
+; Key attributes
+(key_definition
+  (identifier) @variable.member)
+
 ; =============
 ; STATE MACHINES
 ; =============
@@ -133,11 +158,21 @@
 (state_machine
   name: (identifier) @variable.member)
 
+(statemachine_definition
+  name: (identifier) @variable.member)
+
 (state
   name: (identifier) @constant)
 
 (transition
   target: (identifier) @constant)
+
+; Standalone transition states
+(standalone_transition
+  from_state: (identifier) @constant)
+
+(standalone_transition
+  to_state: (identifier) @constant)
 
 ; =============
 ; ASSOCIATIONS
@@ -166,6 +201,20 @@
 (association_member
   right_role: (identifier) @variable.member)
 
+; Single association end (in associationClass)
+(single_association_end
+  type: (identifier) @type)
+
+(single_association_end
+  role: (identifier) @variable.member)
+
+(single_association_end
+  role_name: (identifier) @variable.member)
+
+; Symmetric reflexive association
+(symmetric_reflexive_association
+  role: (identifier) @variable.member)
+
 ; =============
 ; NAMESPACE & IMPORTS
 ; =============
@@ -192,6 +241,7 @@
   ">->"
   "<-<"
   "="
+  "||"
 ] @operator
 
 [

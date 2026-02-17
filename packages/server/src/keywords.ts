@@ -10,9 +10,12 @@ export const COMPLETION_KEYWORDS = {
     "trait",
     "enum",
     "association",
+    "associationClass",
     "namespace",
     "generate",
     "mixset",
+    "req",
+    "statemachine",
     "use",
     "external",
   ],
@@ -32,6 +35,13 @@ export const COMPLETION_KEYWORDS = {
     "static",
     "abstract",
     "const",
+    // New class-level keywords
+    "displayColor",
+    "key",
+    "implementsReq",
+    "mixset",
+    "class",
+    "enum",
   ],
 
   // Attribute modifiers (used in class_body context when typing attribute)

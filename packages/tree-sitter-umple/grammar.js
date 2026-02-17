@@ -17,6 +17,14 @@ module.exports = grammar({
 
   word: ($) => $.identifier,
 
+  conflicts: ($) => [
+    [$.event_spec, $.qualified_name],
+    [$.event_spec, $.state],
+    [$.event_spec, $.method_declaration],
+    [$._definition, $._class_content],
+    [$.single_association_end],
+  ],
+
   rules: {
     source_file: ($) => repeat($._definition),
 
@@ -31,6 +39,10 @@ module.exports = grammar({
         $.association_definition,
         $.external_definition,
         $.enum_definition,
+        $.requirement_definition,
+        $.mixset_definition,
+        $.association_class_definition,
+        $.statemachine_definition,
       ),
 
     // =====================
@@ -42,7 +54,7 @@ module.exports = grammar({
     use_statement: ($) =>
       prec.right(seq("use", field("path", $.use_path), optional(";"))),
 
-    use_path: ($) => /[a-zA-Z_][a-zA-Z0-9_.\/]*/,
+    use_path: ($) => /[a-zA-Z0-9_][a-zA-Z0-9_.\/]*/,
 
     generate_statement: ($) =>
       seq("generate", field("language", $.identifier), ";"),
@@ -72,6 +84,15 @@ module.exports = grammar({
         $.state_machine,
         $.method_declaration,
         $.before_after,
+        $.display_color,
+        $.key_definition,
+        $.abstract_declaration,
+        $.symmetric_reflexive_association,
+        $.req_implementation,
+        $.class_definition,
+        $.enum_definition,
+        $.standalone_transition,
+        $.mixset_definition,
       ),
 
     // Constraints: [pre: condition], [name != ""], etc.
@@ -131,6 +152,66 @@ module.exports = grammar({
       ),
 
     // =====================
+    // REQUIREMENT DEFINITION
+    // =====================
+    requirement_definition: ($) =>
+      seq(
+        "req",
+        field("name", $.identifier),
+        optional($.identifier),
+        "{",
+        optional(/[^}]*/),
+        "}",
+      ),
+
+    // =====================
+    // MIXSET DEFINITION
+    // =====================
+    mixset_definition: ($) =>
+      seq(
+        "mixset",
+        field("name", $.identifier),
+        "{",
+        repeat(choice($._definition, $._class_content)),
+        "}",
+      ),
+
+    // =====================
+    // ASSOCIATION CLASS DEFINITION
+    // =====================
+    association_class_definition: ($) =>
+      seq(
+        "associationClass",
+        field("name", $.identifier),
+        "{",
+        repeat(choice($._class_content, $.single_association_end)),
+        "}",
+      ),
+
+    single_association_end: ($) =>
+      seq(
+        $.multiplicity,
+        optional(field("role", $.identifier)),
+        field("type", $.identifier),
+        optional(field("role_name", $.identifier)),
+        ";",
+      ),
+
+    // =====================
+    // STANDALONE STATEMACHINE DEFINITION
+    // =====================
+    statemachine_definition: ($) =>
+      seq(
+        "statemachine",
+        optional("queued"),
+        optional("pooled"),
+        field("name", $.identifier),
+        "{",
+        repeat($.state),
+        "}",
+      ),
+
+    // =====================
     // CLASS MEMBERS
     // =====================
     isa_declaration: ($) => seq("isA", $.type_list, ";"),
@@ -142,6 +223,41 @@ module.exports = grammar({
       /[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)*(\.\*)?/,
 
     singleton: ($) => seq("singleton", ";"),
+
+    display_color: ($) =>
+      seq(choice("displayColor", "displayColour"), $.string_literal, ";"),
+
+    key_definition: ($) =>
+      seq(
+        "key",
+        "{",
+        optional(seq($.identifier, repeat(seq(",", $.identifier)))),
+        "}",
+      ),
+
+    abstract_declaration: ($) => prec(1, seq("abstract", ";")),
+
+    symmetric_reflexive_association: ($) =>
+      seq($.multiplicity, "self", field("role", $.identifier), ";"),
+
+    req_implementation: ($) =>
+      seq(
+        "implementsReq",
+        $.identifier,
+        repeat(seq(",", $.identifier)),
+        ";",
+      ),
+
+    standalone_transition: ($) =>
+      seq(
+        optional(seq(field("event", $.event_spec), optional($.guard))),
+        field("from_state", $.identifier),
+        optional($.action_code),
+        "->",
+        optional($.action_code),
+        field("to_state", $.identifier),
+        ";",
+      ),
 
     // Attribute: [modifier] [Type] name [= value];
     attribute_declaration: ($) =>
@@ -226,7 +342,7 @@ module.exports = grammar({
         optional("pooled"),
         field("name", $.identifier),
         "{",
-        repeat($.state),
+        repeat(choice($.state, "||", $.standalone_transition)),
         "}",
       ),
 
@@ -237,7 +353,13 @@ module.exports = grammar({
           seq(
             "{",
             repeat(
-              choice($.transition, $.entry_exit_action, $.do_activity, $.state),
+              choice(
+                $.transition,
+                $.entry_exit_action,
+                $.do_activity,
+                $.state,
+                "||",
+              ),
             ),
             "}",
           ),
@@ -246,7 +368,7 @@ module.exports = grammar({
 
     transition: ($) =>
       seq(
-        field("event", $.event_spec),
+        optional(field("event", $.event_spec)),
         optional($.guard),
         "->",
         optional($.action_code),

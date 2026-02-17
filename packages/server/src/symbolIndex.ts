@@ -546,7 +546,11 @@ export class SymbolIndex {
         case "class_definition":
         case "trait_definition":
         case "interface_definition":
+        case "association_class_definition":
           return "class_body";
+        case "mixset_definition":
+        case "statemachine_definition":
+        case "requirement_definition":
         case "source_file":
           return "top";
         case "code_content":
@@ -639,6 +643,10 @@ export class SymbolIndex {
       "target",
       "package",
       "language",
+      "role",
+      "role_name",
+      "from_state",
+      "to_state",
     ];
     for (const name of fieldNames) {
       const fieldNode = parent.childForFieldName(name);
@@ -824,6 +832,75 @@ export class SymbolIndex {
               endLine: nameNode.endPosition.row,
               endColumn: nameNode.endPosition.column,
             });
+          }
+          break;
+        }
+
+        case "requirement_definition":
+        case "mixset_definition": {
+          const nameNode = node.childForFieldName("name");
+          if (nameNode) {
+            symbols.push({
+              name: nameNode.text,
+              kind: "class",
+              file: filePath,
+              line: nameNode.startPosition.row,
+              column: nameNode.startPosition.column,
+              endLine: nameNode.endPosition.row,
+              endColumn: nameNode.endPosition.column,
+            });
+
+            // Visit children with this as parent
+            for (let i = 0; i < node.childCount; i++) {
+              const child = node.child(i);
+              if (child) visit(child, nameNode.text);
+            }
+          }
+          break;
+        }
+
+        case "association_class_definition": {
+          const nameNode = node.childForFieldName("name");
+          if (nameNode) {
+            symbols.push({
+              name: nameNode.text,
+              kind: "class",
+              file: filePath,
+              line: nameNode.startPosition.row,
+              column: nameNode.startPosition.column,
+              endLine: nameNode.endPosition.row,
+              endColumn: nameNode.endPosition.column,
+            });
+
+            // Visit children with this class as parent
+            for (let i = 0; i < node.childCount; i++) {
+              const child = node.child(i);
+              if (child) visit(child, nameNode.text);
+            }
+          }
+          break;
+        }
+
+        case "statemachine_definition": {
+          const nameNode = node.childForFieldName("name");
+          if (nameNode) {
+            symbols.push({
+              name: nameNode.text,
+              kind: "statemachine",
+              file: filePath,
+              line: nameNode.startPosition.row,
+              column: nameNode.startPosition.column,
+              endLine: nameNode.endPosition.row,
+              endColumn: nameNode.endPosition.column,
+            });
+
+            // Visit states with this statemachine as parent
+            for (let i = 0; i < node.childCount; i++) {
+              const child = node.child(i);
+              if (child && child.type === "state") {
+                visit(child, nameNode.text);
+              }
+            }
           }
           break;
         }
