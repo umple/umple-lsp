@@ -320,9 +320,9 @@ connection.onDefinition(async (params) => {
     return [];
   }
 
-  const useLocation = resolveUseDefinitionFromLine(document, params.position);
-  if (useLocation) {
-    return [useLocation];
+  const useLocations = resolveUseFileReference(document, params.position);
+  if (useLocations) {
+    return useLocations;
   }
 
   // Try symbol index, filtered by reachable files
@@ -344,29 +344,34 @@ connection.onDefinition(async (params) => {
       return [];
     }
 
-    const word = getWordAtPosition(document, params.position);
-    if (word) {
+    const token = symbolIndex.getTokenAtPosition(
+      docPath,
+      document.getText(),
+      params.position.line,
+      params.position.character,
+    );
+    if (token) {
       // Ensure imports are indexed and get reachable file set
       const reachableFiles = ensureImportsIndexed(docPath, document.getText());
 
-      const allSymbols = symbolIndex.findDefinition(word);
+      const allSymbols = token.kinds
+        ? symbolIndex.findDefinition(token.word, token.kinds)
+        : symbolIndex.findDefinition(token.word);
       // Filter symbols to only those in reachable files
       const filteredSymbols = allSymbols.filter((sym) =>
         reachableFiles.has(path.normalize(sym.file)),
       );
 
       if (filteredSymbols.length > 0) {
-        const results: Location[] = filteredSymbols.map((sym) => {
-          const uri = pathToFileURL(sym.file).toString();
-          return Location.create(
-            uri,
+        return filteredSymbols.map((sym) =>
+          Location.create(
+            pathToFileURL(sym.file).toString(),
             Range.create(
               Position.create(sym.line, sym.column),
               Position.create(sym.endLine, sym.endColumn),
             ),
-          );
-        });
-        return results;
+          ),
+        );
       }
     }
   }
@@ -787,17 +792,17 @@ function collectReachableFilesRecursive(
 ): void {
   const useStatements = symbolIndex.extractUseStatements(filePath, content);
   for (const usePath of useStatements) {
+    // Skip mixset names (no .ump extension = not a file reference)
+    if (!usePath.endsWith(".ump")) {
+      continue;
+    }
+
     // Resolve the file path
     let resolvedPath: string;
     if (path.isAbsolute(usePath)) {
       resolvedPath = usePath;
     } else {
       resolvedPath = path.resolve(documentDir, usePath);
-    }
-
-    // Ensure .ump extension
-    if (!resolvedPath.endsWith(".ump")) {
-      resolvedPath += ".ump";
     }
 
     const normalizedPath = path.normalize(resolvedPath);
@@ -887,13 +892,15 @@ function buildImportMaps(
   const transitiveMap = new Map<string, Set<string>>();
 
   for (const useStmt of useStatements) {
+    // Skip mixset names (no .ump extension = not a file reference)
+    if (!useStmt.path.endsWith(".ump")) {
+      continue;
+    }
+
     // Resolve the use path to a filename
     let resolvedPath = useStmt.path;
     if (!path.isAbsolute(resolvedPath)) {
       resolvedPath = path.resolve(documentDir, resolvedPath);
-    }
-    if (!resolvedPath.endsWith(".ump")) {
-      resolvedPath += ".ump";
     }
     const filename = path.basename(resolvedPath);
 
@@ -934,12 +941,14 @@ function collectTransitiveFilenames(
     const useStatements = symbolIndex.extractUseStatements(filePath, content);
 
     for (const usePath of useStatements) {
+      // Skip mixset names (no .ump extension = not a file reference)
+      if (!usePath.endsWith(".ump")) {
+        continue;
+      }
+
       let resolvedPath = usePath;
       if (!path.isAbsolute(resolvedPath)) {
         resolvedPath = path.resolve(fileDir, resolvedPath);
-      }
-      if (!resolvedPath.endsWith(".ump")) {
-        resolvedPath += ".ump";
       }
       const filename = path.basename(resolvedPath);
       collected.add(filename);
@@ -1131,16 +1140,20 @@ function getDocumentFilePath(document: TextDocument): string | null {
   }
 }
 
-function resolveUseDefinitionFromLine(
+/**
+ * Handle go-to-definition for `use` statements that reference files (.ump).
+ * Non-file use paths (mixset names) return null and are handled by the
+ * general getTokenAtPosition + DEFINITION_KIND_MAP flow.
+ */
+function resolveUseFileReference(
   document: TextDocument,
   position: Position,
-): Location | null {
+): Location[] | null {
   const docPath = getDocumentFilePath(document);
   if (!docPath) {
     return null;
   }
 
-  // Use tree-sitter to find the use path at this position
   const usePath = symbolIndex.getUsePathAtPosition(
     docPath,
     document.getText(),
@@ -1148,25 +1161,22 @@ function resolveUseDefinitionFromLine(
     Math.max(0, position.character - 1),
   );
 
-  if (!usePath) {
+  if (!usePath || !usePath.endsWith(".ump")) {
     return null;
   }
 
-  // Ensure .ump extension
-  let fileRef = usePath;
-  if (!fileRef.endsWith(".ump")) {
-    fileRef += ".ump";
-  }
-
+  // File reference: resolve to file path
   const baseDir = path.dirname(docPath);
-  const targetPath = path.isAbsolute(fileRef)
-    ? fileRef
-    : path.join(baseDir, fileRef);
+  const targetPath = path.isAbsolute(usePath)
+    ? usePath
+    : path.join(baseDir, usePath);
   const uri = pathToFileURL(targetPath).toString();
-  return Location.create(
-    uri,
-    Range.create(Position.create(0, 0), Position.create(0, 0)),
-  );
+  return [
+    Location.create(
+      uri,
+      Range.create(Position.create(0, 0), Position.create(0, 0)),
+    ),
+  ];
 }
 
 function getCompletionPrefix(
@@ -1196,46 +1206,6 @@ function getUsePathPrefix(
   return match ? match[0] : "";
 }
 
-/**
- * Get the word (identifier) at the given position.
- * Used for go-to-definition symbol lookup.
- */
-function getWordAtPosition(
-  document: TextDocument,
-  position: Position,
-): string | null {
-  const lineText = document.getText(
-    Range.create(
-      Position.create(position.line, 0),
-      Position.create(position.line + 1, 0),
-    ),
-  );
-
-  // Find word boundaries around the cursor
-  let start = position.character;
-  let end = position.character;
-
-  // Expand left to find start of word
-  while (start > 0 && /[A-Za-z0-9_]/.test(lineText[start - 1])) {
-    start--;
-  }
-
-  // Expand right to find end of word
-  while (end < lineText.length && /[A-Za-z0-9_]/.test(lineText[end])) {
-    end++;
-  }
-
-  if (start === end) {
-    return null;
-  }
-
-  const word = lineText.substring(start, end);
-  // Only return valid identifiers (must start with letter or underscore)
-  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(word)) {
-    return word;
-  }
-  return null;
-}
 
 function filterCompletions(
   items: CompletionItem[],

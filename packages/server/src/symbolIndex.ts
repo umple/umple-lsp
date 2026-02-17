@@ -24,7 +24,9 @@ export type SymbolKind =
   | "state"
   | "statemachine"
   | "method"
-  | "association";
+  | "association"
+  | "mixset"
+  | "requirement";
 
 const DUMMY_IDENTIFIER = "__CURSOR__";
 
@@ -65,6 +67,55 @@ export interface FileIndex {
   tree: Tree | null;
   contentHash: string;
 }
+
+/**
+ * Maps tree-sitter context to allowed SymbolKinds for go-to-definition.
+ *
+ * Keys use the format:
+ *   - "parentNodeType"            — matches any identifier inside that node
+ *   - "parentNodeType:fieldName"  — matches only the identifier in that field
+ *
+ * Field-specific keys are checked first, then the bare parent key as fallback.
+ * If no match is found, no filtering is applied (all symbol kinds returned).
+ *
+ * To add a new context, just add an entry here — no code changes needed.
+ */
+const DEFINITION_KIND_MAP: Record<string, SymbolKind[]> = {
+  // Definition names: gd on a name finds other definitions of the same kind
+  "class_definition:name": ["class"],
+  "interface_definition:name": ["interface"],
+  "trait_definition:name": ["trait"],
+  "enum_definition:name": ["enum"],
+  "mixset_definition:name": ["mixset"],
+  "requirement_definition:name": ["requirement"],
+  "association_class_definition:name": ["class"],
+  "statemachine_definition:name": ["statemachine"],
+  "state_machine:name": ["statemachine"],
+  "state:name": ["state"],
+  "association_definition:name": ["association"],
+  "attribute_declaration:name": ["attribute"],
+  "method_declaration:name": ["method"],
+
+  // use statement without .ump extension references a mixset
+  "use_statement:path": ["mixset"],
+
+  // req_implementation: identifiers reference requirements
+  req_implementation: ["requirement"],
+
+  // isA: references types that can be inherited
+  isa_declaration: ["class", "interface", "trait"],
+
+  // Type positions in associations reference classes
+  "association_inline:right_type": ["class", "interface", "trait", "enum"],
+  "association_member:left_type": ["class", "interface", "trait", "enum"],
+  "association_member:right_type": ["class", "interface", "trait", "enum"],
+  "single_association_end:type": ["class", "interface", "trait", "enum"],
+
+  // State references in transitions
+  "transition:target": ["state"],
+  "standalone_transition:from_state": ["state"],
+  "standalone_transition:to_state": ["state"],
+};
 
 export class SymbolIndex {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -169,10 +220,14 @@ export class SymbolIndex {
    * @param kind Optional kind filter
    * @returns Array of matching symbol entries
    */
-  findDefinition(name: string, kind?: SymbolKind): SymbolEntry[] {
+  findDefinition(
+    name: string,
+    kinds?: SymbolKind | SymbolKind[],
+  ): SymbolEntry[] {
     const symbols = this.symbolsByName.get(name) ?? [];
-    if (kind) {
-      return symbols.filter((s) => s.kind === kind);
+    if (kinds) {
+      const kindSet = new Set(Array.isArray(kinds) ? kinds : [kinds]);
+      return symbols.filter((s) => kindSet.has(s.kind));
     }
     return symbols;
   }
@@ -564,6 +619,71 @@ export class SymbolIndex {
   }
 
   /**
+   * Get the token (identifier) at a position using tree-sitter, along with
+   * an optional SymbolKind filter based on the surrounding context.
+   *
+   * Uses DEFINITION_KIND_MAP to determine which symbol kinds are valid for
+   * the cursor's context. See the map definition for supported contexts.
+   */
+  getTokenAtPosition(
+    filePath: string,
+    content: string,
+    line: number,
+    column: number,
+  ): { word: string; kinds: SymbolKind[] | null } | null {
+    if (!this.initialized || !this.parser) {
+      return null;
+    }
+
+    const fileIndex = this.files.get(filePath);
+    let tree: Tree;
+    if (
+      fileIndex?.tree &&
+      fileIndex.contentHash === this.hashContent(content)
+    ) {
+      tree = fileIndex.tree;
+    } else {
+      tree = this.parser.parse(content);
+    }
+
+    const node = tree.rootNode.descendantForPosition({ row: line, column });
+    if (!node || (node.type !== "identifier" && node.type !== "use_path")) {
+      return null;
+    }
+
+    const word = node.text;
+    const kinds = this.resolveDefinitionKinds(node);
+    return { word, kinds };
+  }
+
+  /**
+   * Walk up from an identifier node and look up DEFINITION_KIND_MAP
+   * to determine which symbol kinds the identifier can reference.
+   */
+  private resolveDefinitionKinds(node: SyntaxNode): SymbolKind[] | null {
+    const parent = node.parent;
+    if (!parent) {
+      return null;
+    }
+
+    // Try field-specific key first: "parentType:fieldName"
+    const fieldName = this.getFieldName(parent, node);
+    if (fieldName) {
+      const fieldKey = `${parent.type}:${fieldName}`;
+      if (fieldKey in DEFINITION_KIND_MAP) {
+        return DEFINITION_KIND_MAP[fieldKey];
+      }
+    }
+
+    // Fall back to bare parent key: "parentType"
+    if (parent.type in DEFINITION_KIND_MAP) {
+      return DEFINITION_KIND_MAP[parent.type];
+    }
+
+    return null;
+  }
+
+  /**
    * Get all symbols of a specific kind from the index.
    * @param kind The kind of symbols to retrieve
    * @returns Array of symbol entries of that kind
@@ -840,9 +960,11 @@ export class SymbolIndex {
         case "mixset_definition": {
           const nameNode = node.childForFieldName("name");
           if (nameNode) {
+            const kind: SymbolKind =
+              node.type === "requirement_definition" ? "requirement" : "mixset";
             symbols.push({
               name: nameNode.text,
-              kind: "class",
+              kind,
               file: filePath,
               line: nameNode.startPosition.row,
               column: nameNode.startPosition.column,
