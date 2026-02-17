@@ -86,6 +86,9 @@
 (statemachine_definition
   name: (identifier) @local.definition.field)
 
+(referenced_statemachine
+  name: (identifier) @local.definition.field)
+
 ; =============
 ; REFERENCES
 ; =============
@@ -125,3 +128,7 @@
 
 (standalone_transition
   to_state: (identifier) @local.reference)
+
+; Referenced statemachine references a statemachine definition
+(referenced_statemachine
+  definition: (identifier) @local.reference)

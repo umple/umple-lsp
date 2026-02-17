@@ -93,6 +93,7 @@ module.exports = grammar({
         $.enum_definition,
         $.standalone_transition,
         $.mixset_definition,
+        $.referenced_statemachine,
       ),
 
     // Constraints: [pre: condition], [name != ""], etc.
@@ -209,6 +210,17 @@ module.exports = grammar({
         "{",
         repeat($.state),
         "}",
+      ),
+
+    // =====================
+    // REFERENCED STATEMACHINE
+    // =====================
+    referenced_statemachine: ($) =>
+      seq(
+        field("name", $.identifier),
+        "as",
+        field("definition", $.identifier),
+        choice(seq("{", repeat(choice($.state, "||")), "}"), ";"),
       ),
 
     // =====================

@@ -91,6 +91,8 @@ const DEFINITION_KIND_MAP: Record<string, SymbolKind[]> = {
   "association_class_definition:name": ["class"],
   "statemachine_definition:name": ["statemachine"],
   "state_machine:name": ["statemachine"],
+  "referenced_statemachine:name": ["statemachine"],
+  "referenced_statemachine:definition": ["statemachine"],
   "state:name": ["state"],
   "association_definition:name": ["association"],
   "attribute_declaration:name": ["attribute"],
@@ -767,6 +769,7 @@ export class SymbolIndex {
       "role_name",
       "from_state",
       "to_state",
+      "definition",
     ];
     for (const name of fieldNames) {
       const fieldNode = parent.childForFieldName(name);
@@ -1017,6 +1020,31 @@ export class SymbolIndex {
             });
 
             // Visit states with this statemachine as parent
+            for (let i = 0; i < node.childCount; i++) {
+              const child = node.child(i);
+              if (child && child.type === "state") {
+                visit(child, nameNode.text);
+              }
+            }
+          }
+          break;
+        }
+
+        case "referenced_statemachine": {
+          const nameNode = node.childForFieldName("name");
+          if (nameNode && parent) {
+            symbols.push({
+              name: nameNode.text,
+              kind: "statemachine",
+              file: filePath,
+              line: nameNode.startPosition.row,
+              column: nameNode.startPosition.column,
+              endLine: nameNode.endPosition.row,
+              endColumn: nameNode.endPosition.column,
+              parent,
+            });
+
+            // Visit extended states with this statemachine as parent
             for (let i = 0; i < node.childCount; i++) {
               const child = node.child(i);
               if (child && child.type === "state") {

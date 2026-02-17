@@ -161,6 +161,14 @@
 (statemachine_definition
   name: (identifier) @variable.member)
 
+(referenced_statemachine
+  name: (identifier) @variable.member)
+
+(referenced_statemachine
+  definition: (identifier) @type)
+
+"as" @keyword
+
 (state
   name: (identifier) @constant)
 
