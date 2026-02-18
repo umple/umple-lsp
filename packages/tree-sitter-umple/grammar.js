@@ -18,9 +18,7 @@ module.exports = grammar({
   word: ($) => $.identifier,
 
   conflicts: ($) => [
-    [$.event_spec, $.qualified_name],
     [$.event_spec, $.state],
-    [$.event_spec, $.method_declaration],
     [$._definition, $._class_content],
     [$.single_association_end],
   ],
@@ -91,7 +89,6 @@ module.exports = grammar({
         $.req_implementation,
         $.class_definition,
         $.enum_definition,
-        $.standalone_transition,
         $.mixset_definition,
         $.referenced_statemachine,
       ),
@@ -220,7 +217,16 @@ module.exports = grammar({
         field("name", $.identifier),
         "as",
         field("definition", $.identifier),
-        choice(seq("{", repeat(choice($.state, "||")), "}"), ";"),
+        choice(
+          seq(
+            "{",
+            repeat(
+              choice($.state, $.standalone_transition, $.entry_exit_action),
+            ),
+            "}",
+          ),
+          ";",
+        ),
       ),
 
     // =====================
@@ -262,7 +268,8 @@ module.exports = grammar({
 
     standalone_transition: ($) =>
       seq(
-        optional(seq(field("event", $.event_spec), optional($.guard))),
+        field("event", $.event_spec),
+        optional($.guard),
         field("from_state", $.identifier),
         optional($.action_code),
         "->",
@@ -354,7 +361,7 @@ module.exports = grammar({
         optional("pooled"),
         field("name", $.identifier),
         "{",
-        repeat(choice($.state, "||", $.standalone_transition)),
+        repeat(choice($.state, $.standalone_transition)),
         "}",
       ),
 
