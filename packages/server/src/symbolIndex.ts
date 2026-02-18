@@ -140,6 +140,9 @@ const DEFINITION_KIND_MAP: Record<string, SymbolKind[]> = {
   "transition:target": ["state"],
   "standalone_transition:from_state": ["state"],
   "standalone_transition:to_state": ["state"],
+
+  // Constraint identifiers reference attributes
+  constraint: ["attribute"],
 };
 
 export class SymbolIndex {

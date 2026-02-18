@@ -93,7 +93,17 @@ module.exports = grammar({
 
     // Constraints: [pre: condition], [name != ""], etc.
     constraint: ($) =>
-      seq("[", optional(seq($.identifier, ":")), /[^\]]+/, "]", optional(";")),
+      seq("[", repeat1($._constraint_expr), "]", optional(";")),
+
+    _constraint_expr: ($) =>
+      choice(
+        $.identifier,
+        $.string_literal,
+        $.number,
+        $.boolean,
+        "null",
+        /[^\]\s\w"']+/, // operators and punctuation (: != >= <= && || etc.)
+      ),
 
     // =====================
     // INTERFACE DEFINITION
