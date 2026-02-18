@@ -143,7 +143,6 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
       textDocumentSync: TextDocumentSyncKind.Incremental,
       completionProvider: {
         resolveProvider: false,
-        triggerCharacters: [" ", "."],
       },
       definitionProvider: true,
     },
@@ -278,8 +277,8 @@ connection.onCompletion(async (params): Promise<CompletionItem[]> => {
     );
   }
 
-  // Suppress completions in comments
-  if (context === "comment") {
+  // Suppress completions in comments and definition name positions
+  if (context === "comment" || context === "definition_name") {
     return [];
   }
 

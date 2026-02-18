@@ -89,6 +89,7 @@ export const COMPLETION_KEYWORDS = {
   transition_target: [],
   association_type: [],
   depend_package: [],
+  definition_name: [],
   comment: [],
   unknown: [],
 };

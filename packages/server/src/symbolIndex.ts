@@ -6,7 +6,6 @@
  */
 
 import * as fs from "fs";
-import * as path from "path";
 
 // web-tree-sitter types and module
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -30,6 +29,26 @@ export type SymbolKind =
 
 const DUMMY_IDENTIFIER = "__CURSOR__";
 
+/**
+ * Keywords after which the next token is always a new name (definition).
+ * Completions are suppressed when the cursor immediately follows one of these.
+ */
+const DEFINITION_KEYWORDS = new Set([
+  "class",
+  "interface",
+  "trait",
+  "enum",
+  "mixset",
+  "req",
+  "associationClass",
+  "statemachine",
+  "namespace",
+  "generate",
+  // State machine modifiers — next token is SM name (or another modifier)
+  "queued",
+  "pooled",
+]);
+
 export type CompletionContext =
   | "top"
   | "class_body"
@@ -43,6 +62,7 @@ export type CompletionContext =
   | "transition_target"
   | "association_type"
   | "depend_package"
+  | "definition_name"
   | "comment"
   | "unknown";
 
@@ -521,16 +541,22 @@ export class SymbolIndex {
       return "unknown";
     }
 
-    // Insert dummy identifier at cursor position
+    // Check if the cursor follows a definition keyword (e.g. "class ",
+    // "enum ", "statemachine queued "). Scans backwards through the content
+    // to find the last token, handling multi-line cases correctly.
     const lines = content.split("\n");
     if (line < 0 || line >= lines.length) {
       return "unknown";
     }
     const lineText = lines[line];
-    lines[line] =
-      lineText.substring(0, column) +
-      DUMMY_IDENTIFIER +
-      lineText.substring(column);
+    const linePrefix = lineText.substring(0, column);
+    const lastToken = this.lastTokenBeforeCursor(content, line, column);
+    if (lastToken && DEFINITION_KEYWORDS.has(lastToken)) {
+      return "definition_name";
+    }
+
+    // Insert dummy identifier at cursor position
+    lines[line] = linePrefix + DUMMY_IDENTIFIER + lineText.substring(column);
     const modifiedText = lines.join("\n");
 
     // Parse modified text (throwaway — do NOT update index)
@@ -786,6 +812,54 @@ export class SymbolIndex {
       }
     }
     return null;
+  }
+
+  /**
+   * Scan backwards from the cursor position to find the token before the
+   * word currently being typed. Skips the current partial identifier first,
+   * then whitespace, then extracts the previous token.
+   *
+   * Examples (| = cursor):
+   *   "class |"      → "class"
+   *   "class Fo|"    → "class"
+   *   "class\n  Fo|" → "class"
+   */
+  private lastTokenBeforeCursor(
+    content: string,
+    line: number,
+    column: number,
+  ): string | null {
+    const lines = content.split("\n");
+
+    // Convert (line, column) to absolute offset
+    let offset = 0;
+    for (let i = 0; i < line && i < lines.length; i++) {
+      offset += lines[i].length + 1; // +1 for newline
+    }
+    offset += Math.min(column, lines[line]?.length ?? 0);
+
+    // Skip the current partial identifier (the word being typed)
+    let pos = offset;
+    while (pos > 0 && /[a-zA-Z_0-9]/.test(content[pos - 1])) {
+      pos--;
+    }
+
+    // Skip whitespace
+    while (pos > 0 && /\s/.test(content[pos - 1])) {
+      pos--;
+    }
+
+    if (pos === 0) return null;
+
+    // Collect the previous token
+    let start = pos;
+    while (start > 0 && /[a-zA-Z_]/.test(content[start - 1])) {
+      start--;
+    }
+
+    if (start === pos) return null; // Hit punctuation, not a word
+
+    return content.substring(start, pos);
   }
 
   private readFileSafe(filePath: string): string | null {
