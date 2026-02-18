@@ -13,8 +13,7 @@
   ],
   "scripts": {
     "compile": "tsc -p .",
-    "watch": "tsc -watch -p .",
-    "copy-wasm": "cp ../tree-sitter-umple/tree-sitter-umple.wasm ./tree-sitter-umple.wasm"
+    "watch": "tsc -watch -p ."
   },
   "repository": {
     "type": "git",
