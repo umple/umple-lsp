@@ -1205,7 +1205,6 @@ function getUsePathPrefix(
   return match ? match[0] : "";
 }
 
-
 function filterCompletions(
   items: CompletionItem[],
   prefix: string,
