@@ -1274,7 +1274,7 @@ function buildCompletionsForContext(
             });
           }
         }
-        // Offer class/interface/trait names (for isA, type references)
+        // Offer class/interface/trait/enum names (for isA, type references)
         for (const sym of getSymbols("class")) {
           if (!seen.has(`sym:${sym.name}`)) {
             seen.add(`sym:${sym.name}`);
@@ -1302,6 +1302,16 @@ function buildCompletionsForContext(
               label: sym.name,
               kind: CompletionItemKind.Class,
               detail: "trait",
+            });
+          }
+        }
+        for (const sym of getSymbols("enum")) {
+          if (!seen.has(`sym:${sym.name}`)) {
+            seen.add(`sym:${sym.name}`);
+            items.push({
+              label: sym.name,
+              kind: CompletionItemKind.Enum,
+              detail: "enum",
             });
           }
         }
@@ -1309,7 +1319,7 @@ function buildCompletionsForContext(
       }
 
       case "isa_type": {
-        // After "isA" keyword: only offer class/interface/trait names
+        // After "isA" keyword: offer class/interface/trait names
         for (const sym of getSymbols("class")) {
           if (!seen.has(`sym:${sym.name}`)) {
             seen.add(`sym:${sym.name}`);
@@ -1337,6 +1347,16 @@ function buildCompletionsForContext(
               label: sym.name,
               kind: CompletionItemKind.Class,
               detail: "trait",
+            });
+          }
+        }
+        for (const sym of getSymbols("enum")) {
+          if (!seen.has(`sym:${sym.name}`)) {
+            seen.add(`sym:${sym.name}`);
+            items.push({
+              label: sym.name,
+              kind: CompletionItemKind.Enum,
+              detail: "enum",
             });
           }
         }

@@ -98,6 +98,9 @@ const DEFINITION_KIND_MAP: Record<string, SymbolKind[]> = {
   "attribute_declaration:name": ["attribute"],
   "method_declaration:name": ["method"],
 
+  // Type references (attribute types, method return types, params, isA, etc.)
+  type_name: ["class", "interface", "trait", "enum"],
+
   // use statement without .ump extension references a mixset
   "use_statement:path": ["mixset"],
 
@@ -661,25 +664,30 @@ export class SymbolIndex {
   /**
    * Walk up from an identifier node and look up DEFINITION_KIND_MAP
    * to determine which symbol kinds the identifier can reference.
+   *
+   * Walks the parent chain so that intermediate wrapper nodes
+   * (e.g. qualified_name inside type_name) are traversed correctly.
    */
   private resolveDefinitionKinds(node: SyntaxNode): SymbolKind[] | null {
-    const parent = node.parent;
-    if (!parent) {
-      return null;
-    }
+    let current: SyntaxNode = node;
+    while (current.parent) {
+      const parent = current.parent;
 
-    // Try field-specific key first: "parentType:fieldName"
-    const fieldName = this.getFieldName(parent, node);
-    if (fieldName) {
-      const fieldKey = `${parent.type}:${fieldName}`;
-      if (fieldKey in DEFINITION_KIND_MAP) {
-        return DEFINITION_KIND_MAP[fieldKey];
+      // Try field-specific key first: "parentType:fieldName"
+      const fieldName = this.getFieldName(parent, current);
+      if (fieldName) {
+        const fieldKey = `${parent.type}:${fieldName}`;
+        if (fieldKey in DEFINITION_KIND_MAP) {
+          return DEFINITION_KIND_MAP[fieldKey];
+        }
       }
-    }
 
-    // Fall back to bare parent key: "parentType"
-    if (parent.type in DEFINITION_KIND_MAP) {
-      return DEFINITION_KIND_MAP[parent.type];
+      // Fall back to bare parent key: "parentType"
+      if (parent.type in DEFINITION_KIND_MAP) {
+        return DEFINITION_KIND_MAP[parent.type];
+      }
+
+      current = parent;
     }
 
     return null;
