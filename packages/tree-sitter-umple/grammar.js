@@ -62,10 +62,8 @@ module.exports = grammar({
     // =====================
     class_definition: ($) =>
       seq(
-        optional(choice("abstract", "static")),
         "class",
         field("name", $.identifier),
-        optional($.type_parameters),
         "{",
         repeat($._class_content),
         "}",
