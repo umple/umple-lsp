@@ -12,3 +12,6 @@ packages/tree-sitter-umple/build/
 
 # Build artifact: WASM copied from tree-sitter package into server package
 packages/server/tree-sitter-umple.wasm
+
+# TypeScript incremental build info
+*.tsbuildinfo
