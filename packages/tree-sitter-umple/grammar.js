@@ -100,7 +100,6 @@ module.exports = grammar({
         $.string_literal,
         $.number,
         $.boolean,
-        "null",
         /[^\]\s\w"']+/, // operators and punctuation (: != >= <= && || etc.)
       ),
 
