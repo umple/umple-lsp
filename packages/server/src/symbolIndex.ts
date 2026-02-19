@@ -417,57 +417,6 @@ export class SymbolIndex {
   }
 
   /**
-   * Get the use path at a specific position, if the cursor is on a use statement.
-   * @param filePath Path to the file
-   * @param content File content
-   * @param line 0-indexed line number
-   * @param column 0-indexed column number
-   * @returns The use path (without quotes) or null if not on a use statement
-   */
-  getUsePathAtPosition(
-    filePath: string,
-    content: string,
-    line: number,
-    column: number,
-  ): string | null {
-    if (!this.initialized || !this.parser) {
-      return null;
-    }
-
-    // Use cached tree if available
-    const fileIndex = this.files.get(filePath);
-    let tree: Tree;
-    if (
-      fileIndex?.tree &&
-      fileIndex.contentHash === this.hashContent(content)
-    ) {
-      tree = fileIndex.tree;
-    } else {
-      tree = this.parser.parse(content);
-    }
-
-    const node = tree.rootNode.descendantForPosition({ row: line, column });
-    if (!node) {
-      return null;
-    }
-
-    // Walk up to find if we're inside a use_statement
-    let current = node;
-    while (current) {
-      if (current.type === "use_statement") {
-        const pathNode = current.childForFieldName("path");
-        if (pathNode) {
-          return pathNode.text;
-        }
-        return null;
-      }
-      current = current.parent;
-    }
-
-    return null;
-  }
-
-  /**
    * Get the completion context at a specific position using the dummy identifier trick.
    *
    * Inserts a dummy identifier (__CURSOR__) at the cursor position, parses the

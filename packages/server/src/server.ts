@@ -26,7 +26,6 @@ import {
   CompletionContext,
   SymbolKind,
 } from "./symbolIndex";
-import { debug } from "./utils/debug";
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new Map<string, TextDocument>();
@@ -320,51 +319,64 @@ connection.onDefinition(async (params) => {
     return [];
   }
 
-  const useLocations = resolveUseFileReference(document, params.position);
-  if (useLocations) {
-    return useLocations;
+  if (!symbolIndexReady) {
+    return [];
   }
 
-  // Try symbol index, filtered by reachable files
-  if (symbolIndexReady) {
-    const docPath = getDocumentFilePath(document);
-    if (!docPath) {
+  const docPath = getDocumentFilePath(document);
+  if (!docPath) {
+    return [];
+  }
+
+  const token = symbolIndex.getTokenAtPosition(
+    docPath,
+    document.getText(),
+    params.position.line,
+    params.position.character,
+  );
+  if (!token) {
+    return [];
+  }
+
+  // use statement with .ump extension: resolve as file reference
+  if (token.word.endsWith(".ump")) {
+    const baseDir = path.dirname(docPath);
+    const targetPath = path.isAbsolute(token.word)
+      ? token.word
+      : path.join(baseDir, token.word);
+    if (!fs.existsSync(targetPath)) {
       return [];
     }
-
-    const token = symbolIndex.getTokenAtPosition(
-      docPath,
-      document.getText(),
-      params.position.line,
-      params.position.character,
-    );
-    if (token) {
-      // Ensure imports are indexed and get reachable file set
-      const reachableFiles = ensureImportsIndexed(docPath, document.getText());
-
-      const allSymbols = token.kinds
-        ? symbolIndex.findDefinition(token.word, token.kinds)
-        : symbolIndex.findDefinition(token.word);
-      // Filter symbols to only those in reachable files
-      const filteredSymbols = allSymbols.filter((sym) =>
-        reachableFiles.has(path.normalize(sym.file)),
-      );
-
-      if (filteredSymbols.length > 0) {
-        return filteredSymbols.map((sym) =>
-          Location.create(
-            pathToFileURL(sym.file).toString(),
-            Range.create(
-              Position.create(sym.line, sym.column),
-              Position.create(sym.endLine, sym.endColumn),
-            ),
-          ),
-        );
-      }
-    }
+    return [
+      Location.create(
+        pathToFileURL(targetPath).toString(),
+        Range.create(Position.create(0, 0), Position.create(0, 0)),
+      ),
+    ];
   }
 
-  // No definition found in symbol index
+  // Symbol lookup, filtered by reachable files
+  const reachableFiles = ensureImportsIndexed(docPath, document.getText());
+
+  const allSymbols = token.kinds
+    ? symbolIndex.findDefinition(token.word, token.kinds)
+    : symbolIndex.findDefinition(token.word);
+  const filteredSymbols = allSymbols.filter((sym) =>
+    reachableFiles.has(path.normalize(sym.file)),
+  );
+
+  if (filteredSymbols.length > 0) {
+    return filteredSymbols.map((sym) =>
+      Location.create(
+        pathToFileURL(sym.file).toString(),
+        Range.create(
+          Position.create(sym.line, sym.column),
+          Position.create(sym.endLine, sym.endColumn),
+        ),
+      ),
+    );
+  }
+
   return [];
 });
 
@@ -1126,45 +1138,6 @@ function getDocumentFilePath(document: TextDocument): string | null {
   } catch {
     return null;
   }
-}
-
-/**
- * Handle go-to-definition for `use` statements that reference files (.ump).
- * Non-file use paths (mixset names) return null and are handled by the
- * general getTokenAtPosition + DEFINITION_KIND_MAP flow.
- */
-function resolveUseFileReference(
-  document: TextDocument,
-  position: Position,
-): Location[] | null {
-  const docPath = getDocumentFilePath(document);
-  if (!docPath) {
-    return null;
-  }
-
-  const usePath = symbolIndex.getUsePathAtPosition(
-    docPath,
-    document.getText(),
-    position.line,
-    Math.max(0, position.character - 1),
-  );
-
-  if (!usePath || !usePath.endsWith(".ump")) {
-    return null;
-  }
-
-  // File reference: resolve to file path
-  const baseDir = path.dirname(docPath);
-  const targetPath = path.isAbsolute(usePath)
-    ? usePath
-    : path.join(baseDir, usePath);
-  const uri = pathToFileURL(targetPath).toString();
-  return [
-    Location.create(
-      uri,
-      Range.create(Position.create(0, 0), Position.create(0, 0)),
-    ),
-  ];
 }
 
 function getCompletionPrefix(
