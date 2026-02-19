@@ -5,7 +5,7 @@ A Language Server Protocol implementation for the [Umple](https://www.umple.org)
 ## Features
 
 - **Diagnostics** - Real-time error and warning detection via the Umple compiler
-- **Go-to-definition** - Jump to classes, attributes, state machines, states, and associations
+- **Go-to-definition** - Jump to classes, interfaces, traits, enums, attributes, methods, state machines, states, associations, mixsets, and requirements
 - **Code completion** - Context-aware keyword and symbol suggestions
 - **Syntax highlighting** - Tree-sitter grammar for accurate highlighting
 - **Cross-file support** - Transitive `use` statement resolution and cross-file diagnostics
@@ -68,9 +68,7 @@ The tree-sitter grammar in `packages/tree-sitter-umple/` is used by both the LSP
 After editing `grammar.js`:
 
 ```bash
-cd packages/tree-sitter-umple
-npx tree-sitter generate      # Regenerate parser
-npx tree-sitter build --wasm  # Rebuild WASM for LSP server
+npm run build-grammar          # Regenerate parser + WASM + compile server
 ```
 
 ## Configuration
@@ -91,8 +89,9 @@ Use different ports if running multiple editor instances simultaneously.
 ## Development
 
 ```bash
-npm run compile    # Build server
-npm run watch      # Watch mode
+npm run compile        # Build server (also copies WASM)
+npm run build-grammar  # Full rebuild after grammar.js changes
+npm run watch          # Watch mode
 ```
 
 Test by running the server directly:
