@@ -323,58 +323,6 @@ export class SymbolIndex {
   }
 
   /**
-   * Check if a position is inside a comment.
-   * @param filePath Path to the file
-   * @param content File content (if available, otherwise reads from disk)
-   * @param line 0-indexed line number
-   * @param column 0-indexed column number
-   */
-  isPositionInComment(
-    filePath: string,
-    content: string | null,
-    line: number,
-    column: number,
-  ): boolean {
-    if (!this.initialized || !this.parser) {
-      return false;
-    }
-
-    // Get or create tree
-    let tree: Tree | null = null;
-    const fileIndex = this.files.get(filePath);
-    if (fileIndex?.tree) {
-      tree = fileIndex.tree;
-    } else if (content) {
-      tree = this.parser.parse(content);
-    } else {
-      const fileContent = this.readFileSafe(filePath);
-      if (fileContent) {
-        tree = this.parser.parse(fileContent);
-      }
-    }
-
-    if (!tree) {
-      return false;
-    }
-
-    const node = tree.rootNode.descendantForPosition({ row: line, column });
-    if (!node) {
-      return false;
-    }
-
-    // Check if the node or any ancestor is a comment
-    let current = node;
-    while (current) {
-      if (current.type === "line_comment" || current.type === "block_comment") {
-        return true;
-      }
-      current = current.parent;
-    }
-
-    return false;
-  }
-
-  /**
    * Extract use statement paths from a file using tree-sitter.
    * @param filePath Path to the file
    * @param content File content (optional, will be read from disk if not provided)

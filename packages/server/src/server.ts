@@ -26,6 +26,7 @@ import {
   CompletionContext,
   SymbolKind,
 } from "./symbolIndex";
+import { debug } from "./utils/debug";
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new Map<string, TextDocument>();
@@ -328,18 +329,6 @@ connection.onDefinition(async (params) => {
   if (symbolIndexReady) {
     const docPath = getDocumentFilePath(document);
     if (!docPath) {
-      return [];
-    }
-
-    // Skip if cursor is inside a comment
-    if (
-      symbolIndex.isPositionInComment(
-        docPath,
-        document.getText(),
-        params.position.line,
-        Math.max(0, params.position.character - 1),
-      )
-    ) {
       return [];
     }
 
