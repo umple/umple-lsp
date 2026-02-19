@@ -20,7 +20,6 @@ module.exports = grammar({
   conflicts: ($) => [
     [$.event_spec, $.state],
     [$._definition, $._class_content],
-    [$.single_association_end],
   ],
 
   rules: {
@@ -197,9 +196,19 @@ module.exports = grammar({
     single_association_end: ($) =>
       seq(
         $.multiplicity,
-        optional(field("role", $.identifier)),
-        field("type", $.identifier),
-        optional(field("role_name", $.identifier)),
+        choice(
+          // 3 identifiers: otherEndRoleName type roleName (reflexive)
+          seq(
+            field("other_end_role", $.identifier),
+            field("type", $.identifier),
+            field("role_name", $.identifier),
+          ),
+          // 1-2 identifiers: type roleName?
+          seq(
+            field("type", $.identifier),
+            optional(field("role_name", $.identifier)),
+          ),
+        ),
         ";",
       ),
 
@@ -429,7 +438,9 @@ module.exports = grammar({
         optional($.param_list),
         ")",
         optional($.identifier), // language tag
-        choice(seq("{", optional($.code_content), "}"), ";"),
+        "{",
+        optional($.code_content),
+        "}",
       ),
 
     method_signature: ($) =>

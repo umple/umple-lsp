@@ -130,11 +130,11 @@ const DEFINITION_KIND_MAP: Record<string, SymbolKind[]> = {
   // isA: references types that can be inherited
   isa_declaration: ["class", "interface", "trait"],
 
-  // Type positions in associations reference classes
-  "association_inline:right_type": ["class", "interface", "trait", "enum"],
-  "association_member:left_type": ["class", "interface", "trait", "enum"],
-  "association_member:right_type": ["class", "interface", "trait", "enum"],
-  "single_association_end:type": ["class", "interface", "trait", "enum"],
+  // Type positions in associations reference classes only
+  "association_inline:right_type": ["class"],
+  "association_member:left_type": ["class"],
+  "association_member:right_type": ["class"],
+  "single_association_end:type": ["class"],
 
   // State references in transitions
   "transition:target": ["state"],
@@ -701,7 +701,6 @@ export class SymbolIndex {
     let current: SyntaxNode = node;
     while (current.parent) {
       const parent = current.parent;
-
       // Try field-specific key first: "parentType:fieldName"
       const fieldName = this.getFieldName(parent, current);
       if (fieldName) {
@@ -804,6 +803,7 @@ export class SymbolIndex {
       "language",
       "role",
       "role_name",
+      "other_end_role",
       "from_state",
       "to_state",
       "definition",

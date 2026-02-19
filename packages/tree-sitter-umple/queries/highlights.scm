@@ -214,7 +214,7 @@
   type: (identifier) @type)
 
 (single_association_end
-  role: (identifier) @variable.member)
+  other_end_role: (identifier) @variable.member)
 
 (single_association_end
   role_name: (identifier) @variable.member)
