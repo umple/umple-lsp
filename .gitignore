@@ -10,8 +10,10 @@ CLAUDE.md
 # Tree-sitter native build output
 packages/tree-sitter-umple/build/
 
-# Build artifact: WASM copied from tree-sitter package into server package
+# Build artifacts: WASM and query files copied from tree-sitter package into server package
 packages/server/tree-sitter-umple.wasm
+packages/server/references.scm
+packages/server/definitions.scm
 
 # TypeScript incremental build info
 *.tsbuildinfo
