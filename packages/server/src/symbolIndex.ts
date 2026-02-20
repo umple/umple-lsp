@@ -6,6 +6,8 @@
  */
 
 import * as fs from "fs";
+import * as path from "path";
+import { debugLspInfo } from "./utils/debug";
 
 // web-tree-sitter types and module
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -13,6 +15,7 @@ const TreeSitter = require("web-tree-sitter");
 type Language = InstanceType<typeof TreeSitter.Language>;
 type Tree = InstanceType<typeof TreeSitter.Tree>;
 type SyntaxNode = InstanceType<typeof TreeSitter.Node>;
+type Query = InstanceType<typeof TreeSitter.Query>;
 
 export type SymbolKind =
   | "class"
@@ -74,7 +77,6 @@ export interface SymbolEntry {
   column: number; // 0-indexed
   endLine: number;
   endColumn: number;
-  parent?: string; // For nested symbols (attributes in class, states in statemachine)
 }
 
 export interface UseStatementWithPosition {
@@ -88,67 +90,12 @@ export interface FileIndex {
   contentHash: string;
 }
 
-/**
- * Maps tree-sitter context to allowed SymbolKinds for go-to-definition.
- *
- * Keys use the format:
- *   - "parentNodeType"            — matches any identifier inside that node
- *   - "parentNodeType:fieldName"  — matches only the identifier in that field
- *
- * Field-specific keys are checked first, then the bare parent key as fallback.
- * If no match is found, no filtering is applied (all symbol kinds returned).
- *
- * To add a new context, just add an entry here — no code changes needed.
- */
-const DEFINITION_KIND_MAP: Record<string, SymbolKind[]> = {
-  // Definition names: gd on a name finds other definitions of the same kind
-  "class_definition:name": ["class"],
-  "interface_definition:name": ["interface"],
-  "trait_definition:name": ["trait"],
-  "enum_definition:name": ["enum"],
-  "mixset_definition:name": ["mixset"],
-  "requirement_definition:name": ["requirement"],
-  "association_class_definition:name": ["class"],
-  "statemachine_definition:name": ["statemachine"],
-  "state_machine:name": ["statemachine"],
-  "referenced_statemachine:name": ["statemachine"],
-  "referenced_statemachine:definition": ["statemachine"],
-  "state:name": ["state"],
-  "association_definition:name": ["association"],
-  "attribute_declaration:name": ["attribute"],
-  "method_declaration:name": ["method"],
-
-  // Type references (attribute types, method return types, params, isA, etc.)
-  type_name: ["class", "interface", "trait", "enum"],
-
-  // use statement without .ump extension references a mixset
-  "use_statement:path": ["mixset"],
-
-  // req_implementation: identifiers reference requirements
-  req_implementation: ["requirement"],
-
-  // isA: references types that can be inherited
-  isa_declaration: ["class", "interface", "trait"],
-
-  // Type positions in associations reference classes only
-  "association_inline:right_type": ["class"],
-  "association_member:left_type": ["class"],
-  "association_member:right_type": ["class"],
-  "single_association_end:type": ["class"],
-
-  // State references in transitions
-  "transition:target": ["state"],
-  "standalone_transition:from_state": ["state"],
-  "standalone_transition:to_state": ["state"],
-
-  // Constraint identifiers reference attributes
-  constraint: ["attribute"],
-};
-
 export class SymbolIndex {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private parser: any = null;
   private language: Language | null = null;
+  private referencesQuery: Query | null = null;
+  private definitionsQuery: Query | null = null;
   private files: Map<string, FileIndex> = new Map();
   private symbolsByName: Map<string, SymbolEntry[]> = new Map();
   private initialized = false;
@@ -168,6 +115,21 @@ export class SymbolIndex {
       // Load the WASM language
       this.language = await TreeSitter.Language.load(wasmPath);
       this.parser.setLanguage(this.language);
+
+      // Load .scm queries (co-located with WASM after build)
+      const queryDir = path.dirname(wasmPath);
+
+      const referencesScmPath = path.join(queryDir, "references.scm");
+      if (fs.existsSync(referencesScmPath)) {
+        const src = fs.readFileSync(referencesScmPath, "utf-8");
+        this.referencesQuery = new TreeSitter.Query(this.language, src);
+      }
+
+      const definitionsScmPath = path.join(queryDir, "definitions.scm");
+      if (fs.existsSync(definitionsScmPath)) {
+        const src = fs.readFileSync(definitionsScmPath, "utf-8");
+        this.definitionsQuery = new TreeSitter.Query(this.language, src);
+      }
 
       this.initialized = true;
       return true;
@@ -258,16 +220,6 @@ export class SymbolIndex {
       return symbols.filter((s) => kindSet.has(s.kind));
     }
     return symbols;
-  }
-
-  /**
-   * Find definition with context (for resolving attributes/states within a class/statemachine).
-   * @param name Symbol name
-   * @param parentName Parent symbol name (class or statemachine name)
-   */
-  findDefinitionInContext(name: string, parentName: string): SymbolEntry[] {
-    const symbols = this.symbolsByName.get(name) ?? [];
-    return symbols.filter((s) => s.parent === parentName);
   }
 
   /**
@@ -553,8 +505,8 @@ export class SymbolIndex {
    * Get the token (identifier) at a position using tree-sitter, along with
    * an optional SymbolKind filter based on the surrounding context.
    *
-   * Uses DEFINITION_KIND_MAP to determine which symbol kinds are valid for
-   * the cursor's context. See the map definition for supported contexts.
+   * Uses the references.scm query to determine which symbol kinds are valid
+   * for the cursor's context. See queries/references.scm for supported patterns.
    */
   getTokenAtPosition(
     filePath: string,
@@ -583,39 +535,63 @@ export class SymbolIndex {
     }
 
     const word = node.text;
-    const kinds = this.resolveDefinitionKinds(node);
+    const kinds = this.resolveDefinitionKinds(tree, node);
     return { word, kinds };
   }
 
   /**
-   * Walk up from an identifier node and look up DEFINITION_KIND_MAP
-   * to determine which symbol kinds the identifier can reference.
+   * Use the references.scm query to determine which symbol kinds an
+   * identifier can reference based on its position in the AST.
    *
-   * Walks the parent chain so that intermediate wrapper nodes
-   * (e.g. qualified_name inside type_name) are traversed correctly.
+   * The query captures identifiers with names like @reference.class_interface_trait,
+   * encoding the valid symbol kinds directly. This replaces the old parent-chain
+   * walking approach with a declarative .scm file.
    */
-  private resolveDefinitionKinds(node: SyntaxNode): SymbolKind[] | null {
-    let current: SyntaxNode = node;
-    while (current.parent) {
-      const parent = current.parent;
-      // Try field-specific key first: "parentType:fieldName"
-      const fieldName = this.getFieldName(parent, current);
-      if (fieldName) {
-        const fieldKey = `${parent.type}:${fieldName}`;
-        if (fieldKey in DEFINITION_KIND_MAP) {
-          return DEFINITION_KIND_MAP[fieldKey];
+  private resolveDefinitionKinds(
+    tree: Tree,
+    node: SyntaxNode,
+  ): SymbolKind[] | null {
+    if (!this.referencesQuery) return null;
+
+    // Run query with position filtering to find captures at this node
+    const captures = this.referencesQuery.captures(tree.rootNode, {
+      startPosition: node.startPosition,
+      endPosition: node.endPosition,
+    });
+
+    // Find the capture whose node best matches our target.
+    // When multiple patterns capture the same node (e.g. isA type matched
+    // by both type_name and isa_declaration), pick the most specific:
+    //   1. Smallest node size (fewest bytes)
+    //   2. Fewest kinds in the capture name (fewer = more specific)
+    let bestCapture: { name: string; node: SyntaxNode } | null = null;
+    let bestSize = Infinity;
+    let bestKindCount = Infinity;
+    for (const capture of captures) {
+      if (
+        capture.node.startIndex <= node.startIndex &&
+        capture.node.endIndex >= node.endIndex
+      ) {
+        const size = capture.node.endIndex - capture.node.startIndex;
+        const kindCount = capture.name.split("_").length;
+        if (
+          size < bestSize ||
+          (size === bestSize && kindCount < bestKindCount)
+        ) {
+          bestSize = size;
+          bestKindCount = kindCount;
+          bestCapture = capture;
         }
       }
-
-      // Fall back to bare parent key: "parentType"
-      if (parent.type in DEFINITION_KIND_MAP) {
-        return DEFINITION_KIND_MAP[parent.type];
-      }
-
-      current = parent;
     }
 
-    return null;
+    if (!bestCapture) return null;
+
+    // Parse capture name: "reference.class_interface_trait" → ["class", "interface", "trait"]
+    const prefix = "reference.";
+    if (!bestCapture.name.startsWith(prefix)) return null;
+    const kindStr = bestCapture.name.substring(prefix.length);
+    return kindStr.split("_") as SymbolKind[];
   }
 
   /**
@@ -662,7 +638,15 @@ export class SymbolIndex {
     const lines: string[] = [];
     const visit = (node: SyntaxNode, depth: number) => {
       const indent = "  ".repeat(depth);
-      const field = node.parent ? this.getFieldName(node.parent, node) : null;
+      let field: string | null = null;
+      if (node.parent) {
+        for (let j = 0; j < node.parent.childCount; j++) {
+          if (node.parent.child(j)?.id === node.id) {
+            field = node.parent.fieldNameForChild(j);
+            break;
+          }
+        }
+      }
       const prefix = field ? `${field}: ` : "";
       const pos = `[${node.startPosition.row}, ${node.startPosition.column}] - [${node.endPosition.row}, ${node.endPosition.column}]`;
       if (node.childCount === 0) {
@@ -678,40 +662,6 @@ export class SymbolIndex {
     };
     visit(tree.rootNode, 0);
     return lines.join("\n");
-  }
-
-  /**
-   * Get the field name for a child node within its parent.
-   */
-  private getFieldName(parent: SyntaxNode, child: SyntaxNode): string | null {
-    // Check common field names used in the Umple grammar
-    const fieldNames = [
-      "name",
-      "path",
-      "type",
-      "return_type",
-      "left_role",
-      "right_role",
-      "right_type",
-      "left_type",
-      "event",
-      "target",
-      "package",
-      "language",
-      "role",
-      "role_name",
-      "other_end_role",
-      "from_state",
-      "to_state",
-      "definition",
-    ];
-    for (const name of fieldNames) {
-      const fieldNode = parent.childForFieldName(name);
-      if (fieldNode && fieldNode.id === child.id) {
-        return name;
-      }
-    }
-    return null;
   }
 
   /**
@@ -799,254 +749,36 @@ export class SymbolIndex {
     return hash.toString(16);
   }
 
+  /**
+   * Extract symbol definitions from the AST using the definitions.scm query.
+   * Falls back to an empty list if the query isn't loaded.
+   */
   private extractSymbols(
     filePath: string,
     rootNode: SyntaxNode,
   ): SymbolEntry[] {
+    if (!this.definitionsQuery) return [];
+
+    const captures = this.definitionsQuery.captures(rootNode);
     const symbols: SymbolEntry[] = [];
 
-    const visit = (node: SyntaxNode, parent?: string) => {
-      switch (node.type) {
-        case "class_definition":
-        case "interface_definition":
-        case "trait_definition":
-        case "enum_definition":
-        case "external_definition": {
-          const nameNode = node.childForFieldName("name");
-          if (nameNode) {
-            let kind: SymbolKind = node.type.replace(
-              "_definition",
-              "",
-            ) as SymbolKind;
-            if (node.type === "external_definition") {
-              kind = "class";
-            }
-            symbols.push({
-              name: nameNode.text,
-              kind,
-              file: filePath,
-              line: nameNode.startPosition.row,
-              column: nameNode.startPosition.column,
-              endLine: nameNode.endPosition.row,
-              endColumn: nameNode.endPosition.column,
-            });
+    for (const capture of captures) {
+      const prefix = "definition.";
+      if (!capture.name.startsWith(prefix)) continue;
+      const kind = capture.name.substring(prefix.length) as SymbolKind;
+      const node = capture.node;
 
-            // Visit children with this class as parent
-            for (let i = 0; i < node.childCount; i++) {
-              const child = node.child(i);
-              if (child) visit(child, nameNode.text);
-            }
-          }
-          break;
-        }
+      symbols.push({
+        name: node.text,
+        kind,
+        file: filePath,
+        line: node.startPosition.row,
+        column: node.startPosition.column,
+        endLine: node.endPosition.row,
+        endColumn: node.endPosition.column,
+      });
+    }
 
-        case "attribute_declaration": {
-          const nameNode = node.childForFieldName("name");
-          if (nameNode && parent) {
-            symbols.push({
-              name: nameNode.text,
-              kind: "attribute",
-              file: filePath,
-              line: nameNode.startPosition.row,
-              column: nameNode.startPosition.column,
-              endLine: nameNode.endPosition.row,
-              endColumn: nameNode.endPosition.column,
-              parent,
-            });
-          }
-          break;
-        }
-
-        case "state_machine": {
-          const nameNode = node.childForFieldName("name");
-          if (nameNode && parent) {
-            symbols.push({
-              name: nameNode.text,
-              kind: "statemachine",
-              file: filePath,
-              line: nameNode.startPosition.row,
-              column: nameNode.startPosition.column,
-              endLine: nameNode.endPosition.row,
-              endColumn: nameNode.endPosition.column,
-              parent,
-            });
-
-            // Visit states with this statemachine as parent
-            for (let i = 0; i < node.childCount; i++) {
-              const child = node.child(i);
-              if (child && child.type === "state") {
-                visit(child, nameNode.text);
-              }
-            }
-          }
-          break;
-        }
-
-        case "state": {
-          const nameNode = node.childForFieldName("name");
-          if (nameNode && parent) {
-            symbols.push({
-              name: nameNode.text,
-              kind: "state",
-              file: filePath,
-              line: nameNode.startPosition.row,
-              column: nameNode.startPosition.column,
-              endLine: nameNode.endPosition.row,
-              endColumn: nameNode.endPosition.column,
-              parent,
-            });
-
-            // Visit nested states
-            for (let i = 0; i < node.childCount; i++) {
-              const child = node.child(i);
-              if (child && child.type === "state") {
-                visit(child, nameNode.text);
-              }
-            }
-          }
-          break;
-        }
-
-        case "method_declaration":
-        case "method_signature": {
-          const nameNode = node.childForFieldName("name");
-          if (nameNode && parent) {
-            symbols.push({
-              name: nameNode.text,
-              kind: "method",
-              file: filePath,
-              line: nameNode.startPosition.row,
-              column: nameNode.startPosition.column,
-              endLine: nameNode.endPosition.row,
-              endColumn: nameNode.endPosition.column,
-              parent,
-            });
-          }
-          break;
-        }
-
-        case "association_definition": {
-          const nameNode = node.childForFieldName("name");
-          if (nameNode) {
-            symbols.push({
-              name: nameNode.text,
-              kind: "association",
-              file: filePath,
-              line: nameNode.startPosition.row,
-              column: nameNode.startPosition.column,
-              endLine: nameNode.endPosition.row,
-              endColumn: nameNode.endPosition.column,
-            });
-          }
-          break;
-        }
-
-        case "requirement_definition":
-        case "mixset_definition": {
-          const nameNode = node.childForFieldName("name");
-          if (nameNode) {
-            const kind: SymbolKind =
-              node.type === "requirement_definition" ? "requirement" : "mixset";
-            symbols.push({
-              name: nameNode.text,
-              kind,
-              file: filePath,
-              line: nameNode.startPosition.row,
-              column: nameNode.startPosition.column,
-              endLine: nameNode.endPosition.row,
-              endColumn: nameNode.endPosition.column,
-            });
-
-            // Visit children with this as parent
-            for (let i = 0; i < node.childCount; i++) {
-              const child = node.child(i);
-              if (child) visit(child, nameNode.text);
-            }
-          }
-          break;
-        }
-
-        case "association_class_definition": {
-          const nameNode = node.childForFieldName("name");
-          if (nameNode) {
-            symbols.push({
-              name: nameNode.text,
-              kind: "class",
-              file: filePath,
-              line: nameNode.startPosition.row,
-              column: nameNode.startPosition.column,
-              endLine: nameNode.endPosition.row,
-              endColumn: nameNode.endPosition.column,
-            });
-
-            // Visit children with this class as parent
-            for (let i = 0; i < node.childCount; i++) {
-              const child = node.child(i);
-              if (child) visit(child, nameNode.text);
-            }
-          }
-          break;
-        }
-
-        case "statemachine_definition": {
-          const nameNode = node.childForFieldName("name");
-          if (nameNode) {
-            symbols.push({
-              name: nameNode.text,
-              kind: "statemachine",
-              file: filePath,
-              line: nameNode.startPosition.row,
-              column: nameNode.startPosition.column,
-              endLine: nameNode.endPosition.row,
-              endColumn: nameNode.endPosition.column,
-            });
-
-            // Visit states with this statemachine as parent
-            for (let i = 0; i < node.childCount; i++) {
-              const child = node.child(i);
-              if (child && child.type === "state") {
-                visit(child, nameNode.text);
-              }
-            }
-          }
-          break;
-        }
-
-        case "referenced_statemachine": {
-          const nameNode = node.childForFieldName("name");
-          if (nameNode && parent) {
-            symbols.push({
-              name: nameNode.text,
-              kind: "statemachine",
-              file: filePath,
-              line: nameNode.startPosition.row,
-              column: nameNode.startPosition.column,
-              endLine: nameNode.endPosition.row,
-              endColumn: nameNode.endPosition.column,
-              parent,
-            });
-
-            // Visit extended states with this statemachine as parent
-            for (let i = 0; i < node.childCount; i++) {
-              const child = node.child(i);
-              if (child && child.type === "state") {
-                visit(child, nameNode.text);
-              }
-            }
-          }
-          break;
-        }
-
-        default:
-          // Visit all children for other node types
-          for (let i = 0; i < node.childCount; i++) {
-            const child = node.child(i);
-            if (child) visit(child, parent);
-          }
-      }
-    };
-
-    visit(rootNode);
     return symbols;
   }
 }

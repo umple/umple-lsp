@@ -9,7 +9,9 @@
   "files": [
     "out/",
     "bin/",
-    "tree-sitter-umple.wasm"
+    "tree-sitter-umple.wasm",
+    "references.scm",
+    "definitions.scm"
   ],
   "scripts": {
     "compile": "tsc -p .",
