@@ -11,7 +11,8 @@
     "bin/",
     "tree-sitter-umple.wasm",
     "references.scm",
-    "definitions.scm"
+    "definitions.scm",
+    "completions.scm"
   ],
   "scripts": {
     "compile": "tsc -p .",

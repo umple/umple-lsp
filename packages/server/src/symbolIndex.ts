@@ -7,7 +7,6 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { debugLspInfo } from "./utils/debug";
 
 // web-tree-sitter types and module
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -30,8 +29,6 @@ export type SymbolKind =
   | "mixset"
   | "requirement";
 
-const DUMMY_IDENTIFIER = "__CURSOR__";
-
 /**
  * Keywords after which the next token is always a new name (definition).
  * Completions are suppressed when the cursor immediately follows one of these.
@@ -52,22 +49,48 @@ const DEFINITION_KEYWORDS = new Set([
   "pooled",
 ]);
 
-export type CompletionContext =
-  | "top"
-  | "class_body"
-  | "state_machine"
-  | "state"
-  | "association"
-  | "enum"
-  | "method"
-  | "use_path"
-  | "isa_type"
-  | "transition_target"
-  | "association_type"
-  | "depend_package"
-  | "definition_name"
-  | "comment"
-  | "unknown";
+/** Structural tokens that should NOT appear in completions. */
+const STRUCTURAL_TOKENS = new Set([
+  "{",
+  "}",
+  "(",
+  ")",
+  "[",
+  "]",
+  ";",
+  ",",
+  ".",
+  "<",
+  ">",
+  "=",
+  "/",
+  "[]",
+  "*",
+  "||",
+]);
+
+function isOperatorToken(name: string): boolean {
+  // Matches association/transition arrows: --, ->, <-, <@>-, -<@>, >->, <-<
+  return /^[<>-]/.test(name) && name.length > 1;
+}
+
+/** Information needed by the completion handler. */
+export interface CompletionInfo {
+  /** Keywords the parser expects at this position. */
+  keywords: string[];
+  /** Operators the parser expects at this position. */
+  operators: string[];
+  /** Which symbol kinds to offer, or null for none. */
+  symbolKinds: SymbolKind[] | "suppress" | "use_path" | null;
+  /** True if cursor is at a definition-name position (suppress all). */
+  isDefinitionName: boolean;
+  /** True if cursor is inside a comment. */
+  isComment: boolean;
+  /** Name of enclosing class (for scoped attribute lookups). */
+  enclosingClass?: string;
+  /** Name of enclosing root state machine (for scoped state lookups). */
+  enclosingStateMachine?: string;
+}
 
 export interface SymbolEntry {
   name: string;
@@ -77,6 +100,7 @@ export interface SymbolEntry {
   column: number; // 0-indexed
   endLine: number;
   endColumn: number;
+  container?: string; // Enclosing class (for attributes/methods) or root SM (for states)
 }
 
 export interface UseStatementWithPosition {
@@ -96,8 +120,14 @@ export class SymbolIndex {
   private language: Language | null = null;
   private referencesQuery: Query | null = null;
   private definitionsQuery: Query | null = null;
+  private completionsQuery: Query | null = null;
   private files: Map<string, FileIndex> = new Map();
   private symbolsByName: Map<string, SymbolEntry[]> = new Map();
+  private symbolsByContainer: Map<string, SymbolEntry[]> = new Map();
+  // Per-file isA relationships (for cleanup when a file is re-indexed)
+  private isAByFile: Map<string, Map<string, string[]>> = new Map();
+  // Global isA graph: className → parent names (merged from all files)
+  private isAGraph: Map<string, string[]> = new Map();
   private initialized = false;
 
   /**
@@ -129,6 +159,12 @@ export class SymbolIndex {
       if (fs.existsSync(definitionsScmPath)) {
         const src = fs.readFileSync(definitionsScmPath, "utf-8");
         this.definitionsQuery = new TreeSitter.Query(this.language, src);
+      }
+
+      const completionsScmPath = path.join(queryDir, "completions.scm");
+      if (fs.existsSync(completionsScmPath)) {
+        const src = fs.readFileSync(completionsScmPath, "utf-8");
+        this.completionsQuery = new TreeSitter.Query(this.language, src);
       }
 
       this.initialized = true;
@@ -179,6 +215,11 @@ export class SymbolIndex {
     // Extract symbols from the AST
     const symbols = this.extractSymbols(filePath, tree.rootNode);
 
+    // Extract isA relationships
+    const isAMap = this.extractIsARelationships(tree.rootNode);
+    this.isAByFile.set(filePath, isAMap);
+    this.rebuildIsAGraph();
+
     // Store the file index
     this.files.set(filePath, {
       symbols,
@@ -186,11 +227,18 @@ export class SymbolIndex {
       contentHash: hash,
     });
 
-    // Add symbols to the name index
+    // Add symbols to the name index and container index
     for (const symbol of symbols) {
       const existing = this.symbolsByName.get(symbol.name) ?? [];
       existing.push(symbol);
       this.symbolsByName.set(symbol.name, existing);
+
+      if (symbol.container) {
+        const containerSyms =
+          this.symbolsByContainer.get(symbol.container) ?? [];
+        containerSyms.push(symbol);
+        this.symbolsByContainer.set(symbol.container, containerSyms);
+      }
     }
 
     return true;
@@ -249,6 +297,8 @@ export class SymbolIndex {
   removeFile(filePath: string): void {
     this.removeFileSymbols(filePath);
     this.files.delete(filePath);
+    this.isAByFile.delete(filePath);
+    this.rebuildIsAGraph();
   }
 
   /**
@@ -257,6 +307,9 @@ export class SymbolIndex {
   clear(): void {
     this.files.clear();
     this.symbolsByName.clear();
+    this.symbolsByContainer.clear();
+    this.isAByFile.clear();
+    this.isAGraph.clear();
   }
 
   /**
@@ -369,136 +422,100 @@ export class SymbolIndex {
   }
 
   /**
-   * Get the completion context at a specific position using the dummy identifier trick.
+   * Get completion information at a position using LookaheadIterator + scope query.
    *
-   * Inserts a dummy identifier (__CURSOR__) at the cursor position, parses the
-   * modified text, then walks up from the dummy node to determine context.
-   * This produces reliable results because the dummy forces the parser to place
-   * it in a grammatically valid position (e.g. "isA __CURSOR__" parses as an
-   * isa_declaration with type __CURSOR__).
+   * Operates on the ORIGINAL parse tree (no dummy insertion). Uses:
+   * 1. Previous leaf node's nextParseState → LookaheadIterator for keywords
+   * 2. completions.scm query for symbol kind detection
+   * 3. Simple tree checks for comments, definition names
    *
-   * @param filePath Path to the file
-   * @param content File content (original, without dummy)
-   * @param line 0-indexed line number
-   * @param column 0-indexed column number (raw cursor position, NOT column-1)
-   * @returns The completion context type
+   * @param content The document text (original)
+   * @param line 0-indexed cursor line
+   * @param column 0-indexed cursor column
+   * @returns CompletionInfo with keywords, operators, and symbol kinds
    */
-  getCompletionContext(
-    filePath: string,
+  getCompletionInfo(
     content: string,
     line: number,
     column: number,
-  ): CompletionContext {
-    if (!this.initialized || !this.parser) {
-      return "unknown";
+  ): CompletionInfo {
+    const empty: CompletionInfo = {
+      keywords: [],
+      operators: [],
+      symbolKinds: null,
+      isDefinitionName: false,
+      isComment: false,
+    };
+
+    if (!this.initialized || !this.parser || !this.language) {
+      return empty;
     }
 
-    // Check if the cursor follows a definition keyword (e.g. "class ",
-    // "enum ", "statemachine queued "). Scans backwards through the content
-    // to find the last token, handling multi-line cases correctly.
-    const lines = content.split("\n");
-    if (line < 0 || line >= lines.length) {
-      return "unknown";
-    }
-    const lineText = lines[line];
-    const linePrefix = lineText.substring(0, column);
-    const lastToken = this.lastTokenBeforeCursor(content, line, column);
-    if (lastToken && DEFINITION_KEYWORDS.has(lastToken)) {
-      return "definition_name";
-    }
+    // Parse original text (no dummy insertion)
+    const tree = this.parser.parse(content);
+    if (!tree) return empty;
 
-    // Insert dummy identifier at cursor position
-    lines[line] = linePrefix + DUMMY_IDENTIFIER + lineText.substring(column);
-    const modifiedText = lines.join("\n");
-
-    // Parse modified text (throwaway — do NOT update index)
-    const tree = this.parser.parse(modifiedText);
-
-    // Find the dummy node — it starts at (line, column) in the modified text
-    const dummyNode = tree.rootNode.descendantForPosition({
+    // --- Comment check ---
+    const nodeAtCursor = tree.rootNode.descendantForPosition({
       row: line,
       column,
     });
-    if (!dummyNode) {
-      return "unknown";
+    if (nodeAtCursor && this.isInsideComment(nodeAtCursor)) {
+      return { ...empty, isComment: true };
     }
 
-    // Walk up from the dummy node to determine context
-    let current: SyntaxNode | null = dummyNode;
-    while (current) {
-      switch (current.type) {
-        // Comments: suppress all completions
-        case "line_comment":
-        case "block_comment":
-          return "comment";
+    // --- Definition name check ---
+    const lastToken = this.lastTokenBeforeCursor(content, line, column);
+    if (
+      (lastToken && DEFINITION_KEYWORDS.has(lastToken)) ||
+      this.isAtAttributeNamePosition(tree, content, line, column)
+    ) {
+      return { ...empty, isDefinitionName: true };
+    }
 
-        // Specific keyword contexts (checked before structural)
-        case "use_statement":
-          return "use_path";
+    // --- LookaheadIterator for keywords ---
+    const prevLeaf = this.findPreviousLeaf(tree, content, line, column);
+    const stateId = prevLeaf ? prevLeaf.nextParseState : 0;
+    const keywords: string[] = [];
+    const operators: string[] = [];
 
-        case "isa_declaration":
-          return "isa_type";
+    const iter = this.language.lookaheadIterator(stateId);
+    if (iter) {
+      try {
+        for (const symbolName of iter) {
+          const typeId = iter.currentTypeId;
+          // Skip named nodes (identifier, type_name, etc.)
+          if (this.language.nodeTypeIsNamed(typeId)) continue;
+          // Skip structural tokens
+          if (STRUCTURAL_TOKENS.has(symbolName)) continue;
 
-        case "transition": {
-          const targetNode = current.childForFieldName("target");
-          if (targetNode && targetNode.text.includes(DUMMY_IDENTIFIER)) {
-            return "transition_target";
+          if (isOperatorToken(symbolName)) {
+            operators.push(symbolName);
+          } else if (/^[a-zA-Z]/.test(symbolName)) {
+            keywords.push(symbolName);
           }
-          // Dummy is in event position — fall through to state context
-          return "state";
         }
-
-        case "depend_statement":
-          return "depend_package";
-
-        case "association_inline": {
-          const rightType = current.childForFieldName("right_type");
-          if (rightType && rightType.text.includes(DUMMY_IDENTIFIER)) {
-            return "association_type";
-          }
-          // Dummy is in role or other position — fall through
-          break;
-        }
-
-        case "association_member": {
-          const leftType = current.childForFieldName("left_type");
-          const rightType = current.childForFieldName("right_type");
-          if (
-            (leftType && leftType.text.includes(DUMMY_IDENTIFIER)) ||
-            (rightType && rightType.text.includes(DUMMY_IDENTIFIER))
-          ) {
-            return "association_type";
-          }
-          return "association";
-        }
-
-        // Brace-delimited: always reliable
-        case "state":
-          return "state";
-        case "state_machine":
-          return "state_machine";
-        case "association_definition":
-          return "association";
-        case "enum_definition":
-          return "enum";
-        case "class_definition":
-        case "trait_definition":
-        case "interface_definition":
-        case "association_class_definition":
-          return "class_body";
-        case "mixset_definition":
-        case "statemachine_definition":
-        case "requirement_definition":
-        case "source_file":
-          return "top";
-        case "code_content":
-        case "code_block":
-          return "method";
+      } finally {
+        iter.delete(); // MUST free WASM memory
       }
-      current = current.parent;
     }
 
-    return "unknown";
+    // --- Scope query for symbol kinds ---
+    const symbolKinds = this.resolveCompletionScope(tree, line, column);
+
+    // --- Enclosing scope for scoped lookups ---
+    const { enclosingClass, enclosingStateMachine } =
+      this.resolveEnclosingScope(tree, line, column);
+
+    return {
+      keywords,
+      operators,
+      symbolKinds,
+      isDefinitionName: false,
+      isComment: false,
+      enclosingClass,
+      enclosingStateMachine,
+    };
   }
 
   /**
@@ -611,6 +628,44 @@ export class SymbolIndex {
     return result;
   }
 
+  /** Get direct attributes of a specific class. */
+  getAttributesForClass(className: string): SymbolEntry[] {
+    const containerSyms = this.symbolsByContainer.get(className) ?? [];
+    return containerSyms.filter((s) => s.kind === "attribute");
+  }
+
+  /** Get all attributes for a class including inherited ones via isA chain. */
+  getInheritedAttributes(className: string): SymbolEntry[] {
+    const visited = new Set<string>();
+    const result: SymbolEntry[] = [];
+    this.collectInheritedAttributes(className, visited, result);
+    return result;
+  }
+
+  /** Get states belonging to a specific state machine. */
+  getStatesForStateMachine(smName: string): SymbolEntry[] {
+    const containerSyms = this.symbolsByContainer.get(smName) ?? [];
+    return containerSyms.filter((s) => s.kind === "state");
+  }
+
+  private collectInheritedAttributes(
+    className: string,
+    visited: Set<string>,
+    result: SymbolEntry[],
+  ): void {
+    if (visited.has(className)) return;
+    visited.add(className);
+
+    result.push(...this.getAttributesForClass(className));
+
+    const parents = this.isAGraph.get(className);
+    if (parents) {
+      for (const parent of parents) {
+        this.collectInheritedAttributes(parent, visited, result);
+      }
+    }
+  }
+
   /**
    * Get all symbols (useful for type completions).
    */
@@ -625,6 +680,215 @@ export class SymbolIndex {
   // =====================
   // Private methods
   // =====================
+
+  /**
+   * Find the previous non-extra leaf node before the cursor position.
+   * Skips the current partial word being typed and any whitespace.
+   *
+   * @param tree    The (original, un-modified) parse tree
+   * @param content The document text
+   * @param line    0-indexed cursor line
+   * @param column  0-indexed cursor column
+   * @returns The previous leaf node, or null if cursor is at file start
+   */
+  private findPreviousLeaf(
+    tree: Tree,
+    content: string,
+    line: number,
+    column: number,
+  ): SyntaxNode | null {
+    // Convert (line, column) to absolute offset
+    const lines = content.split("\n");
+    let offset = 0;
+    for (let i = 0; i < line && i < lines.length; i++) {
+      offset += lines[i].length + 1; // +1 for newline
+    }
+    offset += Math.min(column, lines[line]?.length ?? 0);
+
+    // Skip the current partial identifier backwards
+    let pos = offset;
+    while (pos > 0 && /[a-zA-Z_0-9]/.test(content[pos - 1])) {
+      pos--;
+    }
+
+    // Skip whitespace backwards
+    while (pos > 0 && /\s/.test(content[pos - 1])) {
+      pos--;
+    }
+
+    if (pos === 0) return null;
+
+    // Find the node at (pos - 1) — the last character before the gap
+    let node = tree.rootNode.descendantForIndex(pos - 1, pos - 1);
+    if (!node) return null;
+
+    // Skip extra nodes (comments) by walking to previous siblings
+    while (node && node.isExtra) {
+      const prev = node.previousSibling;
+      if (prev) {
+        node = prev;
+        while (node.childCount > 0) {
+          node = node.lastChild!;
+        }
+      } else if (node.parent) {
+        node = node.parent;
+      } else {
+        return null;
+      }
+    }
+
+    // Walk to leaf
+    while (node && node.childCount > 0) {
+      node = node.lastChild!;
+    }
+
+    return node;
+  }
+
+  /**
+   * Run completions.scm to find the innermost scope at the cursor position.
+   * Returns symbol kinds to offer, "suppress", "use_path", or null (keywords only).
+   */
+  private resolveCompletionScope(
+    tree: Tree,
+    line: number,
+    column: number,
+  ): SymbolKind[] | "suppress" | "use_path" | null {
+    if (!this.completionsQuery) return null;
+
+    // Don't pass position filtering to the query — tree-sitter uses
+    // half-open intervals [start, end), so a point query at a node's
+    // exact end boundary misses it (e.g., `use Per|` at use_statement's
+    // end). The manual containment check below uses inclusive boundaries
+    // and handles this correctly.
+    const captures = this.completionsQuery.captures(tree.rootNode);
+
+    // Find the innermost (smallest) scope that contains the cursor
+    let best: { name: string; size: number } | null = null;
+    for (const capture of captures) {
+      const node = capture.node;
+      const startOk =
+        node.startPosition.row < line ||
+        (node.startPosition.row === line &&
+          node.startPosition.column <= column);
+      const endOk =
+        node.endPosition.row > line ||
+        (node.endPosition.row === line && node.endPosition.column >= column);
+
+      if (startOk && endOk) {
+        const size = node.endIndex - node.startIndex;
+        if (!best || size < best.size) {
+          best = { name: capture.name, size };
+        }
+      }
+    }
+
+    if (!best) return null;
+
+    const prefix = "scope.";
+    if (!best.name.startsWith(prefix)) return null;
+    const kindStr = best.name.substring(prefix.length);
+
+    if (kindStr === "suppress") return "suppress";
+    if (kindStr === "use_path") return "use_path";
+    if (kindStr === "none") return null;
+
+    return kindStr.split("_") as SymbolKind[];
+  }
+
+  /**
+   * Check if a node is inside a comment (line_comment or block_comment).
+   */
+  private isInsideComment(node: SyntaxNode): boolean {
+    let current: SyntaxNode | null = node;
+    while (current) {
+      if (current.type === "line_comment" || current.type === "block_comment") {
+        return true;
+      }
+      current = current.parent;
+    }
+    return false;
+  }
+
+  /**
+   * Resolve enclosing class and root state machine names at a position.
+   * For state machines, keeps walking to find the outermost (root) SM.
+   */
+  private resolveEnclosingScope(
+    tree: Tree,
+    line: number,
+    column: number,
+  ): { enclosingClass?: string; enclosingStateMachine?: string } {
+    let node: SyntaxNode | null = tree.rootNode.descendantForPosition({
+      row: line,
+      column,
+    });
+    let enclosingClass: string | undefined;
+    let enclosingStateMachine: string | undefined;
+
+    while (node) {
+      // For state machines: keep overwriting to find the ROOT (outermost) SM
+      if (node.type === "state_machine") {
+        enclosingStateMachine =
+          node.childForFieldName("name")?.text ?? enclosingStateMachine;
+      }
+      if (node.type === "statemachine_definition") {
+        enclosingStateMachine =
+          node.childForFieldName("name")?.text ?? enclosingStateMachine;
+      }
+      // For class: stop at first (innermost is what we want)
+      if (
+        !enclosingClass &&
+        [
+          "class_definition",
+          "trait_definition",
+          "interface_definition",
+          "association_class_definition",
+        ].includes(node.type)
+      ) {
+        enclosingClass = node.childForFieldName("name")?.text;
+      }
+      node = node.parent;
+    }
+
+    return { enclosingClass, enclosingStateMachine };
+  }
+
+  /**
+   * Check if the cursor is at an attribute name position (after a type name).
+   * E.g., "Integer |" — the previous leaf is inside a type_name that is the
+   * "type" field of an attribute_declaration, const_declaration, method, or param.
+   */
+  private isAtAttributeNamePosition(
+    tree: Tree,
+    content: string,
+    line: number,
+    column: number,
+  ): boolean {
+    const prevLeaf = this.findPreviousLeaf(tree, content, line, column);
+    if (!prevLeaf) return false;
+
+    // Walk up to find if prevLeaf is inside a type_name
+    let node: SyntaxNode | null = prevLeaf;
+    while (node) {
+      if (node.type === "type_name") {
+        const parent = node.parent;
+        if (parent) {
+          for (let i = 0; i < parent.childCount; i++) {
+            if (parent.child(i)?.id === node.id) {
+              const fieldName = parent.fieldNameForChild(i);
+              if (fieldName === "type" || fieldName === "return_type") {
+                return true;
+              }
+            }
+          }
+        }
+        break;
+      }
+      node = node.parent;
+    }
+    return false;
+  }
 
   /**
    * Debug helper: print a tree-sitter AST as an S-expression with positions.
@@ -734,6 +998,18 @@ export class SymbolIndex {
           this.symbolsByName.set(symbol.name, filtered);
         }
       }
+
+      if (symbol.container) {
+        const containerSyms = this.symbolsByContainer.get(symbol.container);
+        if (containerSyms) {
+          const filtered = containerSyms.filter((s) => s.file !== filePath);
+          if (filtered.length === 0) {
+            this.symbolsByContainer.delete(symbol.container);
+          } else {
+            this.symbolsByContainer.set(symbol.container, filtered);
+          }
+        }
+      }
     }
   }
 
@@ -747,6 +1023,110 @@ export class SymbolIndex {
       hash = hash & hash; // Convert to 32bit integer
     }
     return hash.toString(16);
+  }
+
+  /**
+   * Extract isA relationships from the AST.
+   * Returns a map of className → parent names.
+   */
+  private extractIsARelationships(rootNode: SyntaxNode): Map<string, string[]> {
+    const isAMap = new Map<string, string[]>();
+    const visit = (node: SyntaxNode) => {
+      if (node.type === "isa_declaration") {
+        // Find enclosing class name
+        let parent = node.parent;
+        while (
+          parent &&
+          ![
+            "class_definition",
+            "trait_definition",
+            "interface_definition",
+            "association_class_definition",
+          ].includes(parent.type)
+        ) {
+          parent = parent.parent;
+        }
+        const className = parent?.childForFieldName("name")?.text;
+        if (!className) return;
+
+        // Extract parent names from type_list → type_name → qualified_name
+        for (let i = 0; i < node.childCount; i++) {
+          const child = node.child(i);
+          if (child?.type === "type_list") {
+            for (let j = 0; j < child.childCount; j++) {
+              const tn = child.child(j);
+              if (tn?.type === "type_name") {
+                for (let k = 0; k < tn.childCount; k++) {
+                  const qn = tn.child(k);
+                  if (qn?.type === "qualified_name") {
+                    const parents = isAMap.get(className) ?? [];
+                    parents.push(qn.text);
+                    isAMap.set(className, parents);
+                  }
+                }
+              }
+            }
+          }
+        }
+      } else {
+        for (let i = 0; i < node.childCount; i++) {
+          const child = node.child(i);
+          if (child) visit(child);
+        }
+      }
+    };
+    visit(rootNode);
+    return isAMap;
+  }
+
+  /** Rebuild the global isA graph from all per-file isA maps. */
+  private rebuildIsAGraph(): void {
+    this.isAGraph.clear();
+    for (const fileIsA of this.isAByFile.values()) {
+      for (const [className, parents] of fileIsA) {
+        const existing = this.isAGraph.get(className) ?? [];
+        existing.push(...parents);
+        this.isAGraph.set(className, existing);
+      }
+    }
+  }
+
+  /** For attributes/methods: walk up to find the enclosing class name. */
+  private resolveClassContainer(node: SyntaxNode): string | undefined {
+    let current = node.parent;
+    while (current) {
+      if (
+        [
+          "class_definition",
+          "trait_definition",
+          "interface_definition",
+          "association_class_definition",
+        ].includes(current.type)
+      ) {
+        return current.childForFieldName("name")?.text;
+      }
+      current = current.parent;
+    }
+    return undefined;
+  }
+
+  /**
+   * For states/statemachines: walk up to find the ROOT (outermost) state machine name.
+   * All states share the same container so nested states can target any state at any level.
+   */
+  private resolveStateMachineContainer(node: SyntaxNode): string | undefined {
+    let rootSmName: string | undefined;
+    let current = node.parent;
+    while (current) {
+      if (current.type === "state_machine") {
+        rootSmName = current.childForFieldName("name")?.text ?? rootSmName;
+      }
+      if (current.type === "statemachine_definition") {
+        rootSmName = current.childForFieldName("name")?.text ?? rootSmName;
+      }
+      current = current.parent;
+    }
+    return rootSmName;
   }
 
   /**
@@ -768,6 +1148,13 @@ export class SymbolIndex {
       const kind = capture.name.substring(prefix.length) as SymbolKind;
       const node = capture.node;
 
+      let container: string | undefined;
+      if (kind === "state" || kind === "statemachine") {
+        container = this.resolveStateMachineContainer(node);
+      } else if (kind === "attribute" || kind === "method") {
+        container = this.resolveClassContainer(node);
+      }
+
       symbols.push({
         name: node.text,
         kind,
@@ -776,6 +1163,7 @@ export class SymbolIndex {
         column: node.startPosition.column,
         endLine: node.endPosition.row,
         endColumn: node.endPosition.column,
+        container,
       });
     }
 

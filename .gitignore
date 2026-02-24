@@ -14,6 +14,7 @@ packages/tree-sitter-umple/build/
 packages/server/tree-sitter-umple.wasm
 packages/server/references.scm
 packages/server/definitions.scm
+packages/server/completions.scm
 
 # TypeScript incremental build info
 *.tsbuildinfo

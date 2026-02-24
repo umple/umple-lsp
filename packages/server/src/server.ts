@@ -19,12 +19,12 @@ import {
   Range,
 } from "vscode-languageserver/node";
 import { TextDocument } from "vscode-languageserver-textdocument";
-import { COMPLETION_KEYWORDS } from "./keywords";
+import { BUILTIN_TYPES } from "./keywords";
 import {
   symbolIndex,
   UseStatementWithPosition,
-  CompletionContext,
   SymbolKind,
+  SymbolEntry,
 } from "./symbolIndex";
 
 const connection = createConnection(ProposedFeatures.all);
@@ -265,52 +265,107 @@ connection.onCompletion(async (params): Promise<CompletionItem[]> => {
   }
 
   const docPath = getDocumentFilePath(document);
-
-  // Determine context using dummy identifier trick
-  let context: CompletionContext = "unknown";
-  if (docPath && symbolIndexReady) {
-    context = symbolIndex.getCompletionContext(
-      docPath,
-      document.getText(),
-      params.position.line,
-      params.position.character,
-    );
-  }
-
-  // Suppress completions in comments and definition name positions
-  if (context === "comment" || context === "definition_name") {
+  if (!docPath || !symbolIndexReady) {
     return [];
   }
 
-  // Use path completion: offer .ump file names
-  if (context === "use_path") {
-    const prefix = getUsePathPrefix(
-      document,
-      params.position.line,
-      params.position.character,
-    );
-    return getUseFileCompletions(
-      document,
-      prefix,
-      params.position.line,
-      params.position.character,
-    );
+  const text = document.getText();
+  const { line, character } = params.position;
+
+  // 1. Get completion info from LookaheadIterator + scope query
+  const info = symbolIndex.getCompletionInfo(text, line, character);
+
+  // 2. Suppress completions
+  if (info.isComment || info.isDefinitionName) {
+    return [];
+  }
+  if (info.symbolKinds === "suppress") {
+    return [];
   }
 
-  // Ensure imported files are indexed so their symbols appear in completions
-  let reachableFiles: Set<string> | undefined;
-  if (docPath && symbolIndexReady) {
-    reachableFiles = ensureImportsIndexed(docPath, document.getText());
+  // 3. Use-path → file completions
+  if (info.symbolKinds === "use_path") {
+    const prefix = getUsePathPrefix(document, line, character);
+    return getUseFileCompletions(document, prefix, line, character);
   }
 
-  // All other contexts: keyword + symbol completions
-  const prefix = getCompletionPrefix(
-    document,
-    params.position.line,
-    params.position.character,
-  );
+  // 4. Ensure imported files are indexed
+  const reachableFiles = ensureImportsIndexed(docPath, text);
 
-  return buildCompletionsForContext(context, prefix, reachableFiles);
+  // 5. Build completions
+  const prefix = getCompletionPrefix(document, line, character);
+  const items: CompletionItem[] = [];
+  const seen = new Set<string>();
+
+  // 5a. Keywords from LookaheadIterator
+  for (const kw of info.keywords) {
+    if (!seen.has(kw)) {
+      seen.add(kw);
+      items.push({ label: kw, kind: CompletionItemKind.Keyword });
+    }
+  }
+
+  // 5b. Operators from LookaheadIterator
+  for (const op of info.operators) {
+    if (!seen.has(op)) {
+      seen.add(op);
+      items.push({ label: op, kind: CompletionItemKind.Operator });
+    }
+  }
+
+  // 5c. Built-in types (when in type-compatible scope)
+  if (
+    Array.isArray(info.symbolKinds) &&
+    info.symbolKinds.some((k) =>
+      ["class", "interface", "trait", "enum"].includes(k),
+    )
+  ) {
+    for (const typ of BUILTIN_TYPES) {
+      if (!seen.has(typ)) {
+        seen.add(typ);
+        items.push({
+          label: typ,
+          kind: CompletionItemKind.TypeParameter,
+          detail: "type",
+        });
+      }
+    }
+  }
+
+  // 5d. Symbol completions from index (scoped to reachable files)
+  if (Array.isArray(info.symbolKinds)) {
+    for (const symKind of info.symbolKinds) {
+      let symbols: SymbolEntry[];
+
+      // Scoped lookups for container-aware kinds
+      if (symKind === "attribute" && info.enclosingClass) {
+        symbols = symbolIndex
+          .getInheritedAttributes(info.enclosingClass)
+          .filter((s) => reachableFiles.has(path.normalize(s.file)));
+      } else if (symKind === "state" && info.enclosingStateMachine) {
+        symbols = symbolIndex
+          .getStatesForStateMachine(info.enclosingStateMachine)
+          .filter((s) => reachableFiles.has(path.normalize(s.file)));
+      } else {
+        symbols = symbolIndex
+          .getSymbolsByKind(symKind)
+          .filter((s) => reachableFiles.has(path.normalize(s.file)));
+      }
+
+      for (const sym of symbols) {
+        if (!seen.has(sym.name)) {
+          seen.add(sym.name);
+          items.push({
+            label: sym.name,
+            kind: symbolKindToCompletionKind(symKind),
+            detail: symKind,
+          });
+        }
+      }
+    }
+  }
+
+  return filterCompletions(items, prefix);
 });
 
 connection.onDefinition(async (params) => {
@@ -1167,6 +1222,38 @@ function getUsePathPrefix(
   return match ? match[0] : "";
 }
 
+/**
+ * Map a SymbolKind to the appropriate LSP CompletionItemKind.
+ */
+function symbolKindToCompletionKind(kind: SymbolKind): CompletionItemKind {
+  switch (kind) {
+    case "class":
+      return CompletionItemKind.Class;
+    case "interface":
+      return CompletionItemKind.Interface;
+    case "trait":
+      return CompletionItemKind.Class;
+    case "enum":
+      return CompletionItemKind.Enum;
+    case "state":
+      return CompletionItemKind.EnumMember;
+    case "statemachine":
+      return CompletionItemKind.Enum;
+    case "attribute":
+      return CompletionItemKind.Field;
+    case "method":
+      return CompletionItemKind.Method;
+    case "association":
+      return CompletionItemKind.Reference;
+    case "mixset":
+      return CompletionItemKind.Module;
+    case "requirement":
+      return CompletionItemKind.Text;
+    default:
+      return CompletionItemKind.Text;
+  }
+}
+
 function filterCompletions(
   items: CompletionItem[],
   prefix: string,
@@ -1178,217 +1265,6 @@ function filterCompletions(
   return items.filter((item) =>
     item.label.toLowerCase().startsWith(lowerPrefix),
   );
-}
-
-/**
- * Build completion items for a given tree-sitter based context.
- * Combines context-specific keywords with symbol-based completions.
- */
-function buildCompletionsForContext(
-  context: CompletionContext,
-  prefix: string,
-  reachableFiles?: Set<string>,
-): CompletionItem[] {
-  const items: CompletionItem[] = [];
-  const seen = new Set<string>();
-
-  // Helper: get symbols of a kind, filtered to reachable files
-  const getSymbols = (kind: SymbolKind) => {
-    const all = symbolIndex.getSymbolsByKind(kind);
-    if (!reachableFiles) return all;
-    return all.filter((sym) => reachableFiles.has(path.normalize(sym.file)));
-  };
-
-  // Add context-specific keywords
-  const keywords =
-    COMPLETION_KEYWORDS[context as keyof typeof COMPLETION_KEYWORDS] ?? [];
-  for (const kw of keywords) {
-    if (!seen.has(`kw:${kw}`)) {
-      seen.add(`kw:${kw}`);
-      items.push({ label: kw, kind: CompletionItemKind.Keyword });
-    }
-  }
-
-  // Add symbol-based completions depending on context
-  if (symbolIndexReady) {
-    switch (context) {
-      case "top":
-        // No symbol completions at top level
-        break;
-
-      case "class_body": {
-        // Offer attribute modifiers and types
-        for (const mod of COMPLETION_KEYWORDS.attribute_modifiers) {
-          if (!seen.has(`kw:${mod}`)) {
-            seen.add(`kw:${mod}`);
-            items.push({ label: mod, kind: CompletionItemKind.Keyword });
-          }
-        }
-        for (const typ of COMPLETION_KEYWORDS.attribute_types) {
-          if (!seen.has(`type:${typ}`)) {
-            seen.add(`type:${typ}`);
-            items.push({
-              label: typ,
-              kind: CompletionItemKind.TypeParameter,
-              detail: "type",
-            });
-          }
-        }
-        // Offer class/interface/trait/enum names (for isA, type references)
-        for (const sym of getSymbols("class")) {
-          if (!seen.has(`sym:${sym.name}`)) {
-            seen.add(`sym:${sym.name}`);
-            items.push({
-              label: sym.name,
-              kind: CompletionItemKind.Class,
-              detail: "class",
-            });
-          }
-        }
-        for (const sym of getSymbols("interface")) {
-          if (!seen.has(`sym:${sym.name}`)) {
-            seen.add(`sym:${sym.name}`);
-            items.push({
-              label: sym.name,
-              kind: CompletionItemKind.Interface,
-              detail: "interface",
-            });
-          }
-        }
-        for (const sym of getSymbols("trait")) {
-          if (!seen.has(`sym:${sym.name}`)) {
-            seen.add(`sym:${sym.name}`);
-            items.push({
-              label: sym.name,
-              kind: CompletionItemKind.Class,
-              detail: "trait",
-            });
-          }
-        }
-        for (const sym of getSymbols("enum")) {
-          if (!seen.has(`sym:${sym.name}`)) {
-            seen.add(`sym:${sym.name}`);
-            items.push({
-              label: sym.name,
-              kind: CompletionItemKind.Enum,
-              detail: "enum",
-            });
-          }
-        }
-        break;
-      }
-
-      case "isa_type": {
-        // After "isA" keyword: offer class/interface/trait names
-        for (const sym of getSymbols("class")) {
-          if (!seen.has(`sym:${sym.name}`)) {
-            seen.add(`sym:${sym.name}`);
-            items.push({
-              label: sym.name,
-              kind: CompletionItemKind.Class,
-              detail: "class",
-            });
-          }
-        }
-        for (const sym of getSymbols("interface")) {
-          if (!seen.has(`sym:${sym.name}`)) {
-            seen.add(`sym:${sym.name}`);
-            items.push({
-              label: sym.name,
-              kind: CompletionItemKind.Interface,
-              detail: "interface",
-            });
-          }
-        }
-        for (const sym of getSymbols("trait")) {
-          if (!seen.has(`sym:${sym.name}`)) {
-            seen.add(`sym:${sym.name}`);
-            items.push({
-              label: sym.name,
-              kind: CompletionItemKind.Class,
-              detail: "trait",
-            });
-          }
-        }
-        for (const sym of getSymbols("enum")) {
-          if (!seen.has(`sym:${sym.name}`)) {
-            seen.add(`sym:${sym.name}`);
-            items.push({
-              label: sym.name,
-              kind: CompletionItemKind.Enum,
-              detail: "enum",
-            });
-          }
-        }
-        break;
-      }
-
-      case "transition_target": {
-        // After "->" in state: only offer state names
-        for (const sym of getSymbols("state")) {
-          if (!seen.has(`sym:${sym.name}`)) {
-            seen.add(`sym:${sym.name}`);
-            items.push({
-              label: sym.name,
-              kind: CompletionItemKind.EnumMember,
-              detail: "state",
-            });
-          }
-        }
-        break;
-      }
-
-      case "association_type": {
-        // Type position in association: only offer class names
-        for (const sym of getSymbols("class")) {
-          if (!seen.has(`sym:${sym.name}`)) {
-            seen.add(`sym:${sym.name}`);
-            items.push({
-              label: sym.name,
-              kind: CompletionItemKind.Class,
-              detail: "class",
-            });
-          }
-        }
-        break;
-      }
-
-      case "state_machine":
-      case "state": {
-        // Offer state names from the index
-        for (const sym of getSymbols("state")) {
-          if (!seen.has(`sym:${sym.name}`)) {
-            seen.add(`sym:${sym.name}`);
-            items.push({
-              label: sym.name,
-              kind: CompletionItemKind.EnumMember,
-              detail: "state",
-            });
-          }
-        }
-        break;
-      }
-
-      case "association": {
-        // Offer class names for association endpoints
-        for (const sym of getSymbols("class")) {
-          if (!seen.has(`sym:${sym.name}`)) {
-            seen.add(`sym:${sym.name}`);
-            items.push({
-              label: sym.name,
-              kind: CompletionItemKind.Class,
-              detail: "class",
-            });
-          }
-        }
-        break;
-      }
-
-      // depend_package, enum, method, comment, unknown: no additional symbol completions
-    }
-  }
-
-  return filterCompletions(items, prefix);
 }
 
 function getUseFileCompletions(
