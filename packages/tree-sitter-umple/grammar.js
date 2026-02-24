@@ -51,7 +51,7 @@ module.exports = grammar({
     use_statement: ($) =>
       prec.right(seq("use", field("path", $.use_path), optional(";"))),
 
-    use_path: ($) => /[a-zA-Z0-9_][a-zA-Z0-9_.\/]*/,
+    use_path: ($) => /[a-zA-Z0-9_.\/][a-zA-Z0-9_.\/]*/,
 
     generate_statement: ($) =>
       seq("generate", field("language", $.identifier), ";"),

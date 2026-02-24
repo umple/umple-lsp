@@ -143,6 +143,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
       textDocumentSync: TextDocumentSyncKind.Incremental,
       completionProvider: {
         resolveProvider: false,
+        triggerCharacters: ["/"],
       },
       definitionProvider: true,
     },
@@ -285,15 +286,11 @@ connection.onCompletion(async (params): Promise<CompletionItem[]> => {
 
   // 3. Use-path → file completions
   if (info.symbolKinds === "use_path") {
-    const prefix = getUsePathPrefix(document, line, character);
-    return getUseFileCompletions(document, prefix, line, character);
+    return getUseFileCompletions(document, info.prefix, line, character);
   }
 
   // 4. Ensure imported files are indexed
   const reachableFiles = ensureImportsIndexed(docPath, text);
-
-  // 5. Build completions
-  const prefix = getCompletionPrefix(document, line, character);
   const items: CompletionItem[] = [];
   const seen = new Set<string>();
 
@@ -365,7 +362,7 @@ connection.onCompletion(async (params): Promise<CompletionItem[]> => {
     }
   }
 
-  return filterCompletions(items, prefix);
+  return items;
 });
 
 connection.onDefinition(async (params) => {
@@ -1195,33 +1192,6 @@ function getDocumentFilePath(document: TextDocument): string | null {
   }
 }
 
-function getCompletionPrefix(
-  document: TextDocument,
-  line: number,
-  character: number,
-): string {
-  const lineText = document.getText(
-    Range.create(Position.create(line, 0), Position.create(line, character)),
-  );
-  const match = lineText.match(/[A-Za-z_][A-Za-z0-9_]*$/);
-  return match ? match[0] : "";
-}
-
-/**
- * Get the prefix for use-path completion (allows dots, slashes, underscores).
- */
-function getUsePathPrefix(
-  document: TextDocument,
-  line: number,
-  character: number,
-): string {
-  const lineText = document.getText(
-    Range.create(Position.create(line, 0), Position.create(line, character)),
-  );
-  const match = lineText.match(/[A-Za-z_][A-Za-z0-9_.\/]*$/);
-  return match ? match[0] : "";
-}
-
 /**
  * Map a SymbolKind to the appropriate LSP CompletionItemKind.
  */
@@ -1254,19 +1224,6 @@ function symbolKindToCompletionKind(kind: SymbolKind): CompletionItemKind {
   }
 }
 
-function filterCompletions(
-  items: CompletionItem[],
-  prefix: string,
-): CompletionItem[] {
-  if (!prefix) {
-    return items;
-  }
-  const lowerPrefix = prefix.toLowerCase();
-  return items.filter((item) =>
-    item.label.toLowerCase().startsWith(lowerPrefix),
-  );
-}
-
 function getUseFileCompletions(
   document: TextDocument,
   prefix: string,
@@ -1278,32 +1235,68 @@ function getUseFileCompletions(
     return [];
   }
 
-  const docBasename = path.basename(getDocumentFilePath(document) ?? "");
+  // Split prefix into directory part and filename filter
+  const lastSlash = prefix.lastIndexOf("/");
+  const dirPart = lastSlash >= 0 ? prefix.substring(0, lastSlash + 1) : "";
+  const filePart = lastSlash >= 0 ? prefix.substring(lastSlash + 1) : prefix;
 
-  let files: string[];
+  // Resolve target directory
+  const targetDir = path.resolve(docDir, dirPart);
+
+  let entries: fs.Dirent[];
   try {
-    files = fs
-      .readdirSync(docDir)
-      .filter((f) => f.endsWith(".ump") && f !== docBasename);
+    entries = fs.readdirSync(targetDir, { withFileTypes: true });
   } catch {
     return [];
   }
 
-  // Replace range covers the entire prefix the user has typed
+  const docBasename = path.basename(getDocumentFilePath(document) ?? "");
+  const isSameDir = path.normalize(targetDir) === path.normalize(docDir);
+  const lowerFilter = filePart.toLowerCase();
+
+  // Replace range covers only the filePart (after the last '/').
+  // The dirPart is already in the document and stays untouched.
+  // This ensures VS Code filters items against the filePart, not the full prefix.
   const replaceRange = Range.create(
-    Position.create(line, character - prefix.length),
+    Position.create(line, character - filePart.length),
     Position.create(line, character),
   );
 
-  const lowerPrefix = prefix.toLowerCase();
-  return files
-    .filter((f) => f.toLowerCase().startsWith(lowerPrefix))
-    .map((f) => ({
-      label: f,
-      kind: CompletionItemKind.File,
-      detail: "Umple file",
-      textEdit: { range: replaceRange, newText: f },
-    }));
+  const items: CompletionItem[] = [];
+
+  for (const entry of entries) {
+    const name = entry.name;
+    // Skip hidden files/dirs
+    if (name.startsWith(".")) continue;
+
+    if (entry.isDirectory()) {
+      const label = name + "/";
+      if (!label.toLowerCase().startsWith(lowerFilter)) continue;
+      items.push({
+        label,
+        kind: CompletionItemKind.Folder,
+        detail: "Directory",
+        textEdit: { range: replaceRange, newText: label },
+        // Re-trigger completions after inserting folder name
+        command: {
+          title: "Continue completion",
+          command: "editor.action.triggerSuggest",
+        },
+      });
+    } else if (name.endsWith(".ump")) {
+      // Skip current file if listing the same directory
+      if (isSameDir && name === docBasename) continue;
+      if (!name.toLowerCase().startsWith(lowerFilter)) continue;
+      items.push({
+        label: name,
+        kind: CompletionItemKind.File,
+        detail: "Umple file",
+        textEdit: { range: replaceRange, newText: name },
+      });
+    }
+  }
+
+  return items;
 }
 
 function extractJson(text: string): string | null {

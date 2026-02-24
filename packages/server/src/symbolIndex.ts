@@ -86,6 +86,8 @@ export interface CompletionInfo {
   isDefinitionName: boolean;
   /** True if cursor is inside a comment. */
   isComment: boolean;
+  /** Text of the token at the cursor (identifier or use_path), empty if none. */
+  prefix: string;
   /** Name of enclosing class (for scoped attribute lookups). */
   enclosingClass?: string;
   /** Name of enclosing root state machine (for scoped state lookups). */
@@ -445,6 +447,7 @@ export class SymbolIndex {
       symbolKinds: null,
       isDefinitionName: false,
       isComment: false,
+      prefix: "",
     };
 
     if (!this.initialized || !this.parser || !this.language) {
@@ -456,12 +459,28 @@ export class SymbolIndex {
     if (!tree) return empty;
 
     // --- Comment check ---
+    // Use column - 1 to land inside the token when cursor is at its end boundary
+    // (tree-sitter uses half-open intervals [start, end))
     const nodeAtCursor = tree.rootNode.descendantForPosition({
       row: line,
-      column,
+      column: Math.max(0, column - 1),
     });
     if (nodeAtCursor && this.isInsideComment(nodeAtCursor)) {
       return { ...empty, isComment: true };
+    }
+
+    // --- Extract prefix from the token at cursor ---
+    let prefix = "";
+    if (
+      column > 0 &&
+      nodeAtCursor &&
+      (nodeAtCursor.type === "identifier" || nodeAtCursor.type === "use_path")
+    ) {
+      const nodeStartCol =
+        nodeAtCursor.startPosition.row === line
+          ? nodeAtCursor.startPosition.column
+          : 0;
+      prefix = nodeAtCursor.text.substring(0, column - nodeStartCol);
     }
 
     // --- Definition name check ---
@@ -506,13 +525,13 @@ export class SymbolIndex {
     // --- Enclosing scope for scoped lookups ---
     const { enclosingClass, enclosingStateMachine } =
       this.resolveEnclosingScope(tree, line, column);
-
     return {
       keywords,
       operators,
       symbolKinds,
       isDefinitionName: false,
       isComment: false,
+      prefix,
       enclosingClass,
       enclosingStateMachine,
     };
