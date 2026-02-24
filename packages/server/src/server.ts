@@ -1242,7 +1242,7 @@ function symbolKindToCompletionKind(kind: SymbolKind): CompletionItemKind {
     case "requirement":
       return CompletionItemKind.Text;
     case "template":
-      return CompletionItemKind.Snippet;
+      return CompletionItemKind.Property;
     default:
       return CompletionItemKind.Text;
   }
