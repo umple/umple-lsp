@@ -28,6 +28,7 @@
 (association_class_definition) @local.scope
 (requirement_definition) @local.scope
 (statemachine_definition) @local.scope
+(emit_method) @local.scope
 
 ; =============
 ; DEFINITIONS
@@ -87,6 +88,12 @@
   name: (identifier) @local.definition.field)
 
 (referenced_statemachine
+  name: (identifier) @local.definition.field)
+
+(emit_method
+  name: (identifier) @local.definition.function)
+
+(template_attribute
   name: (identifier) @local.definition.field)
 
 ; =============

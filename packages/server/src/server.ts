@@ -329,7 +329,25 @@ connection.onCompletion(async (params): Promise<CompletionItem[]> => {
     }
   }
 
-  // 5d. Symbol completions from index (scoped to reachable files)
+  // 5d. Constraint scope: only own attributes (Umple E28)
+  if (info.symbolKinds === "own_attribute" && info.enclosingClass) {
+    const symbols = symbolIndex
+      .getAttributesForClass(info.enclosingClass)
+      .filter((s) => reachableFiles.has(path.normalize(s.file)));
+    for (const sym of symbols) {
+      if (!seen.has(sym.name)) {
+        seen.add(sym.name);
+        items.push({
+          label: sym.name,
+          kind: symbolKindToCompletionKind("attribute"),
+          detail: "attribute",
+        });
+      }
+    }
+    return items;
+  }
+
+  // 5e. Symbol completions from index (scoped to reachable files)
   if (Array.isArray(info.symbolKinds)) {
     for (const symKind of info.symbolKinds) {
       let symbols: SymbolEntry[];
@@ -342,6 +360,10 @@ connection.onCompletion(async (params): Promise<CompletionItem[]> => {
       } else if (symKind === "state" && info.enclosingStateMachine) {
         symbols = symbolIndex
           .getStatesForStateMachine(info.enclosingStateMachine)
+          .filter((s) => reachableFiles.has(path.normalize(s.file)));
+      } else if (symKind === "template" && info.enclosingClass) {
+        symbols = symbolIndex
+          .getTemplatesForClass(info.enclosingClass)
           .filter((s) => reachableFiles.has(path.normalize(s.file)));
       } else {
         symbols = symbolIndex
@@ -1219,6 +1241,8 @@ function symbolKindToCompletionKind(kind: SymbolKind): CompletionItemKind {
       return CompletionItemKind.Module;
     case "requirement":
       return CompletionItemKind.Text;
+    case "template":
+      return CompletionItemKind.Snippet;
     default:
       return CompletionItemKind.Text;
   }

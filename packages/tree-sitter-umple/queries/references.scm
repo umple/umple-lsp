@@ -83,3 +83,10 @@
 ; Identifiers inside constraints reference attributes
 
 (constraint (identifier) @reference.attribute)
+
+; =====================
+; EMIT METHOD & TEMPLATE
+; =====================
+(emit_method name: (identifier) @reference.method)
+(template_attribute name: (identifier) @reference.template)
+(template_list template_name: (identifier) @reference.template)

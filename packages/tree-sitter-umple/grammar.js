@@ -88,6 +88,8 @@ module.exports = grammar({
         $.enum_definition,
         $.mixset_definition,
         $.referenced_statemachine,
+        $.emit_method,
+        $.template_attribute,
       ),
 
     // Constraints: [pre: condition], [name != ""], etc.
@@ -468,6 +470,40 @@ module.exports = grammar({
         "{",
         optional($.code_content),
         "}",
+      ),
+
+    // =====================
+    // EMIT METHODS & TEMPLATE ATTRIBUTES
+    // =====================
+    template_attribute: ($) =>
+      seq(field("name", $.identifier), $.template_body),
+
+    template_body: ($) =>
+      token(seq("<<!", /([^!]|!([^>]|>[^>]))*/, "!>>")),
+
+    emit_method: ($) =>
+      seq(
+        optional($.visibility),
+        optional("static"),
+        "emit",
+        field("name", $.identifier),
+        "(",
+        optional($.param_list),
+        ")",
+        optional($.template_list),
+        ";",
+      ),
+
+    template_list: ($) =>
+      seq(
+        "(",
+        optional(
+          seq(
+            field("template_name", $.identifier),
+            repeat(seq(",", field("template_name", $.identifier))),
+          ),
+        ),
+        ")",
       ),
 
     code_content: ($) =>

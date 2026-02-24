@@ -27,7 +27,8 @@ export type SymbolKind =
   | "method"
   | "association"
   | "mixset"
-  | "requirement";
+  | "requirement"
+  | "template";
 
 /**
  * Keywords after which the next token is always a new name (definition).
@@ -47,6 +48,8 @@ const DEFINITION_KEYWORDS = new Set([
   // State machine modifiers — next token is SM name (or another modifier)
   "queued",
   "pooled",
+  // Emit methods — next token is the method name
+  "emit",
 ]);
 
 /** Structural tokens that should NOT appear in completions. */
@@ -81,7 +84,7 @@ export interface CompletionInfo {
   /** Operators the parser expects at this position. */
   operators: string[];
   /** Which symbol kinds to offer, or null for none. */
-  symbolKinds: SymbolKind[] | "suppress" | "use_path" | null;
+  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | null;
   /** True if cursor is at a definition-name position (suppress all). */
   isDefinitionName: boolean;
   /** True if cursor is inside a comment. */
@@ -667,6 +670,12 @@ export class SymbolIndex {
     return containerSyms.filter((s) => s.kind === "state");
   }
 
+  /** Get template attributes belonging to a specific class. */
+  getTemplatesForClass(className: string): SymbolEntry[] {
+    const containerSyms = this.symbolsByContainer.get(className) ?? [];
+    return containerSyms.filter((s) => s.kind === "template");
+  }
+
   private collectInheritedAttributes(
     className: string,
     visited: Set<string>,
@@ -772,7 +781,7 @@ export class SymbolIndex {
     tree: Tree,
     line: number,
     column: number,
-  ): SymbolKind[] | "suppress" | "use_path" | null {
+  ): SymbolKind[] | "suppress" | "use_path" | "own_attribute" | null {
     if (!this.completionsQuery) return null;
 
     // Don't pass position filtering to the query — tree-sitter uses
@@ -810,6 +819,7 @@ export class SymbolIndex {
 
     if (kindStr === "suppress") return "suppress";
     if (kindStr === "use_path") return "use_path";
+    if (kindStr === "own_attribute") return "own_attribute";
     if (kindStr === "none") return null;
 
     return kindStr.split("_") as SymbolKind[];
@@ -1170,7 +1180,7 @@ export class SymbolIndex {
       let container: string | undefined;
       if (kind === "state" || kind === "statemachine") {
         container = this.resolveStateMachineContainer(node);
-      } else if (kind === "attribute" || kind === "method") {
+      } else if (kind === "attribute" || kind === "method" || kind === "template") {
         container = this.resolveClassContainer(node);
       }
 

@@ -58,11 +58,12 @@
 ; depend java.util.* — suppress (not a symbol reference)
 (depend_statement) @scope.suppress
 
-; [name != ""] — offer attribute names (scoped to enclosing class)
-(constraint) @scope.attribute
+; [name != ""] — offer only own attributes (Umple E28: no inherited attrs in constraints)
+(constraint) @scope.own_attribute
 
 ; =====================
 ; OTHER
 ; =====================
 (enum_definition) @scope.none
 (use_statement) @scope.use_path
+(template_list) @scope.template

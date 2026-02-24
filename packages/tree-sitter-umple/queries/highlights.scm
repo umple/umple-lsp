@@ -55,6 +55,7 @@
 [
   "before"
   "after"
+  "emit"
 ] @keyword.directive
 
 [
@@ -133,6 +134,11 @@
 
 (event_spec
   (identifier) @function.method)
+
+(emit_method name: (identifier) @function)
+(template_attribute name: (identifier) @variable.member)
+(template_body) @string
+(template_list template_name: (identifier) @variable.member)
 
 ; =============
 ; VARIABLES & PARAMETERS
