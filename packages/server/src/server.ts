@@ -284,15 +284,32 @@ connection.onCompletion(async (params): Promise<CompletionItem[]> => {
     return [];
   }
 
-  // 3. Use-path → file completions
-  if (info.symbolKinds === "use_path") {
-    return getUseFileCompletions(document, info.prefix, line, character);
-  }
-
-  // 4. Ensure imported files are indexed
+  // 3. Ensure imported files are indexed
   const reachableFiles = ensureImportsIndexed(docPath, text);
   const items: CompletionItem[] = [];
   const seen = new Set<string>();
+
+  // 4. Normalize symbolKinds: use_path → file completions + mixset symbols
+  //    "/" trigger outside use_path is suppressed
+  let symbolKinds = info.symbolKinds;
+  if (symbolKinds === "use_path") {
+    for (const item of getUseFileCompletions(
+      document,
+      info.prefix,
+      line,
+      character,
+    )) {
+      seen.add(item.label);
+      items.push(item);
+    }
+    // Path prefix (contains /) → only file completions, no keywords/mixsets
+    if (info.prefix.includes("/")) {
+      return items;
+    }
+    symbolKinds = ["mixset"] as SymbolKind[];
+  } else if (params.context?.triggerCharacter === "/") {
+    return [];
+  }
 
   // 5a. Keywords from LookaheadIterator
   for (const kw of info.keywords) {
@@ -312,10 +329,8 @@ connection.onCompletion(async (params): Promise<CompletionItem[]> => {
 
   // 5c. Built-in types (when in type-compatible scope)
   if (
-    Array.isArray(info.symbolKinds) &&
-    info.symbolKinds.some((k) =>
-      ["class", "interface", "trait", "enum"].includes(k),
-    )
+    Array.isArray(symbolKinds) &&
+    symbolKinds.some((k) => ["class", "interface", "trait", "enum"].includes(k))
   ) {
     for (const typ of BUILTIN_TYPES) {
       if (!seen.has(typ)) {
@@ -330,9 +345,9 @@ connection.onCompletion(async (params): Promise<CompletionItem[]> => {
   }
 
   // 5d. Constraint scope: only own attributes (Umple E28)
-  if (info.symbolKinds === "own_attribute" && info.enclosingClass) {
+  if (symbolKinds === "own_attribute" && info.enclosingClass) {
     const symbols = symbolIndex
-      .getAttributesForClass(info.enclosingClass)
+      .getSymbols({ container: info.enclosingClass, kind: "attribute" })
       .filter((s) => reachableFiles.has(path.normalize(s.file)));
     for (const sym of symbols) {
       if (!seen.has(sym.name)) {
@@ -348,26 +363,30 @@ connection.onCompletion(async (params): Promise<CompletionItem[]> => {
   }
 
   // 5e. Symbol completions from index (scoped to reachable files)
-  if (Array.isArray(info.symbolKinds)) {
-    for (const symKind of info.symbolKinds) {
+  if (Array.isArray(symbolKinds)) {
+    for (const symKind of symbolKinds) {
       let symbols: SymbolEntry[];
 
       // Scoped lookups for container-aware kinds
       if (symKind === "attribute" && info.enclosingClass) {
         symbols = symbolIndex
-          .getInheritedAttributes(info.enclosingClass)
+          .getSymbols({
+            container: info.enclosingClass,
+            kind: "attribute",
+            inherited: true,
+          })
           .filter((s) => reachableFiles.has(path.normalize(s.file)));
       } else if (symKind === "state" && info.enclosingStateMachine) {
         symbols = symbolIndex
-          .getStatesForStateMachine(info.enclosingStateMachine)
+          .getSymbols({ container: info.enclosingStateMachine, kind: "state" })
           .filter((s) => reachableFiles.has(path.normalize(s.file)));
       } else if (symKind === "template" && info.enclosingClass) {
         symbols = symbolIndex
-          .getTemplatesForClass(info.enclosingClass)
+          .getSymbols({ container: info.enclosingClass, kind: "template" })
           .filter((s) => reachableFiles.has(path.normalize(s.file)));
       } else {
         symbols = symbolIndex
-          .getSymbolsByKind(symKind)
+          .getSymbols({ kind: symKind })
           .filter((s) => reachableFiles.has(path.normalize(s.file)));
       }
 
@@ -432,12 +451,38 @@ connection.onDefinition(async (params) => {
   // Symbol lookup, filtered by reachable files
   const reachableFiles = ensureImportsIndexed(docPath, document.getText());
 
-  const allSymbols = token.kinds
-    ? symbolIndex.findDefinition(token.word, token.kinds)
-    : symbolIndex.findDefinition(token.word);
-  const filteredSymbols = allSymbols.filter((sym) =>
-    reachableFiles.has(path.normalize(sym.file)),
-  );
+  // For container-scoped kinds, try scoped lookup first (with inheritance), then global fallback
+  const containerKinds = new Set<string>([
+    "attribute",
+    "method",
+    "template",
+    "state",
+  ]);
+  const isScoped = token.kinds?.some((k) => containerKinds.has(k));
+  let container: string | undefined;
+  if (isScoped) {
+    container = token.kinds?.some((k) => k === "state")
+      ? token.enclosingStateMachine
+      : token.enclosingClass;
+  }
+
+  let filteredSymbols: SymbolEntry[] = [];
+  if (container) {
+    filteredSymbols = symbolIndex
+      .getSymbols({
+        name: token.word,
+        kind: token.kinds ?? undefined,
+        container,
+        inherited: true,
+      })
+      .filter((s) => reachableFiles.has(path.normalize(s.file)));
+  }
+
+  if (filteredSymbols.length === 0) {
+    filteredSymbols = symbolIndex
+      .getSymbols({ name: token.word, kind: token.kinds ?? undefined })
+      .filter((s) => reachableFiles.has(path.normalize(s.file)));
+  }
 
   if (filteredSymbols.length > 0) {
     return filteredSymbols.map((sym) =>
@@ -1240,7 +1285,7 @@ function symbolKindToCompletionKind(kind: SymbolKind): CompletionItemKind {
     case "mixset":
       return CompletionItemKind.Module;
     case "requirement":
-      return CompletionItemKind.Text;
+      return CompletionItemKind.Reference;
     case "template":
       return CompletionItemKind.Property;
     default:

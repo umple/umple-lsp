@@ -113,7 +113,7 @@ export interface UseStatementWithPosition {
   line: number; // 0-indexed line number
 }
 
-export interface FileIndex {
+interface FileIndex {
   symbols: SymbolEntry[];
   tree: Tree | null;
   contentHash: string;
@@ -127,7 +127,6 @@ export class SymbolIndex {
   private definitionsQuery: Query | null = null;
   private completionsQuery: Query | null = null;
   private files: Map<string, FileIndex> = new Map();
-  private symbolsByName: Map<string, SymbolEntry[]> = new Map();
   private symbolsByContainer: Map<string, SymbolEntry[]> = new Map();
   // Per-file isA relationships (for cleanup when a file is re-indexed)
   private isAByFile: Map<string, Map<string, string[]>> = new Map();
@@ -232,12 +231,8 @@ export class SymbolIndex {
       contentHash: hash,
     });
 
-    // Add symbols to the name index and container index
+    // Add symbols to the container index
     for (const symbol of symbols) {
-      const existing = this.symbolsByName.get(symbol.name) ?? [];
-      existing.push(symbol);
-      this.symbolsByName.set(symbol.name, existing);
-
       if (symbol.container) {
         const containerSyms =
           this.symbolsByContainer.get(symbol.container) ?? [];
@@ -258,78 +253,79 @@ export class SymbolIndex {
   }
 
   /**
-   * Find definition of a symbol by name.
-   * @param name Symbol name to look up
-   * @param kind Optional kind filter
-   * @returns Array of matching symbol entries
+   * Unified symbol lookup. All old getters are replaced by this method.
+   *
+   * @param opts.container  Scope to this container (class name or SM name)
+   * @param opts.kind       Filter by kind(s)
+   * @param opts.name       Filter by symbol name
+   * @param opts.inherited  Walk isA chain when container is specified
    */
-  findDefinition(
-    name: string,
-    kinds?: SymbolKind | SymbolKind[],
-  ): SymbolEntry[] {
-    const symbols = this.symbolsByName.get(name) ?? [];
-    if (kinds) {
-      const kindSet = new Set(Array.isArray(kinds) ? kinds : [kinds]);
-      return symbols.filter((s) => kindSet.has(s.kind));
+  getSymbols(opts: {
+    container?: string;
+    kind?: SymbolKind | SymbolKind[];
+    name?: string;
+    inherited?: boolean;
+  }): SymbolEntry[] {
+    const kindSet = opts.kind
+      ? new Set(Array.isArray(opts.kind) ? opts.kind : [opts.kind])
+      : null;
+
+    if (opts.container) {
+      const result: SymbolEntry[] = [];
+      if (opts.inherited) {
+        this.collectFromContainerChain(
+          opts.container,
+          kindSet,
+          opts.name,
+          new Set(),
+          result,
+        );
+      } else {
+        const syms = this.symbolsByContainer.get(opts.container) ?? [];
+        for (const s of syms) {
+          if (kindSet && !kindSet.has(s.kind)) continue;
+          if (opts.name && s.name !== opts.name) continue;
+          result.push(s);
+        }
+      }
+      return result;
     }
-    return symbols;
-  }
 
-  /**
-   * Get all symbols in a file.
-   */
-  getFileSymbols(filePath: string): SymbolEntry[] {
-    return this.files.get(filePath)?.symbols ?? [];
-  }
-
-  /**
-   * Get all indexed files.
-   */
-  getIndexedFiles(): string[] {
-    return Array.from(this.files.keys());
-  }
-
-  /**
-   * Get all symbol names.
-   */
-  getAllSymbolNames(): string[] {
-    return Array.from(this.symbolsByName.keys());
-  }
-
-  /**
-   * Remove a file from the index.
-   */
-  removeFile(filePath: string): void {
-    this.removeFileSymbols(filePath);
-    this.files.delete(filePath);
-    this.isAByFile.delete(filePath);
-    this.rebuildIsAGraph();
-  }
-
-  /**
-   * Clear the entire index.
-   */
-  clear(): void {
-    this.files.clear();
-    this.symbolsByName.clear();
-    this.symbolsByContainer.clear();
-    this.isAByFile.clear();
-    this.isAGraph.clear();
-  }
-
-  /**
-   * Get index statistics.
-   */
-  getStats(): { files: number; symbols: number; uniqueNames: number } {
-    let totalSymbols = 0;
-    for (const fileIndex of this.files.values()) {
-      totalSymbols += fileIndex.symbols.length;
+    // No container: iterate all containers
+    const result: SymbolEntry[] = [];
+    for (const syms of this.symbolsByContainer.values()) {
+      for (const s of syms) {
+        if (kindSet && !kindSet.has(s.kind)) continue;
+        if (opts.name && s.name !== opts.name) continue;
+        result.push(s);
+      }
     }
-    return {
-      files: this.files.size,
-      symbols: totalSymbols,
-      uniqueNames: this.symbolsByName.size,
-    };
+    return result;
+  }
+
+  private collectFromContainerChain(
+    container: string,
+    kindSet: Set<SymbolKind> | null,
+    name: string | undefined,
+    visited: Set<string>,
+    result: SymbolEntry[],
+  ): void {
+    if (visited.has(container)) return;
+    visited.add(container);
+
+    const syms = this.symbolsByContainer.get(container) ?? [];
+    for (const s of syms) {
+      if (kindSet && !kindSet.has(s.kind)) continue;
+      if (name && s.name !== name) continue;
+      result.push(s);
+    }
+
+    const parents = this.isAGraph.get(container);
+    if (parents) {
+      for (const parent of parents) {
+        this.collectFromContainerChain(parent, kindSet, name, visited, result);
+      }
+    }
   }
 
   /**
@@ -497,7 +493,12 @@ export class SymbolIndex {
 
     // --- LookaheadIterator for keywords ---
     const prevLeaf = this.findPreviousLeaf(tree, content, line, column);
-    const stateId = prevLeaf ? prevLeaf.nextParseState : 0;
+    // When no previous token exists (file start / after only comments),
+    // use the node at cursor's parseState instead of state 0.
+    // State 0 is the initial LR state which is overly broad.
+    const stateId = prevLeaf
+      ? prevLeaf.nextParseState
+      : (nodeAtCursor?.parseState ?? 0);
     const keywords: string[] = [];
     const operators: string[] = [];
 
@@ -552,7 +553,12 @@ export class SymbolIndex {
     content: string,
     line: number,
     column: number,
-  ): { word: string; kinds: SymbolKind[] | null } | null {
+  ): {
+    word: string;
+    kinds: SymbolKind[] | null;
+    enclosingClass?: string;
+    enclosingStateMachine?: string;
+  } | null {
     if (!this.initialized || !this.parser) {
       return null;
     }
@@ -575,7 +581,9 @@ export class SymbolIndex {
 
     const word = node.text;
     const kinds = this.resolveDefinitionKinds(tree, node);
-    return { word, kinds };
+    const { enclosingClass, enclosingStateMachine } =
+      this.resolveEnclosingScope(tree, line, column);
+    return { word, kinds, enclosingClass, enclosingStateMachine };
   }
 
   /**
@@ -631,78 +639,6 @@ export class SymbolIndex {
     if (!bestCapture.name.startsWith(prefix)) return null;
     const kindStr = bestCapture.name.substring(prefix.length);
     return kindStr.split("_") as SymbolKind[];
-  }
-
-  /**
-   * Get all symbols of a specific kind from the index.
-   * @param kind The kind of symbols to retrieve
-   * @returns Array of symbol entries of that kind
-   */
-  getSymbolsByKind(kind: SymbolKind): SymbolEntry[] {
-    const result: SymbolEntry[] = [];
-    for (const symbols of this.symbolsByName.values()) {
-      for (const symbol of symbols) {
-        if (symbol.kind === kind) {
-          result.push(symbol);
-        }
-      }
-    }
-    return result;
-  }
-
-  /** Get direct attributes of a specific class. */
-  getAttributesForClass(className: string): SymbolEntry[] {
-    const containerSyms = this.symbolsByContainer.get(className) ?? [];
-    return containerSyms.filter((s) => s.kind === "attribute");
-  }
-
-  /** Get all attributes for a class including inherited ones via isA chain. */
-  getInheritedAttributes(className: string): SymbolEntry[] {
-    const visited = new Set<string>();
-    const result: SymbolEntry[] = [];
-    this.collectInheritedAttributes(className, visited, result);
-    return result;
-  }
-
-  /** Get states belonging to a specific state machine. */
-  getStatesForStateMachine(smName: string): SymbolEntry[] {
-    const containerSyms = this.symbolsByContainer.get(smName) ?? [];
-    return containerSyms.filter((s) => s.kind === "state");
-  }
-
-  /** Get template attributes belonging to a specific class. */
-  getTemplatesForClass(className: string): SymbolEntry[] {
-    const containerSyms = this.symbolsByContainer.get(className) ?? [];
-    return containerSyms.filter((s) => s.kind === "template");
-  }
-
-  private collectInheritedAttributes(
-    className: string,
-    visited: Set<string>,
-    result: SymbolEntry[],
-  ): void {
-    if (visited.has(className)) return;
-    visited.add(className);
-
-    result.push(...this.getAttributesForClass(className));
-
-    const parents = this.isAGraph.get(className);
-    if (parents) {
-      for (const parent of parents) {
-        this.collectInheritedAttributes(parent, visited, result);
-      }
-    }
-  }
-
-  /**
-   * Get all symbols (useful for type completions).
-   */
-  getAllSymbols(): SymbolEntry[] {
-    const result: SymbolEntry[] = [];
-    for (const symbols of this.symbolsByName.values()) {
-      result.push(...symbols);
-    }
-    return result;
   }
 
   // =====================
@@ -920,44 +856,6 @@ export class SymbolIndex {
   }
 
   /**
-   * Debug helper: print a tree-sitter AST as an S-expression with positions.
-   * Output matches the format used by `tree-sitter parse` and Neovim InspectTree.
-   */
-  debugPrintTree(content: string): string | null {
-    if (!this.initialized || !this.parser) {
-      return null;
-    }
-    const tree = this.parser.parse(content);
-    const lines: string[] = [];
-    const visit = (node: SyntaxNode, depth: number) => {
-      const indent = "  ".repeat(depth);
-      let field: string | null = null;
-      if (node.parent) {
-        for (let j = 0; j < node.parent.childCount; j++) {
-          if (node.parent.child(j)?.id === node.id) {
-            field = node.parent.fieldNameForChild(j);
-            break;
-          }
-        }
-      }
-      const prefix = field ? `${field}: ` : "";
-      const pos = `[${node.startPosition.row}, ${node.startPosition.column}] - [${node.endPosition.row}, ${node.endPosition.column}]`;
-      if (node.childCount === 0) {
-        lines.push(`${indent}${prefix}(${node.type} ${pos}) "${node.text}"`);
-      } else {
-        lines.push(`${indent}${prefix}(${node.type} ${pos}`);
-        for (let i = 0; i < node.childCount; i++) {
-          const child = node.child(i);
-          if (child) visit(child, depth + 1);
-        }
-        lines.push(`${indent})`);
-      }
-    };
-    visit(tree.rootNode, 0);
-    return lines.join("\n");
-  }
-
-  /**
    * Scan backwards from the cursor position to find the token before the
    * word currently being typed. Skips the current partial identifier first,
    * then whitespace, then extracts the previous token.
@@ -1018,16 +916,6 @@ export class SymbolIndex {
     if (!fileIndex) return;
 
     for (const symbol of fileIndex.symbols) {
-      const symbols = this.symbolsByName.get(symbol.name);
-      if (symbols) {
-        const filtered = symbols.filter((s) => s.file !== filePath);
-        if (filtered.length === 0) {
-          this.symbolsByName.delete(symbol.name);
-        } else {
-          this.symbolsByName.set(symbol.name, filtered);
-        }
-      }
-
       if (symbol.container) {
         const containerSyms = this.symbolsByContainer.get(symbol.container);
         if (containerSyms) {
@@ -1180,8 +1068,15 @@ export class SymbolIndex {
       let container: string | undefined;
       if (kind === "state" || kind === "statemachine") {
         container = this.resolveStateMachineContainer(node);
-      } else if (kind === "attribute" || kind === "method" || kind === "template") {
+      } else if (
+        kind === "attribute" ||
+        kind === "method" ||
+        kind === "template"
+      ) {
         container = this.resolveClassContainer(node);
+      } else {
+        // Top-level symbols (class, interface, trait, enum, etc.) are self-containers
+        container = node.text;
       }
 
       symbols.push({
@@ -1195,7 +1090,6 @@ export class SymbolIndex {
         container,
       });
     }
-
     return symbols;
   }
 }
