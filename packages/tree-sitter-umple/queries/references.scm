@@ -78,6 +78,13 @@
 (standalone_transition to_state: (identifier) @reference.state)
 
 ; =====================
+; KEY DEFINITION
+; =====================
+; Identifiers inside key { } reference attributes
+
+(key_definition (identifier) @reference.attribute)
+
+; =====================
 ; CONSTRAINT IDENTIFIERS
 ; =====================
 ; Identifiers inside constraints reference attributes

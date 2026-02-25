@@ -58,6 +58,9 @@
 ; depend java.util.* — suppress (not a symbol reference)
 (depend_statement) @scope.suppress
 
+; implementsReq R1, R2 — offer requirement names
+(req_implementation) @scope.requirement
+
 ; [name != ""] — offer only own attributes (Umple E28: no inherited attrs in constraints)
 (constraint) @scope.own_attribute
 
