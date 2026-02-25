@@ -603,20 +603,12 @@ async function validateTextDocument(document: TextDocument): Promise<void> {
 }
 
 function resolveJarPath(): string | undefined {
-  if (!umpleSyncJarPath) {
+  if (!umpleSyncJarPath || !fs.existsSync(umpleSyncJarPath)) {
     if (!jarWarningShown) {
       connection.window.showWarningMessage(
-        "UmpleSync jar path not set. Configure initializationOptions.umpleSyncJarPath or UMPLESYNC_JAR.",
-      );
-      jarWarningShown = true;
-    }
-    return undefined;
-  }
-
-  if (!fs.existsSync(umpleSyncJarPath)) {
-    if (!jarWarningShown) {
-      connection.window.showWarningMessage(
-        `UmpleSync jar not found at ${umpleSyncJarPath}. Update the path or UMPLESYNC_JAR.`,
+        "Umple diagnostics are disabled: umplesync.jar was not found. " +
+        "Completion and go-to-definition still work. " +
+        "Reload the window to retry.",
       );
       jarWarningShown = true;
     }
