@@ -88,6 +88,10 @@
           "named": true
         },
         {
+          "type": "immutable_declaration",
+          "named": true
+        },
+        {
           "type": "isa_declaration",
           "named": true
         },
@@ -423,6 +427,10 @@
           "named": true
         },
         {
+          "type": "immutable_declaration",
+          "named": true
+        },
+        {
           "type": "isa_declaration",
           "named": true
         },
@@ -743,7 +751,201 @@
         "required": true,
         "types": [
           {
-            "type": "identifier",
+            "type": "Alloy",
+            "named": false
+          },
+          {
+            "type": "Cpp",
+            "named": false
+          },
+          {
+            "type": "Ecore",
+            "named": false
+          },
+          {
+            "type": "EventSequence",
+            "named": false
+          },
+          {
+            "type": "ExternalGrammar",
+            "named": false
+          },
+          {
+            "type": "GvClassDiagram",
+            "named": false
+          },
+          {
+            "type": "GvClassTraitDiagram",
+            "named": false
+          },
+          {
+            "type": "GvEntityRelationshipDiagram",
+            "named": false
+          },
+          {
+            "type": "GvFeatureDiagram",
+            "named": false
+          },
+          {
+            "type": "GvStateDiagram",
+            "named": false
+          },
+          {
+            "type": "InstanceDiagram",
+            "named": false
+          },
+          {
+            "type": "Java",
+            "named": false
+          },
+          {
+            "type": "Json",
+            "named": false
+          },
+          {
+            "type": "Mermaid",
+            "named": false
+          },
+          {
+            "type": "Nothing",
+            "named": false
+          },
+          {
+            "type": "NuSMV",
+            "named": false
+          },
+          {
+            "type": "NuSMVOptimizer",
+            "named": false
+          },
+          {
+            "type": "Papyrus",
+            "named": false
+          },
+          {
+            "type": "Php",
+            "named": false
+          },
+          {
+            "type": "PlainRequirementsDoc",
+            "named": false
+          },
+          {
+            "type": "Python",
+            "named": false
+          },
+          {
+            "type": "RTCpp",
+            "named": false
+          },
+          {
+            "type": "Ruby",
+            "named": false
+          },
+          {
+            "type": "Scxml",
+            "named": false
+          },
+          {
+            "type": "SimpleCpp",
+            "named": false
+          },
+          {
+            "type": "SimpleMetrics",
+            "named": false
+          },
+          {
+            "type": "Simulate",
+            "named": false
+          },
+          {
+            "type": "Sql",
+            "named": false
+          },
+          {
+            "type": "StateTables",
+            "named": false
+          },
+          {
+            "type": "StructureDiagram",
+            "named": false
+          },
+          {
+            "type": "Test",
+            "named": false
+          },
+          {
+            "type": "TextUml",
+            "named": false
+          },
+          {
+            "type": "USE",
+            "named": false
+          },
+          {
+            "type": "Uigu2",
+            "named": false
+          },
+          {
+            "type": "Umlet",
+            "named": false
+          },
+          {
+            "type": "Umple",
+            "named": false
+          },
+          {
+            "type": "UmpleSelf",
+            "named": false
+          },
+          {
+            "type": "Violet",
+            "named": false
+          },
+          {
+            "type": "Xmi",
+            "named": false
+          },
+          {
+            "type": "Xtext",
+            "named": false
+          },
+          {
+            "type": "Yuml",
+            "named": false
+          }
+        ]
+      },
+      "override": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "--override",
+            "named": false
+          },
+          {
+            "type": "--override-all",
+            "named": false
+          }
+        ]
+      },
+      "path": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "string_literal",
+            "named": true
+          }
+        ]
+      },
+      "suboption": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "string_literal",
             "named": true
           }
         ]
@@ -752,6 +954,11 @@
   },
   {
     "type": "guard",
+    "named": true,
+    "fields": {}
+  },
+  {
+    "type": "immutable_declaration",
     "named": true,
     "fields": {}
   },
@@ -987,6 +1194,10 @@
           "named": true
         },
         {
+          "type": "immutable_declaration",
+          "named": true
+        },
+        {
           "type": "interface_definition",
           "named": true
         },
@@ -1040,6 +1251,10 @@
         },
         {
           "type": "template_attribute",
+          "named": true
+        },
+        {
+          "type": "toplevel_code_injection",
           "named": true
         },
         {
@@ -1355,6 +1570,10 @@
           "named": true
         },
         {
+          "type": "toplevel_code_injection",
+          "named": true
+        },
+        {
           "type": "trait_definition",
           "named": true
         },
@@ -1419,6 +1638,24 @@
     "type": "state",
     "named": true,
     "fields": {
+      "change_type": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "*",
+            "named": false
+          },
+          {
+            "type": "+",
+            "named": false
+          },
+          {
+            "type": "-",
+            "named": false
+          }
+        ]
+      },
       "name": {
         "multiple": false,
         "required": true,
@@ -1435,11 +1672,19 @@
       "required": false,
       "types": [
         {
+          "type": "display_color",
+          "named": true
+        },
+        {
           "type": "do_activity",
           "named": true
         },
         {
           "type": "entry_exit_action",
+          "named": true
+        },
+        {
+          "type": "standalone_transition",
           "named": true
         },
         {
@@ -1473,6 +1718,10 @@
       "required": false,
       "types": [
         {
+          "type": "mixset_definition",
+          "named": true
+        },
+        {
           "type": "standalone_transition",
           "named": true
         },
@@ -1502,6 +1751,14 @@
       "multiple": true,
       "required": false,
       "types": [
+        {
+          "type": "mixset_definition",
+          "named": true
+        },
+        {
+          "type": "standalone_transition",
+          "named": true
+        },
         {
           "type": "state",
           "named": true
@@ -1583,6 +1840,82 @@
     }
   },
   {
+    "type": "toplevel_code_injection",
+    "named": true,
+    "fields": {
+      "operation": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "operation_source": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "all",
+            "named": false
+          },
+          {
+            "type": "custom",
+            "named": false
+          },
+          {
+            "type": "generated",
+            "named": false
+          }
+        ]
+      },
+      "target": {
+        "multiple": true,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "timing": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "after",
+            "named": false
+          },
+          {
+            "type": "around",
+            "named": false
+          },
+          {
+            "type": "before",
+            "named": false
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "code_content",
+          "named": true
+        },
+        {
+          "type": "param_list",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "trait_definition",
     "named": true,
     "fields": {
@@ -1639,6 +1972,10 @@
         },
         {
           "type": "enum_definition",
+          "named": true
+        },
+        {
+          "type": "immutable_declaration",
           "named": true
         },
         {
@@ -1811,11 +2148,31 @@
     "named": false
   },
   {
+    "type": "+",
+    "named": false
+  },
+  {
     "type": ",",
     "named": false
   },
   {
+    "type": "-",
+    "named": false
+  },
+  {
     "type": "--",
+    "named": false
+  },
+  {
+    "type": "--override",
+    "named": false
+  },
+  {
+    "type": "--override-all",
+    "named": false
+  },
+  {
+    "type": "--suboption",
     "named": false
   },
   {
@@ -1824,6 +2181,10 @@
   },
   {
     "type": "->",
+    "named": false
+  },
+  {
+    "type": "-s",
     "named": false
   },
   {
@@ -1867,6 +2228,170 @@
     "named": false
   },
   {
+    "type": "Alloy",
+    "named": false
+  },
+  {
+    "type": "Cpp",
+    "named": false
+  },
+  {
+    "type": "Ecore",
+    "named": false
+  },
+  {
+    "type": "EventSequence",
+    "named": false
+  },
+  {
+    "type": "ExternalGrammar",
+    "named": false
+  },
+  {
+    "type": "GvClassDiagram",
+    "named": false
+  },
+  {
+    "type": "GvClassTraitDiagram",
+    "named": false
+  },
+  {
+    "type": "GvEntityRelationshipDiagram",
+    "named": false
+  },
+  {
+    "type": "GvFeatureDiagram",
+    "named": false
+  },
+  {
+    "type": "GvStateDiagram",
+    "named": false
+  },
+  {
+    "type": "InstanceDiagram",
+    "named": false
+  },
+  {
+    "type": "Java",
+    "named": false
+  },
+  {
+    "type": "Json",
+    "named": false
+  },
+  {
+    "type": "Mermaid",
+    "named": false
+  },
+  {
+    "type": "Nothing",
+    "named": false
+  },
+  {
+    "type": "NuSMV",
+    "named": false
+  },
+  {
+    "type": "NuSMVOptimizer",
+    "named": false
+  },
+  {
+    "type": "Papyrus",
+    "named": false
+  },
+  {
+    "type": "Php",
+    "named": false
+  },
+  {
+    "type": "PlainRequirementsDoc",
+    "named": false
+  },
+  {
+    "type": "Python",
+    "named": false
+  },
+  {
+    "type": "RTCpp",
+    "named": false
+  },
+  {
+    "type": "Ruby",
+    "named": false
+  },
+  {
+    "type": "Scxml",
+    "named": false
+  },
+  {
+    "type": "SimpleCpp",
+    "named": false
+  },
+  {
+    "type": "SimpleMetrics",
+    "named": false
+  },
+  {
+    "type": "Simulate",
+    "named": false
+  },
+  {
+    "type": "Sql",
+    "named": false
+  },
+  {
+    "type": "StateTables",
+    "named": false
+  },
+  {
+    "type": "StructureDiagram",
+    "named": false
+  },
+  {
+    "type": "Test",
+    "named": false
+  },
+  {
+    "type": "TextUml",
+    "named": false
+  },
+  {
+    "type": "USE",
+    "named": false
+  },
+  {
+    "type": "Uigu2",
+    "named": false
+  },
+  {
+    "type": "Umlet",
+    "named": false
+  },
+  {
+    "type": "Umple",
+    "named": false
+  },
+  {
+    "type": "UmpleSelf",
+    "named": false
+  },
+  {
+    "type": "Violet",
+    "named": false
+  },
+  {
+    "type": "Xmi",
+    "named": false
+  },
+  {
+    "type": "Xtext",
+    "named": false
+  },
+  {
+    "type": "Yuml",
+    "named": false
+  },
+  {
     "type": "[",
     "named": false
   },
@@ -1884,6 +2409,14 @@
   },
   {
     "type": "after",
+    "named": false
+  },
+  {
+    "type": "all",
+    "named": false
+  },
+  {
+    "type": "around",
     "named": false
   },
   {
@@ -1917,6 +2450,10 @@
   },
   {
     "type": "const",
+    "named": false
+  },
+  {
+    "type": "custom",
     "named": false
   },
   {
@@ -1965,6 +2502,10 @@
   },
   {
     "type": "generate",
+    "named": false
+  },
+  {
+    "type": "generated",
     "named": false
   },
   {

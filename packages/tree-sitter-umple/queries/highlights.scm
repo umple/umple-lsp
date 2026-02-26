@@ -64,6 +64,7 @@
 [
   "before"
   "after"
+  "around"
   "emit"
 ] @keyword.directive
 
@@ -111,6 +112,9 @@
 
 (association_class_definition
   name: (identifier) @type.definition)
+
+(toplevel_code_injection
+  target: (identifier) @type)
 
 (type_name
   (qualified_name) @type)
@@ -183,6 +187,9 @@
   definition: (identifier) @type)
 
 "as" @keyword
+
+(state
+  change_type: _ @operator)
 
 (state
   name: (identifier) @constant)

@@ -20,6 +20,7 @@ module.exports = grammar({
   conflicts: ($) => [
     [$.event_spec, $.state],
     [$._definition, $._class_content],
+    [$.transition, $.standalone_transition],
   ],
 
   rules: {
@@ -40,6 +41,7 @@ module.exports = grammar({
         $.mixset_definition,
         $.association_class_definition,
         $.statemachine_definition,
+        $.toplevel_code_injection,
       ),
 
     // =====================
@@ -101,6 +103,7 @@ module.exports = grammar({
         $.display_color,
         $.key_definition,
         $.abstract_declaration,
+        $.immutable_declaration,
         $.symmetric_reflexive_association,
         $.req_implementation,
         $.class_definition,
@@ -242,7 +245,7 @@ module.exports = grammar({
         optional("pooled"),
         field("name", $.identifier),
         "{",
-        repeat($.state),
+        repeat(choice($.state, $.standalone_transition, $.mixset_definition)),
         "}",
       ),
 
@@ -291,6 +294,8 @@ module.exports = grammar({
       ),
 
     abstract_declaration: ($) => prec(1, seq("abstract", ";")),
+
+    immutable_declaration: ($) => prec(1, seq("immutable", ";")),
 
     symmetric_reflexive_association: ($) =>
       seq($.multiplicity, "self", field("role", $.identifier), ";"),
@@ -398,12 +403,13 @@ module.exports = grammar({
         optional("pooled"),
         field("name", $.identifier),
         "{",
-        repeat(choice($.state, $.standalone_transition)),
+        repeat(choice($.state, $.standalone_transition, $.mixset_definition)),
         "}",
       ),
 
     state: ($) =>
       seq(
+        optional(field("change_type", choice("+", "-", "*"))),
         field("name", $.identifier),
         optional(
           seq(
@@ -414,6 +420,8 @@ module.exports = grammar({
                 $.entry_exit_action,
                 $.do_activity,
                 $.state,
+                $.standalone_transition,
+                $.display_color,
                 "||",
               ),
             ),
@@ -523,6 +531,25 @@ module.exports = grammar({
           ),
         ),
         ")",
+      ),
+
+    // =====================
+    // TOP-LEVEL CODE INJECTION (aspect-oriented)
+    // =====================
+    // before/after/around { ClassName, ... } operationName(params) { code }
+    toplevel_code_injection: ($) =>
+      seq(
+        field("timing", choice("before", "after", "around")),
+        "{",
+        field("target", $.identifier),
+        repeat(seq(",", field("target", $.identifier))),
+        "}",
+        optional(field("operation_source", choice("custom", "generated", "all"))),
+        field("operation", $.identifier),
+        optional(seq("(", optional($.param_list), ")")),
+        "{",
+        optional($.code_content),
+        "}",
       ),
 
     code_content: ($) =>

@@ -60,6 +60,13 @@
 (req_implementation (identifier) @reference.requirement)
 
 ; =====================
+; TOP-LEVEL CODE INJECTION
+; =====================
+; before/after/around { ClassName } — target must be a class
+
+(toplevel_code_injection target: (identifier) @reference.class)
+
+; =====================
 ; ASSOCIATION TYPE REFERENCES
 ; =====================
 ; Types in associations can only be classes
