@@ -112,6 +112,7 @@ module.exports = grammar({
         $.referenced_statemachine,
         $.emit_method,
         $.template_attribute,
+        $.active_definition,
       ),
 
     // Constraints: [pre: condition], [name != ""], etc.
@@ -296,6 +297,16 @@ module.exports = grammar({
     abstract_declaration: ($) => prec(1, seq("abstract", ";")),
 
     immutable_declaration: ($) => prec(1, seq("immutable", ";")),
+
+    // active { code } — runs in its own thread on construction
+    active_definition: ($) =>
+      seq(
+        "active",
+        optional(field("name", $.identifier)),
+        "{",
+        optional($.code_content),
+        "}",
+      ),
 
     symmetric_reflexive_association: ($) =>
       seq($.multiplicity, "self", field("role", $.identifier), ";"),

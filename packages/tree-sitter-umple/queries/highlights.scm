@@ -72,6 +72,7 @@
   "entry"
   "exit"
   "do"
+  "active"
 ] @keyword
 
 [
