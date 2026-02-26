@@ -512,6 +512,7 @@ module.exports = grammar({
       seq(
         optional($.visibility),
         optional("static"),
+        optional(field("return_type", $.type_name)),
         "emit",
         field("name", $.identifier),
         "(",
