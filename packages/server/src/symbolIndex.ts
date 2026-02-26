@@ -44,7 +44,6 @@ const DEFINITION_KEYWORDS = new Set([
   "associationClass",
   "statemachine",
   "namespace",
-  "generate",
   // State machine modifiers — next token is SM name (or another modifier)
   "queued",
   "pooled",

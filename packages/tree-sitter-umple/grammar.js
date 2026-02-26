@@ -54,7 +54,26 @@ module.exports = grammar({
     use_path: ($) => /[a-zA-Z0-9_.\/][a-zA-Z0-9_.\/]*/,
 
     generate_statement: ($) =>
-      seq("generate", field("language", $.identifier), ";"),
+      seq(
+        "generate",
+        field("language", choice(
+          "Java", "Nothing", "Php", "RTCpp", "SimpleCpp", "Ruby", "Python",
+          "Cpp", "Json", "StructureDiagram", "Yuml", "Violet", "Umlet",
+          "Simulate", "TextUml", "Scxml", "GvStateDiagram", "GvClassDiagram",
+          "GvFeatureDiagram", "GvClassTraitDiagram", "GvEntityRelationshipDiagram",
+          "Alloy", "NuSMV", "NuSMVOptimizer", "Papyrus", "Ecore", "Xmi",
+          "Xtext", "Sql", "StateTables", "EventSequence", "InstanceDiagram",
+          "Umple", "UmpleSelf", "USE", "Test", "SimpleMetrics",
+          "PlainRequirementsDoc", "Uigu2", "ExternalGrammar", "Mermaid",
+        )),
+        optional(field("path", $.string_literal)),
+        optional(field("override", choice("--override-all", "--override"))),
+        repeat(seq(
+          choice("-s", "--suboption"),
+          field("suboption", $.string_literal),
+        )),
+        ";",
+      ),
 
     // =====================
     // CLASS DEFINITION

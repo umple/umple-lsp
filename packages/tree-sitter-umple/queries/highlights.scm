@@ -25,6 +25,15 @@
   "generate"
 ] @keyword.import
 
+(generate_statement language: _ @string.special)
+
+[
+  "--override"
+  "--override-all"
+  "-s"
+  "--suboption"
+] @keyword.modifier
+
 [
   "isA"
   "implementsReq"
