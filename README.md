@@ -11,6 +11,58 @@ A Language Server Protocol implementation for the [Umple](https://www.umple.org)
 - **Cross-file support** - Transitive `use` statement resolution and cross-file diagnostics
 - **Import error reporting** - Errors in imported files shown on the `use` statement line
 
+## Umple Grammar Coverage
+
+The table below shows the LSP's support for Umple language features, based on the [Umple Grammar](https://cruise.umple.org/umple/UmpleGrammar.html). Priority: `**` = high, `*` = lower.
+
+| Feature | Priority | Status | Notes |
+|---|---|---|---|
+| **Directive (top level)** | | | |
+| generate | * | ✅ | Language names, path, `--override`, `-s` suboption |
+| suboption | * | ⚠️ | Syntax works; specific suboption names not enumerated |
+| filter | * | ❌ | |
+| useStatement | ** | ✅ | File paths + mixset references; file completions; go-to-def |
+| requirement | ** | ✅ | Parsed, indexed, go-to-def |
+| reqImplementation | ** | ✅ | Identifiers reference requirements; go-to-def |
+| **Entity** | | | |
+| mixsetDefinition | ** | ✅ | Top-level and inside class/SM bodies |
+| classDefinition | ** | ✅ | Including nested classes |
+| **Class content** | | | |
+| displayColor | ** | ✅ | In class body and state body |
+| abstract | ** | ✅ | `abstract;` standalone |
+| immutable | ** | ✅ | `immutable;` standalone |
+| keyDefinition | ** | ✅ | `key { attr1, attr2 }` with attribute references |
+| softwarePattern (isA, singleton, codeInjection) | ** | ✅ | |
+| depend | ** | ✅ | |
+| symmetricReflexiveAssociation | ** | ✅ | |
+| attribute | ** | ✅ | All modifiers, typed/untyped, defaults |
+| inlineAssociation | ** | ✅ | All arrow types |
+| concreteMethodDeclaration | ** | ✅ | Visibility, static, return type, params |
+| constantDeclaration | ** | ✅ | |
+| enumerationDefinition | ** | ✅ | Inside class or top-level |
+| templateAttributeDefinition | * | ✅ | `name <<! ... !>>` |
+| emitMethod | * | ✅ | `emit name(params)(templates);` |
+| invariant | * | ⚠️ | Constraints `[expr]` work; named `[name: expr]` not captured |
+| **State machine** | | | |
+| inlineStateMachine | ** | ✅ | With queued/pooled |
+| state | ** | ✅ | Nested states, concurrent regions (`\|\|`) |
+| transitions (event/guard/action) | ** | ✅ | |
+| entry / exit / do | ** | ✅ | |
+| changeType markers (+/-/\*) | ** | ✅ | |
+| standaloneTransition | ** | ✅ | In SM body and state body |
+| mixsetDefinition (in SM) | ** | ✅ | |
+| activeDefinition | * | ✅ | `active { code }` or `active name { code }` |
+| **Top-level entities** | | | |
+| traitDefinition | * | ✅ | Without traitParameters |
+| interfaceDefinition | ** | ✅ | |
+| associationDefinition | ** | ✅ | |
+| associationClassDefinition | ** | ✅ | |
+| stateMachineDefinition | ** | ✅ | |
+| topLevelCodeInjection | * | ✅ | `before/after/around { Class } op { code }` |
+| templateDefinition (top-level) | * | ❌ | Usage unclear; needs clarification |
+
+**Summary**: ✅ 38 supported, ❌ 3 not supported, ⚠️ 2 partial
+
 ## Editor Plugins
 
 | Editor | Repo | Auto-installs server? |
@@ -78,13 +130,9 @@ The LSP server accepts these initialization options:
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `umpleSyncJarPath` | string | required | Path to umplesync.jar |
-| `umpleSyncPort` | number | 5556 | Port for umplesync socket server |
-| `umpleSyncHost` | string | "localhost" | Host for umplesync connection |
-| `umpleSyncTimeoutMs` | number | 30000 | Timeout for umplesync requests |
+| `umpleSyncTimeoutMs` | number | 30000 | Timeout for umplesync per-request process (ms) |
 
-Environment variables: `UMPLESYNC_JAR_PATH`, `UMPLESYNC_HOST`, `UMPLESYNC_PORT`, `UMPLESYNC_TIMEOUT_MS`, `UMPLE_TREE_SITTER_WASM_PATH`
-
-Use different ports if running multiple editor instances simultaneously.
+Environment variables: `UMPLESYNC_JAR_PATH`, `UMPLESYNC_TIMEOUT_MS`, `UMPLE_TREE_SITTER_WASM_PATH`
 
 ## Development
 

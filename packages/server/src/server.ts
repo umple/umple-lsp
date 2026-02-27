@@ -1,6 +1,5 @@
-import { ChildProcess, spawn } from "child_process";
+import { execFile } from "child_process";
 import * as fs from "fs";
-import * as net from "net";
 import * as os from "os";
 import * as path from "path";
 import { fileURLToPath, pathToFileURL } from "url";
@@ -94,37 +93,25 @@ function findFile(candidates: string[]): string | undefined {
 }
 
 let umpleSyncJarPath: string | undefined;
-let umpleSyncHost = "localhost";
-let umpleSyncPort = 5555;
-let umpleSyncTimeoutMs = 50000;
+let umpleSyncTimeoutMs = 30000;
 let jarWarningShown = false;
-let serverProcess: ChildProcess | undefined;
 let treeSitterWasmPath: string | undefined;
 let symbolIndexReady = false;
 
-const DEFAULT_UMPLESYNC_TIMEOUT_MS = 50000;
+const DEFAULT_UMPLESYNC_TIMEOUT_MS = 30000;
+
+// Track in-flight validations so we can abort stale ones
+const inFlightValidations = new Map<string, AbortController>();
 
 connection.onInitialize((params: InitializeParams): InitializeResult => {
   const initOptions = params.initializationOptions as
     | {
         umpleSyncJarPath?: string;
-        umpleSyncHost?: string;
-        umpleSyncPort?: number;
         umpleSyncTimeoutMs?: number;
       }
     | undefined;
   umpleSyncJarPath =
     initOptions?.umpleSyncJarPath || process.env.UMPLESYNC_JAR_PATH;
-  umpleSyncHost =
-    initOptions?.umpleSyncHost || process.env.UMPLESYNC_HOST || "localhost";
-  if (typeof initOptions?.umpleSyncPort === "number") {
-    umpleSyncPort = initOptions.umpleSyncPort;
-  } else if (process.env.UMPLESYNC_PORT) {
-    const parsed = Number(process.env.UMPLESYNC_PORT);
-    if (!Number.isNaN(parsed)) {
-      umpleSyncPort = parsed;
-    }
-  }
   if (typeof initOptions?.umpleSyncTimeoutMs === "number") {
     umpleSyncTimeoutMs = initOptions.umpleSyncTimeoutMs;
   } else if (process.env.UMPLESYNC_TIMEOUT_MS) {
@@ -255,6 +242,12 @@ connection.onDidCloseTextDocument((params) => {
   if (pendingValidation) {
     clearTimeout(pendingValidation);
     pendingValidations.delete(normalizedUri);
+  }
+  // Abort any in-flight validation so stale results aren't published after close
+  const inFlight = inFlightValidations.get(normalizedUri);
+  if (inFlight) {
+    inFlight.abort();
+    inFlightValidations.delete(normalizedUri);
   }
   connection.sendDiagnostics({ uri: params.textDocument.uri, diagnostics: [] });
 });
@@ -500,15 +493,16 @@ connection.onDefinition(async (params) => {
 });
 
 function scheduleValidation(document: TextDocument): void {
-  const existing = pendingValidations.get(document.uri);
+  const uriKey = normalizeUri(document.uri);
+  const existing = pendingValidations.get(uriKey);
   if (existing) {
     clearTimeout(existing);
   }
   const handle = setTimeout(() => {
-    pendingValidations.delete(document.uri);
+    pendingValidations.delete(uriKey);
     void validateTextDocument(document);
   }, 300);
-  pendingValidations.set(document.uri, handle);
+  pendingValidations.set(uriKey, handle);
 }
 
 // Debounce key for dependent validation
@@ -590,15 +584,46 @@ async function validateTextDocument(document: TextDocument): Promise<void> {
     return;
   }
 
+  const uriKey = normalizeUri(document.uri);
+  const docVersion = document.version;
+
+  // Abort any in-flight validation for this document
+  const previous = inFlightValidations.get(uriKey);
+  if (previous) {
+    previous.abort();
+  }
+  const abortController = new AbortController();
+  inFlightValidations.set(uriKey, abortController);
+
   try {
     const diagnostics = await runUmpleSyncAndParseDiagnostics(
       jarPath,
       document,
+      abortController.signal,
     );
+    if (abortController.signal.aborted) {
+      return;
+    }
+    // Drop stale results if the document has been edited since we started
+    const current = getDocument(document.uri);
+    if (!current || current.version !== docVersion) {
+      return;
+    }
     connection.sendDiagnostics({ uri: document.uri, diagnostics });
   } catch (error) {
+    if (abortController.signal.aborted) {
+      return;
+    }
+    const current = getDocument(document.uri);
+    if (!current || current.version !== docVersion) {
+      return;
+    }
     connection.console.error(`Diagnostics failed: ${String(error)}`);
     connection.sendDiagnostics({ uri: document.uri, diagnostics: [] });
+  } finally {
+    if (inFlightValidations.get(uriKey) === abortController) {
+      inFlightValidations.delete(uriKey);
+    }
   }
 }
 
@@ -607,8 +632,8 @@ function resolveJarPath(): string | undefined {
     if (!jarWarningShown) {
       connection.window.showWarningMessage(
         "Umple diagnostics are disabled: umplesync.jar was not found. " +
-        "Completion and go-to-definition still work. " +
-        "Reload the window to retry.",
+          "Completion and go-to-definition still work. " +
+          "Reload the window to retry.",
       );
       jarWarningShown = true;
     }
@@ -621,6 +646,7 @@ function resolveJarPath(): string | undefined {
 async function runUmpleSyncAndParseDiagnostics(
   jarPath: string,
   document: TextDocument,
+  signal?: AbortSignal,
 ): Promise<Diagnostic[]> {
   const docPath = getDocumentFilePath(document);
   if (!docPath) {
@@ -641,8 +667,11 @@ async function runUmpleSyncAndParseDiagnostics(
     }
     await fs.promises.writeFile(shadow.targetFile, text, "utf8");
 
-    const commandLine = `-generate nothing ${formatUmpleArg(shadow.targetFile)}`;
-    const { stdout, stderr } = await sendUmpleSyncCommand(jarPath, commandLine);
+    const { stdout, stderr } = await runUmpleDirect(
+      jarPath,
+      shadow.targetFile,
+      signal,
+    );
     const tempFilename = path.basename(shadow.targetFile);
     const documentDir = getDocumentDirectory(document);
     return parseUmpleDiagnostics(
@@ -655,6 +684,43 @@ async function runUmpleSyncAndParseDiagnostics(
   } finally {
     await shadow.cleanup();
   }
+}
+
+/**
+ * Run umplesync.jar directly as a subprocess (one process per request).
+ * This is simpler and more reliable than the socket server approach —
+ * no persistent state, no stuck connections between requests.
+ */
+function runUmpleDirect(
+  jarPath: string,
+  filePath: string,
+  signal?: AbortSignal,
+): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new Error("aborted"));
+      return;
+    }
+
+    execFile(
+      "java",
+      ["-jar", jarPath, "-generate", "nothing", filePath],
+      { signal, timeout: umpleSyncTimeoutMs, maxBuffer: 10 * 1024 * 1024 },
+      (error, stdout, stderr) => {
+        if (signal?.aborted) {
+          reject(new Error("aborted"));
+          return;
+        }
+        // Umplesync writes errors to stderr and exits 0 — only reject on
+        // actual execution failures (java not found, killed, etc.)
+        if (error && !stderr && !stdout) {
+          reject(error);
+          return;
+        }
+        resolve({ stdout, stderr });
+      },
+    );
+  });
 }
 
 interface ShadowWorkspace {
@@ -671,7 +737,6 @@ async function createShadowWorkspace(
   documentPath: string,
 ): Promise<ShadowWorkspace | null> {
   const documentDir = path.dirname(documentPath);
-  const documentName = path.basename(documentPath);
 
   // Get document content (from open doc or disk)
   const fileUri = pathToFileURL(documentPath).toString();
@@ -696,13 +761,20 @@ async function createShadowWorkspace(
     );
 
     // Also include the current document
-    reachableFiles.add(path.normalize(documentPath));
+    const normalizedDocPath = path.normalize(documentPath);
+    reachableFiles.add(normalizedDocPath);
+
+    // Compute a common ancestor directory so all relative paths stay inside
+    // the shadow workspace (no "../" escapes). Always include the document
+    // path in the ancestor calculation even if it doesn't exist on disk,
+    // since we always write it to the shadow workspace.
+    const allForBase = Array.from(reachableFiles);
+    const baseDir = findCommonAncestor(allForBase);
+    const allPaths = allForBase.filter((f) => fs.existsSync(f));
 
     // Create directory structure and symlink/copy files
-    for (const filePath of reachableFiles) {
-      if (!fs.existsSync(filePath)) continue;
-
-      const relativePath = path.relative(documentDir, filePath);
+    for (const filePath of allPaths) {
+      const relativePath = path.relative(baseDir, filePath);
       const shadowPath = path.join(shadowDir, relativePath);
       const shadowFileDir = path.dirname(shadowPath);
 
@@ -722,7 +794,13 @@ async function createShadowWorkspace(
       }
     }
 
-    const targetFile = path.join(shadowDir, documentName);
+    const targetFile = path.join(
+      shadowDir,
+      path.relative(baseDir, normalizedDocPath),
+    );
+    // Ensure target directory exists (document may not be on disk,
+    // so the symlink/copy loop above may not have created it)
+    await fs.promises.mkdir(path.dirname(targetFile), { recursive: true });
 
     return {
       shadowDir,
@@ -738,144 +816,28 @@ async function createShadowWorkspace(
   }
 }
 
-async function sendUmpleSyncCommand(
-  jarPath: string,
-  commandLine: string,
-): Promise<{ stdout: string; stderr: string }> {
-  try {
-    return await connectAndSend(commandLine);
-  } catch (error) {
-    if (!isConnectionError(error)) {
-      throw error;
-    }
-
-    const started = await startUmpleSyncServer(jarPath);
-    if (!started) {
-      throw error;
-    }
-
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      try {
-        return await connectAndSend(commandLine);
-      } catch (retryError) {
-        if (!isConnectionError(retryError)) {
-          throw retryError;
-        }
-        await delay(150);
-      }
-    }
-
-    throw error;
+/**
+ * Find the deepest common ancestor directory of a list of file paths.
+ * Used to ensure all shadow workspace relative paths stay positive (no "../").
+ */
+function findCommonAncestor(filePaths: string[]): string {
+  if (filePaths.length === 0) {
+    return os.tmpdir();
   }
-}
-
-// Send command to UmpleSync.jar socket server and receive the output
-function connectAndSend(
-  commandLine: string,
-): Promise<{ stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    const socket = new net.Socket();
-    const chunks: string[] = [];
-    let settled = false;
-
-    const finishSuccess = (raw: string) => {
-      if (settled) {
-        return;
+  const dirs = filePaths.map((f) => path.dirname(path.normalize(f)));
+  const segments = dirs[0].split(path.sep);
+  let commonLength = segments.length;
+  for (let i = 1; i < dirs.length; i++) {
+    const parts = dirs[i].split(path.sep);
+    commonLength = Math.min(commonLength, parts.length);
+    for (let j = 0; j < commonLength; j++) {
+      if (segments[j] !== parts[j]) {
+        commonLength = j;
+        break;
       }
-      settled = true;
-      const { stdout, stderr } = splitUmpleSyncOutput(raw);
-      resolve({ stdout, stderr });
-    };
-
-    const finishError = (err: Error) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      socket.destroy();
-      reject(err);
-    };
-
-    socket.setEncoding("utf8");
-    socket.setTimeout(umpleSyncTimeoutMs);
-
-    socket.on("data", (chunk) => {
-      if (typeof chunk === "string") {
-        chunks.push(chunk);
-      } else {
-        chunks.push(chunk.toString("utf8"));
-      }
-    });
-
-    socket.on("end", () => {
-      finishSuccess(chunks.join(""));
-    });
-
-    socket.on("error", (err) => {
-      const error = err instanceof Error ? err : new Error(String(err));
-      finishError(error);
-    });
-
-    socket.on("timeout", () => {
-      finishError(new Error("umplesync socket timeout"));
-    });
-
-    socket.connect(umpleSyncPort, umpleSyncHost, () => {
-      socket.end(commandLine);
-    });
-  });
-}
-
-async function startUmpleSyncServer(jarPath: string): Promise<boolean> {
-  if (serverProcess) {
-    return true;
-  }
-
-  return new Promise((resolve) => {
-    const child = spawn(
-      "java",
-      ["-jar", jarPath, "-server", String(umpleSyncPort)],
-      {
-        detached: true,
-        stdio: "ignore",
-      },
-    );
-
-    child.on("error", (err) => {
-      connection.console.error(`Failed to start umplesync: ${String(err)}`);
-      resolve(false);
-    });
-
-    child.unref();
-    serverProcess = child;
-    resolve(true);
-  });
-}
-
-function splitUmpleSyncOutput(raw: string): { stdout: string; stderr: string } {
-  let stdout = "";
-  let stderr = "";
-  let index = 0;
-
-  while (index < raw.length) {
-    const start = raw.indexOf("ERROR!!", index);
-    if (start === -1) {
-      stdout += raw.slice(index);
-      break;
     }
-
-    stdout += raw.slice(index, start);
-    const end = raw.indexOf("!!ERROR", start + 7);
-    if (end === -1) {
-      stderr += raw.slice(start + 7);
-      break;
-    }
-
-    stderr += raw.slice(start + 7, end);
-    index = end + 7;
   }
-
-  return { stdout, stderr };
+  return segments.slice(0, commonLength).join(path.sep) || path.sep;
 }
 
 /**
@@ -938,24 +900,6 @@ function collectReachableFilesRecursive(
       }
     }
   }
-}
-
-function isConnectionError(error: unknown): boolean {
-  if (!error || typeof error !== "object") {
-    return false;
-  }
-  const maybeError = error as { code?: string; message?: string };
-  return (
-    maybeError.code === "ECONNREFUSED" ||
-    maybeError.code === "ECONNRESET" ||
-    maybeError.code === "EPIPE" ||
-    maybeError.code === "ETIMEDOUT" ||
-    (maybeError.message || "").includes("umplesync socket timeout")
-  );
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function parseUmpleDiagnostics(
@@ -1367,10 +1311,6 @@ function extractJson(text: string): string | null {
     return null;
   }
   return text.slice(start, end + 1);
-}
-
-function formatUmpleArg(filePath: string): string {
-  return JSON.stringify(filePath);
 }
 
 connection.listen();
