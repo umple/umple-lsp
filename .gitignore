@@ -10,6 +10,9 @@ CLAUDE.md
 # Tree-sitter native build output
 packages/tree-sitter-umple/build/
 
+# Tree-sitter WASM (rebuilt by npm run build-grammar; src/ files are kept for Neovim/Zed)
+packages/tree-sitter-umple/tree-sitter-umple.wasm
+
 # Build artifacts: WASM and query files copied from tree-sitter package into server package
 packages/server/tree-sitter-umple.wasm
 packages/server/references.scm
