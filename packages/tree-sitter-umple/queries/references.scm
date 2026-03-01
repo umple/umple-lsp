@@ -104,3 +104,13 @@
 (emit_method name: (identifier) @reference.method)
 (template_attribute name: (identifier) @reference.template)
 (template_list template_name: (identifier) @reference.template)
+
+; =====================
+; FILTER VALUE CLASS REFERENCES
+; =====================
+; include ClassName; — plain names (no wildcards) reference classes.
+; Wildcard/exclusion patterns (Conn*, ~Foo, ?) are skipped via the
+; match predicate: only tokens that look like plain identifiers qualify.
+(filter_value
+  (filter_pattern) @reference.class
+  (#match? @reference.class "^[A-Za-z_][A-Za-z0-9_]*$"))

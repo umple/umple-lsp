@@ -31,6 +31,7 @@ module.exports = grammar({
         $.namespace_declaration,
         $.use_statement,
         $.generate_statement,
+        $.filter_definition,
         $.class_definition,
         $.interface_definition,
         $.trait_definition,
@@ -602,6 +603,72 @@ module.exports = grammar({
     _argument_list: ($) => seq($._value, repeat(seq(",", $._value))),
 
     code_block: ($) => seq("{", optional($.code_content), "}"),
+
+    // =====================
+    // FILTER DEFINITION
+    // =====================
+    // filter (name)? { (filterStatement)* }
+    // Unnamed filter = active by default. Named filter = activated via includeFilter.
+    // Note: filter names/references are not indexed as symbols (no definitions.scm entry).
+    filter_definition: ($) =>
+      seq(
+        "filter",
+        optional(field("name", $.filter_name)),
+        "{",
+        repeat($.filter_statement),
+        "}",
+      ),
+
+    filter_name: ($) => choice($.identifier, $.integer_literal),
+
+    filter_statement: ($) =>
+      choice(
+        $.filter_value,
+        $.filter_combined_value,
+        $.filter_namespace_stmt,
+        $.filter_hops,
+      ),
+
+    // include ClassName, ~Excluded, Conn*;
+    filter_value: ($) =>
+      seq("include", $.filter_pattern, repeat(seq(",", $.filter_pattern)), ";"),
+
+    // includeFilter 7, myFilter;
+    filter_combined_value: ($) =>
+      seq("includeFilter", $.filter_name, repeat(seq(",", $.filter_name)), ";"),
+
+    // namespace com.example, other.ns;  (filter-local, not top-level namespace)
+    filter_namespace_stmt: ($) =>
+      seq(
+        "namespace",
+        $.qualified_name,
+        repeat(seq(",", $.qualified_name)),
+        ";",
+      ),
+
+    // hops { super 1; sub 2; association 1; }
+    filter_hops: ($) =>
+      seq(
+        "hops",
+        "{",
+        repeat(
+          choice(
+            $.filter_hop_super,
+            $.filter_hop_sub,
+            $.filter_hop_association,
+          ),
+        ),
+        "}",
+      ),
+
+    filter_hop_super:       ($) => seq("super",       $.integer_literal, ";"),
+    filter_hop_sub:         ($) => seq("sub",         $.integer_literal, ";"),
+    filter_hop_association: ($) => seq("association", $.integer_literal, ";"),
+
+    // Class name or glob pattern: ClassName, Conn*, ~Excluded, ?Name
+    filter_pattern: ($) => /~?[a-zA-Z0-9_.*?][a-zA-Z0-9_.*?]*/,
+
+    integer_literal: ($) => /[0-9]+/,
 
     // =====================
     // BASIC TOKENS

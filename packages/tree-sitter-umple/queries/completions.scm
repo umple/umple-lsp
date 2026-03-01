@@ -25,6 +25,10 @@
 (mixset_definition) @scope.none
 (statemachine_definition) @scope.none
 (requirement_definition) @scope.none
+; filter blocks: no symbol completions by default…
+(filter_definition) @scope.none
+; …except inside include statements, where class names are valid targets
+(filter_value) @scope.class
 
 ; =====================
 ; CLASS-LIKE SCOPES (offer type names)

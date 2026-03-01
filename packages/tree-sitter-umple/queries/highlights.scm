@@ -25,6 +25,42 @@
   "generate"
 ] @keyword.import
 
+[
+  "filter"
+  "include"
+  "includeFilter"
+  "hops"
+  "super"
+  "sub"
+] @keyword.directive
+
+(filter_definition
+  name: (filter_name (integer_literal) @number))
+
+(filter_definition
+  name: (filter_name (identifier) @variable))
+
+(filter_combined_value
+  (filter_name (integer_literal) @number))
+
+(filter_combined_value
+  (filter_name (identifier) @variable))
+
+(filter_value
+  (filter_pattern) @string.special)
+
+(filter_namespace_stmt
+  (qualified_name) @module)
+
+(filter_hop_super
+  (integer_literal) @number)
+
+(filter_hop_sub
+  (integer_literal) @number)
+
+(filter_hop_association
+  (integer_literal) @number)
+
 (generate_statement language: _ @string.special)
 
 [

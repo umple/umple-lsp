@@ -574,11 +574,24 @@ export class SymbolIndex {
     }
 
     const node = tree.rootNode.descendantForPosition({ row: line, column });
-    if (!node || (node.type !== "identifier" && node.type !== "use_path")) {
+    if (
+      !node ||
+      (node.type !== "identifier" &&
+        node.type !== "use_path" &&
+        node.type !== "filter_pattern")
+    ) {
       return null;
     }
 
-    const word = node.text;
+    // For filter_pattern, strip leading ~ (exclusion prefix) to get the class name.
+    // Skip wildcard-only patterns (contain * or ?) — no meaningful go-to-def target.
+    let word = node.text;
+    if (node.type === "filter_pattern") {
+      if (/[*?]/.test(word)) {
+        return null; // wildcard — nothing to navigate to
+      }
+      word = word.replace(/^~/, ""); // strip exclusion prefix
+    }
     const kinds = this.resolveDefinitionKinds(tree, node);
     const { enclosingClass, enclosingStateMachine } =
       this.resolveEnclosingScope(tree, line, column);
