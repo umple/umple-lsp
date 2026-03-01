@@ -711,9 +711,10 @@ function runUmpleDirect(
           reject(new Error("aborted"));
           return;
         }
-        // Umplesync writes errors to stderr and exits 0 — only reject on
-        // actual execution failures (java not found, killed, etc.)
-        if (error && !stderr && !stdout) {
+        // Umplesync writes diagnostics to stderr and exits 0 on compile errors.
+        // Any non-null error here is a real execution failure (java not found,
+        // corrupt jar, runtime crash, timeout kill) — reject unconditionally.
+        if (error) {
           reject(error);
           return;
         }

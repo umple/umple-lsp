@@ -583,14 +583,13 @@ export class SymbolIndex {
       return null;
     }
 
-    // For filter_pattern, strip leading ~ (exclusion prefix) to get the class name.
-    // Skip wildcard-only patterns (contain * or ?) — no meaningful go-to-def target.
+    // For filter_pattern: skip wildcards (contain * or ?) and exclusion patterns
+    // (start with ~) — neither has a meaningful go-to-def target.
     let word = node.text;
     if (node.type === "filter_pattern") {
-      if (/[*?]/.test(word)) {
-        return null; // wildcard — nothing to navigate to
+      if (/[*?]/.test(word) || word.startsWith("~")) {
+        return null;
       }
-      word = word.replace(/^~/, ""); // strip exclusion prefix
     }
     const kinds = this.resolveDefinitionKinds(tree, node);
     const { enclosingClass, enclosingStateMachine } =
