@@ -114,11 +114,24 @@ module.exports = grammar({
         $.emit_method,
         $.template_attribute,
         $.active_definition,
+        ";", // bare semicolons are valid in class/mixset bodies
       ),
 
-    // Constraints: [pre: condition], [name != ""], etc.
+    // Invariants: unnamed [expr]; and named [name: expr];
+    // constraint_name consumes "identifier:" as a unit, so ":" is unambiguous
+    // and the body _constraint_expr regex need not match it.
     constraint: ($) =>
-      seq("[", repeat1($._constraint_expr), "]", optional(";")),
+      prec.right(
+        seq(
+          "[",
+          optional(field("name", $.constraint_name)),
+          field("body", repeat1($._constraint_expr)),
+          "]",
+          optional(";"),
+        ),
+      ),
+
+    constraint_name: ($) => seq($.identifier, ":"),
 
     _constraint_expr: ($) =>
       choice(
@@ -126,7 +139,7 @@ module.exports = grammar({
         $.string_literal,
         $.number,
         $.boolean,
-        /[^\]\s\w"']+/, // operators and punctuation (: != >= <= && || etc.)
+        /[^\]\s\w"':]+/, // operators and punctuation (: excluded — it is the name separator)
       ),
 
     // =====================
@@ -435,6 +448,7 @@ module.exports = grammar({
                 $.standalone_transition,
                 $.display_color,
                 "||",
+                ";", // bare semicolons allowed in state bodies
               ),
             ),
             "}",
@@ -446,8 +460,11 @@ module.exports = grammar({
       seq(
         optional(field("event", $.event_spec)),
         optional($.guard),
-        "->",
-        optional($.action_code),
+        choice(
+          seq($.action_code, "->"), // pre-arrow only:  e [g] / { code } -> T;
+          seq("->", $.action_code), // post-arrow only: e [g] -> / { code } T;
+          "->",                     // no action:       e [g] -> T;
+        ),
         field("target", $.identifier),
         ";",
       ),

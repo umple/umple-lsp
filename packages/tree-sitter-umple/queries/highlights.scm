@@ -358,3 +358,6 @@
 ; =============
 
 (constraint) @string.special
+
+; Named invariant label: [myInvariant: expr]
+(constraint_name (identifier) @property)

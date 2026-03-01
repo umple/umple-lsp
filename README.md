@@ -20,8 +20,8 @@ The table below shows the LSP's support for Umple language features, based on th
 | **Directive (top level)** | | | |
 | generate | * | ✅ | Language names, path, `--override`, `-s` suboption |
 | suboption | * | ⚠️ | Syntax works; specific suboption names not enumerated |
-| filter | * | ❌ | |
-| useStatement | ** | ✅ | File paths + mixset references; file completions; go-to-def |
+| filter | * | ✅ | Named/unnamed, numeric names, glob patterns, hops; class completions in `include`; go-to-def for plain names |
+| useStatement | ** | ✅ | file completions and go-to-def work; comma-separated, `!` negation, and `lib:` URL forms intentionally not supported |
 | requirement | ** | ✅ | Parsed, indexed, go-to-def |
 | reqImplementation | ** | ✅ | Identifiers reference requirements; go-to-def |
 | **Entity** | | | |
@@ -42,18 +42,18 @@ The table below shows the LSP's support for Umple language features, based on th
 | enumerationDefinition | ** | ✅ | Inside class or top-level |
 | templateAttributeDefinition | * | ✅ | `name <<! ... !>>` |
 | emitMethod | * | ✅ | `emit name(params)(templates);` |
-| invariant | * | ⚠️ | Constraints `[expr]` work; named `[name: expr]` not captured |
+| invariant | * | ✅ | Both `[expr]` and named `[name: expr]`; name field is structurally distinct |
 | **State machine** | | | |
 | inlineStateMachine | ** | ✅ | With queued/pooled |
 | state | ** | ✅ | Nested states, concurrent regions (`\|\|`) |
-| transitions (event/guard/action) | ** | ✅ | |
+| transitions (event/guard/action) | ** | ✅ | All forms: event, guard, pre-arrow action, post-arrow action |
 | entry / exit / do | ** | ✅ | |
 | changeType markers (+/-/\*) | ** | ✅ | |
 | standaloneTransition | ** | ✅ | In SM body and state body |
 | mixsetDefinition (in SM) | ** | ✅ | |
 | activeDefinition | * | ✅ | `active { code }` or `active name { code }` |
 | **Top-level entities** | | | |
-| traitDefinition | * | ✅ | Without traitParameters |
+| traitDefinition | * | ⚠️ | Simple `<T>` type parameters supported; broader official trait clauses may not be |
 | interfaceDefinition | ** | ✅ | |
 | associationDefinition | ** | ✅ | |
 | associationClassDefinition | ** | ✅ | |
@@ -61,7 +61,7 @@ The table below shows the LSP's support for Umple language features, based on th
 | topLevelCodeInjection | * | ✅ | `before/after/around { Class } op { code }` |
 | templateDefinition (top-level) | * | ❌ | Usage unclear; needs clarification |
 
-**Summary**: ✅ 38 supported, ❌ 3 not supported, ⚠️ 2 partial
+**Summary**: ✅ 35 supported, ❌ 1 not supported, ⚠️ 2 partial
 
 ## Editor Plugins
 
