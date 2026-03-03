@@ -518,9 +518,7 @@ connection.onDefinition(async (params) => {
 /**
  * Find the definition node in the tree that matches a SymbolEntry's body range.
  */
-function findDefNode(
-  sym: SymbolEntry,
-): /* SyntaxNode */ any | null {
+function findDefNode(sym: SymbolEntry): /* SyntaxNode */ any | null {
   if (sym.defLine == null || sym.defEndLine == null) return null;
   const tree = symbolIndex.getTree(sym.file);
   if (!tree) return null;
@@ -731,9 +729,8 @@ function collectStateInfo(defNode: /* SyntaxNode */ any): {
 
     if (child.type === "entry_exit_action") {
       const keyword =
-        child.children.find(
-          (c: any) => c.text === "entry" || c.text === "exit",
-        )?.text ?? "action";
+        child.children.find((c: any) => c.text === "entry" || c.text === "exit")
+          ?.text ?? "action";
       const line = `  ${keyword} / { ... }`;
       if (!actions.includes(line)) actions.push(line);
     }
@@ -749,10 +746,7 @@ function collectStateInfo(defNode: /* SyntaxNode */ any): {
   return { transitions, actions, nestedStates };
 }
 
-function buildStateHover(
-  sym: SymbolEntry,
-  allSymbols: SymbolEntry[],
-): string {
+function buildStateHover(sym: SymbolEntry, allSymbols: SymbolEntry[]): string {
   const lines: string[] = [`${sym.name} (state)`];
 
   // Merge transitions/actions/nested states from ALL matching state definitions
@@ -1110,8 +1104,8 @@ function computeIndentEdits(
       if (ch === "{") opens++;
       else if (ch === "}") closes++;
     }
-    // Net depth change: opens minus closes (leading closes already applied)
-    depth = Math.max(0, depth + opens - closes);
+    // Subtract only non-leading closes (leading ones were already applied above)
+    depth = Math.max(0, depth + opens - (closes - leadingCloses));
   }
 
   return edits;
