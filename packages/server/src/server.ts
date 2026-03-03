@@ -529,15 +529,26 @@ function findDefNode(
 
 function buildClassLikeHover(
   sym: SymbolEntry,
-  defNode: /* SyntaxNode */ any,
+  allSymbols: SymbolEntry[],
 ): string {
   const keyword = sym.kind; // class | interface | trait | enum
   const parts: string[] = [];
 
-  // Check for abstract
-  const isAbstract = defNode.children.some(
-    (c: any) => c.type === "abstract_declaration",
+  // Check for abstract across ALL definition blocks (classes can be split)
+  const sameNameSyms = allSymbols.filter(
+    (s) => s.kind === sym.kind && s.name === sym.name,
   );
+  let isAbstract = false;
+  for (const s of sameNameSyms) {
+    const node = findDefNode(s);
+    if (
+      node &&
+      node.children.some((c: any) => c.type === "abstract_declaration")
+    ) {
+      isAbstract = true;
+      break;
+    }
+  }
 
   // Build header
   let header = "";
@@ -545,23 +556,26 @@ function buildClassLikeHover(
   header += `${keyword} ${sym.name}`;
   parts.push(header);
 
-  // isA parents
+  // isA parents (already aggregated from all blocks via isAGraph)
   const parents = symbolIndex.getIsAParents(sym.name);
   if (parents.length > 0) {
     parts.push(`isA ${parents.join(", ")}`);
   }
 
-  // For enums, list values
+  // For enums, list values (enums don't split, use first defNode)
   if (keyword === "enum") {
-    const values: string[] = [];
-    for (const child of defNode.children) {
-      if (child.type === "enum_value") {
-        const name = child.childForFieldName("name");
-        if (name) values.push(name.text);
+    const defNode = findDefNode(sym);
+    if (defNode) {
+      const values: string[] = [];
+      for (const child of defNode.children) {
+        if (child.type === "enum_value") {
+          const name = child.childForFieldName("name");
+          if (name) values.push(name.text);
+        }
       }
-    }
-    if (values.length > 0) {
-      parts.push(`{ ${values.join(", ")} }`);
+      if (values.length > 0) {
+        parts.push(`{ ${values.join(", ")} }`);
+      }
     }
   }
 
@@ -689,13 +703,15 @@ function buildStateMachineHover(
   return result;
 }
 
-function buildStateHover(
-  sym: SymbolEntry,
-  defNode: /* SyntaxNode */ any,
-): string {
-  const lines: string[] = [`${sym.name} (state)`];
+function collectStateInfo(defNode: /* SyntaxNode */ any): {
+  transitions: string[];
+  actions: string[];
+  nestedStates: string[];
+} {
+  const transitions: string[] = [];
+  const actions: string[] = [];
+  const nestedStates: string[] = [];
 
-  // Transitions
   for (const child of defNode.children) {
     if (child.type === "transition") {
       const event = child.childForFieldName("event");
@@ -707,29 +723,54 @@ function buildStateHover(
       else transStr += "(auto)";
       if (guard) transStr += ` ${guard.text}`;
       if (target) transStr += ` -> ${target.text}`;
-      lines.push(transStr);
+      if (!transitions.includes(transStr)) transitions.push(transStr);
     }
 
     if (child.type === "entry_exit_action") {
-      // First named child is "entry" or "exit"
       const keyword =
         child.children.find(
           (c: any) => c.text === "entry" || c.text === "exit",
         )?.text ?? "action";
-      lines.push(`  ${keyword} / { ... }`);
+      const line = `  ${keyword} / { ... }`;
+      if (!actions.includes(line)) actions.push(line);
+    }
+
+    if (child.type === "state") {
+      const name = child.childForFieldName("name");
+      if (name && !nestedStates.includes(name.text)) {
+        nestedStates.push(name.text);
+      }
     }
   }
 
-  // Nested states
-  const nestedStates: string[] = [];
-  for (const child of defNode.children) {
-    if (child.type === "state") {
-      const name = child.childForFieldName("name");
-      if (name) nestedStates.push(name.text);
+  return { transitions, actions, nestedStates };
+}
+
+function buildStateHover(
+  sym: SymbolEntry,
+  allSymbols: SymbolEntry[],
+): string {
+  const lines: string[] = [`${sym.name} (state)`];
+
+  // Merge transitions/actions/nested states from ALL matching state definitions
+  const sameNameStates = allSymbols.filter(
+    (s) => s.kind === "state" && s.name === sym.name,
+  );
+  for (const s of sameNameStates) {
+    const node = findDefNode(s);
+    if (!node) continue;
+    const info = collectStateInfo(node);
+    for (const t of info.transitions) {
+      if (!lines.includes(t)) lines.push(t);
     }
-  }
-  if (nestedStates.length > 0) {
-    lines.push(`  nested: ${nestedStates.join(", ")}`);
+    for (const a of info.actions) {
+      if (!lines.includes(a)) lines.push(a);
+    }
+    // Collect nested states (shown at end)
+    if (info.nestedStates.length > 0) {
+      const nested = `  nested: ${info.nestedStates.join(", ")}`;
+      if (!lines.includes(nested)) lines.push(nested);
+    }
   }
 
   let result = "```umple\n" + lines.join("\n") + "\n```";
@@ -788,7 +829,7 @@ function buildHoverMarkdown(
     case "interface":
     case "trait":
     case "enum":
-      return buildClassLikeHover(sym, defNode);
+      return buildClassLikeHover(sym, allSymbols);
     case "attribute":
       return buildAttributeHover(sym, defNode);
     case "method":
@@ -796,7 +837,7 @@ function buildHoverMarkdown(
     case "statemachine":
       return buildStateMachineHover(sym, allSymbols);
     case "state":
-      return buildStateHover(sym, defNode);
+      return buildStateHover(sym, allSymbols);
     case "association":
       return buildAssociationHover(sym, defNode);
     case "enum_value": {
