@@ -15,6 +15,7 @@
 (interface_definition name: (identifier) @definition.interface)
 (trait_definition name: (identifier) @definition.trait)
 (enum_definition name: (identifier) @definition.enum)
+(enum_value name: (identifier) @definition.enum_value)
 (external_definition name: (identifier) @definition.class)
 (association_definition name: (identifier) @definition.association)
 (requirement_definition name: (identifier) @definition.requirement)

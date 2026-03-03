@@ -21,6 +21,7 @@ export type SymbolKind =
   | "interface"
   | "trait"
   | "enum"
+  | "enum_value"
   | "attribute"
   | "state"
   | "statemachine"
@@ -1076,6 +1077,18 @@ export class SymbolIndex {
     return rootSmName;
   }
 
+  /** For enum values: walk up to find the enclosing enum_definition name. */
+  private resolveEnumContainer(node: SyntaxNode): string | undefined {
+    let current = node.parent;
+    while (current) {
+      if (current.type === "enum_definition") {
+        return current.childForFieldName("name")?.text;
+      }
+      current = current.parent;
+    }
+    return undefined;
+  }
+
   /**
    * Extract symbol definitions from the AST using the definitions.scm query.
    * Falls back to an empty list if the query isn't loaded.
@@ -1104,6 +1117,9 @@ export class SymbolIndex {
         kind === "template"
       ) {
         container = this.resolveClassContainer(node);
+      } else if (kind === "enum_value") {
+        // Enum values belong to their enclosing enum
+        container = this.resolveEnumContainer(node);
       } else {
         // Top-level symbols (class, interface, trait, enum, etc.) are self-containers
         container = node.text;

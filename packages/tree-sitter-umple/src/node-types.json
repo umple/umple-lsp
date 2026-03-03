@@ -771,10 +771,26 @@
       "required": false,
       "types": [
         {
-          "type": "identifier",
+          "type": "enum_value",
           "named": true
         }
       ]
+    }
+  },
+  {
+    "type": "enum_value",
+    "named": true,
+    "fields": {
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
     }
   },
   {

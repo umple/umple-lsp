@@ -189,10 +189,16 @@ module.exports = grammar({
         field("name", $.identifier),
         "{",
         optional(
-          seq($.identifier, repeat(seq(",", $.identifier)), optional(",")),
+          seq(
+            $.enum_value,
+            repeat(seq(",", $.enum_value)),
+            optional(","),
+          ),
         ),
         "}",
       ),
+
+    enum_value: ($) => field("name", $.identifier),
 
     // =====================
     // REQUIREMENT DEFINITION

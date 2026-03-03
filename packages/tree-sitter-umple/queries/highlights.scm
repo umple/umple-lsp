@@ -138,6 +138,9 @@
 (enum_definition
   name: (identifier) @type.definition)
 
+(enum_value
+  name: (identifier) @constant)
+
 (external_definition
   name: (identifier) @type.definition)
 
