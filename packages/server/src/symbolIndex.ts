@@ -100,11 +100,16 @@ export interface SymbolEntry {
   name: string;
   kind: SymbolKind;
   file: string;
-  line: number; // 0-indexed
+  line: number; // 0-indexed, name identifier position
   column: number; // 0-indexed
   endLine: number;
   endColumn: number;
   container?: string; // Enclosing class (for attributes/methods) or root SM (for states)
+  // Definition node range (full body extent, e.g., class_definition start to closing })
+  defLine?: number;
+  defColumn?: number;
+  defEndLine?: number;
+  defEndColumn?: number;
 }
 
 export interface UseStatementWithPosition {
@@ -300,6 +305,13 @@ export class SymbolIndex {
       }
     }
     return result;
+  }
+
+  /**
+   * Get all symbols defined in a specific file (for document outline).
+   */
+  getFileSymbols(filePath: string): SymbolEntry[] {
+    return this.files.get(filePath)?.symbols ?? [];
   }
 
   private collectFromContainerChain(
@@ -1090,6 +1102,7 @@ export class SymbolIndex {
         container = node.text;
       }
 
+      const defNode = node.parent;
       symbols.push({
         name: node.text,
         kind,
@@ -1099,6 +1112,10 @@ export class SymbolIndex {
         endLine: node.endPosition.row,
         endColumn: node.endPosition.column,
         container,
+        defLine: defNode?.startPosition.row,
+        defColumn: defNode?.startPosition.column,
+        defEndLine: defNode?.endPosition.row,
+        defEndColumn: defNode?.endPosition.column,
       });
     }
     return symbols;
