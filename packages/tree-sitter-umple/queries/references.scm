@@ -18,6 +18,8 @@
 (interface_definition name: (identifier) @reference.interface)
 (trait_definition name: (identifier) @reference.trait)
 (enum_definition name: (identifier) @reference.enum)
+(enum_value name: (identifier) @reference.enum_value)
+(external_definition name: (identifier) @reference.class)
 (mixset_definition name: (identifier) @reference.mixset)
 (requirement_definition name: (identifier) @reference.requirement)
 (association_class_definition name: (identifier) @reference.class)
@@ -29,6 +31,7 @@
 (association_definition name: (identifier) @reference.association)
 (attribute_declaration name: (identifier) @reference.attribute)
 (method_declaration name: (identifier) @reference.method)
+(method_signature name: (identifier) @reference.method)
 
 ; =====================
 ; TYPE REFERENCES

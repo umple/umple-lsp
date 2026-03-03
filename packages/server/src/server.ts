@@ -424,6 +424,9 @@ function resolveSymbolAtPosition(
   const token = symbolIndex.getTokenAtPosition(docPath, content, line, col);
   if (!token) return null;
 
+  // If references.scm didn't match any pattern, there's no valid target
+  if (!token.kinds) return { token, symbols: [] };
+
   const reachableFiles = ensureImportsIndexed(docPath, content);
 
   const containerKinds = new Set<string>([
@@ -432,10 +435,10 @@ function resolveSymbolAtPosition(
     "template",
     "state",
   ]);
-  const isScoped = token.kinds?.some((k) => containerKinds.has(k));
+  const isScoped = token.kinds.some((k) => containerKinds.has(k));
   let container: string | undefined;
   if (isScoped) {
-    container = token.kinds?.some((k) => k === "state")
+    container = token.kinds.some((k) => k === "state")
       ? token.enclosingStateMachine
       : token.enclosingClass;
   }
@@ -445,7 +448,7 @@ function resolveSymbolAtPosition(
     symbols = symbolIndex
       .getSymbols({
         name: token.word,
-        kind: token.kinds ?? undefined,
+        kind: token.kinds,
         container,
         inherited: true,
       })
@@ -454,7 +457,7 @@ function resolveSymbolAtPosition(
 
   if (symbols.length === 0) {
     symbols = symbolIndex
-      .getSymbols({ name: token.word, kind: token.kinds ?? undefined })
+      .getSymbols({ name: token.word, kind: token.kinds })
       .filter((s) => reachableFiles.has(path.normalize(s.file)));
   }
 

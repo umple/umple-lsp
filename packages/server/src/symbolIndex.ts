@@ -31,6 +31,13 @@ export type SymbolKind =
   | "requirement"
   | "template";
 
+/** All SymbolKind values sorted longest-first for greedy capture name parsing. */
+const SYMBOL_KINDS_LONGEST_FIRST: SymbolKind[] = ([
+  "class", "interface", "trait", "enum", "enum_value",
+  "attribute", "state", "statemachine", "method",
+  "association", "mixset", "requirement", "template",
+] as SymbolKind[]).sort((a, b) => b.length - a.length);
+
 /**
  * Keywords after which the next token is always a new name (definition).
  * Completions are suppressed when the cursor immediately follows one of these.
@@ -671,10 +678,19 @@ export class SymbolIndex {
     if (!bestCapture) return null;
 
     // Parse capture name: "reference.class_interface_trait" → ["class", "interface", "trait"]
+    // Must match against known SymbolKind values to handle multi-word kinds like "enum_value"
     const prefix = "reference.";
     if (!bestCapture.name.startsWith(prefix)) return null;
-    const kindStr = bestCapture.name.substring(prefix.length);
-    return kindStr.split("_") as SymbolKind[];
+    let rest = bestCapture.name.substring(prefix.length);
+    const kinds: SymbolKind[] = [];
+    while (rest.length > 0) {
+      const match = SYMBOL_KINDS_LONGEST_FIRST.find((k) => rest.startsWith(k));
+      if (!match) break;
+      kinds.push(match);
+      rest = rest.substring(match.length);
+      if (rest.startsWith("_")) rest = rest.substring(1);
+    }
+    return kinds.length > 0 ? kinds : null;
   }
 
   // =====================
