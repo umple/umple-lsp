@@ -322,6 +322,11 @@ export class SymbolIndex {
     return this.files.get(filePath)?.tree ?? null;
   }
 
+  /** Get the direct isA parents for a class name. */
+  getIsAParents(className: string): string[] {
+    return this.isAGraph.get(className) ?? [];
+  }
+
   private collectFromContainerChain(
     container: string,
     kindSet: Set<SymbolKind> | null,

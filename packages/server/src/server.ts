@@ -136,6 +136,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
         triggerCharacters: ["/"],
       },
       definitionProvider: true,
+      hoverProvider: true,
       documentSymbolProvider: true,
       documentFormattingProvider: true,
     },
@@ -404,52 +405,27 @@ connection.onCompletion(async (params): Promise<CompletionItem[]> => {
   return items;
 });
 
-connection.onDefinition(async (params) => {
-  const document = getDocument(params.textDocument.uri);
-  if (!document) {
-    return [];
-  }
+// ── Shared symbol resolution (used by go-to-def and hover) ──────────────────
 
-  if (!symbolIndexReady) {
-    return [];
-  }
+/**
+ * Resolve symbol(s) at a given position.  Returns the token info plus
+ * matching SymbolEntry[] filtered to reachable files, or null if no
+ * identifier is found at the position.
+ */
+function resolveSymbolAtPosition(
+  docPath: string,
+  content: string,
+  line: number,
+  col: number,
+): {
+  token: NonNullable<ReturnType<typeof symbolIndex.getTokenAtPosition>>;
+  symbols: SymbolEntry[];
+} | null {
+  const token = symbolIndex.getTokenAtPosition(docPath, content, line, col);
+  if (!token) return null;
 
-  const docPath = getDocumentFilePath(document);
-  if (!docPath) {
-    return [];
-  }
+  const reachableFiles = ensureImportsIndexed(docPath, content);
 
-  const token = symbolIndex.getTokenAtPosition(
-    docPath,
-    document.getText(),
-    params.position.line,
-    params.position.character,
-  );
-  if (!token) {
-    return [];
-  }
-
-  // use statement with .ump extension: resolve as file reference
-  if (token.word.endsWith(".ump")) {
-    const baseDir = path.dirname(docPath);
-    const targetPath = path.isAbsolute(token.word)
-      ? token.word
-      : path.join(baseDir, token.word);
-    if (!fs.existsSync(targetPath)) {
-      return [];
-    }
-    return [
-      Location.create(
-        pathToFileURL(targetPath).toString(),
-        Range.create(Position.create(0, 0), Position.create(0, 0)),
-      ),
-    ];
-  }
-
-  // Symbol lookup, filtered by reachable files
-  const reachableFiles = ensureImportsIndexed(docPath, document.getText());
-
-  // For container-scoped kinds, try scoped lookup first (with inheritance), then global fallback
   const containerKinds = new Set<string>([
     "attribute",
     "method",
@@ -464,9 +440,9 @@ connection.onDefinition(async (params) => {
       : token.enclosingClass;
   }
 
-  let filteredSymbols: SymbolEntry[] = [];
+  let symbols: SymbolEntry[] = [];
   if (container) {
-    filteredSymbols = symbolIndex
+    symbols = symbolIndex
       .getSymbols({
         name: token.word,
         kind: token.kinds ?? undefined,
@@ -476,25 +452,391 @@ connection.onDefinition(async (params) => {
       .filter((s) => reachableFiles.has(path.normalize(s.file)));
   }
 
-  if (filteredSymbols.length === 0) {
-    filteredSymbols = symbolIndex
+  if (symbols.length === 0) {
+    symbols = symbolIndex
       .getSymbols({ name: token.word, kind: token.kinds ?? undefined })
       .filter((s) => reachableFiles.has(path.normalize(s.file)));
   }
 
-  if (filteredSymbols.length > 0) {
-    return filteredSymbols.map((sym) =>
+  return { token, symbols };
+}
+
+connection.onDefinition(async (params) => {
+  const document = getDocument(params.textDocument.uri);
+  if (!document || !symbolIndexReady) return [];
+
+  const docPath = getDocumentFilePath(document);
+  if (!docPath) return [];
+
+  const token = symbolIndex.getTokenAtPosition(
+    docPath,
+    document.getText(),
+    params.position.line,
+    params.position.character,
+  );
+  if (!token) return [];
+
+  // use statement with .ump extension: resolve as file reference
+  if (token.word.endsWith(".ump")) {
+    const baseDir = path.dirname(docPath);
+    const targetPath = path.isAbsolute(token.word)
+      ? token.word
+      : path.join(baseDir, token.word);
+    if (!fs.existsSync(targetPath)) return [];
+    return [
       Location.create(
-        pathToFileURL(sym.file).toString(),
-        Range.create(
-          Position.create(sym.line, sym.column),
-          Position.create(sym.endLine, sym.endColumn),
-        ),
+        pathToFileURL(targetPath).toString(),
+        Range.create(Position.create(0, 0), Position.create(0, 0)),
       ),
-    );
+    ];
   }
 
-  return [];
+  const resolved = resolveSymbolAtPosition(
+    docPath,
+    document.getText(),
+    params.position.line,
+    params.position.character,
+  );
+  if (!resolved || resolved.symbols.length === 0) return [];
+
+  return resolved.symbols.map((sym) =>
+    Location.create(
+      pathToFileURL(sym.file).toString(),
+      Range.create(
+        Position.create(sym.line, sym.column),
+        Position.create(sym.endLine, sym.endColumn),
+      ),
+    ),
+  );
+});
+
+// ── Hover ───────────────────────────────────────────────────────────────────
+
+/**
+ * Find the definition node in the tree that matches a SymbolEntry's body range.
+ */
+function findDefNode(
+  sym: SymbolEntry,
+): /* SyntaxNode */ any | null {
+  if (sym.defLine == null || sym.defEndLine == null) return null;
+  const tree = symbolIndex.getTree(sym.file);
+  if (!tree) return null;
+  return tree.rootNode.descendantForPosition(
+    { row: sym.defLine, column: sym.defColumn ?? 0 },
+    { row: sym.defEndLine, column: sym.defEndColumn ?? 0 },
+  );
+}
+
+function buildClassLikeHover(
+  sym: SymbolEntry,
+  defNode: /* SyntaxNode */ any,
+): string {
+  const keyword = sym.kind; // class | interface | trait | enum
+  const parts: string[] = [];
+
+  // Check for abstract
+  const isAbstract = defNode.children.some(
+    (c: any) => c.type === "abstract_declaration",
+  );
+
+  // Build header
+  let header = "";
+  if (isAbstract) header += "abstract ";
+  header += `${keyword} ${sym.name}`;
+  parts.push(header);
+
+  // isA parents
+  const parents = symbolIndex.getIsAParents(sym.name);
+  if (parents.length > 0) {
+    parts.push(`isA ${parents.join(", ")}`);
+  }
+
+  // For enums, list values
+  if (keyword === "enum") {
+    const values: string[] = [];
+    for (const child of defNode.children) {
+      if (child.type === "enum_value") {
+        const name = child.childForFieldName("name");
+        if (name) values.push(name.text);
+      }
+    }
+    if (values.length > 0) {
+      parts.push(`{ ${values.join(", ")} }`);
+    }
+  }
+
+  return "```umple\n" + parts.join("\n") + "\n```";
+}
+
+function buildAttributeHover(
+  sym: SymbolEntry,
+  defNode: /* SyntaxNode */ any,
+): string {
+  const parts: string[] = [];
+
+  // Modifier (unique, immutable, lazy, settable, autounique, etc.)
+  const modifier = defNode.children.find(
+    (c: any) => c.type === "attribute_modifier",
+  );
+  if (modifier) parts.push(modifier.text);
+
+  // Type
+  const typeNode = defNode.childForFieldName("type");
+  if (typeNode) {
+    parts.push(typeNode.text);
+  } else if (!modifier || modifier.text !== "autounique") {
+    // Default type is String in Umple (unless autounique which has no type)
+    parts.push("String");
+  }
+
+  // Name
+  parts.push(sym.name);
+
+  // Container info
+  let extra = "";
+  if (sym.container) {
+    extra = `\n\n*in class ${sym.container}*`;
+  }
+
+  return "```umple\n" + parts.join(" ") + "\n```" + extra;
+}
+
+function buildMethodHover(
+  sym: SymbolEntry,
+  defNode: /* SyntaxNode */ any,
+): string {
+  const parts: string[] = [];
+
+  // Visibility
+  const vis = defNode.children.find((c: any) => c.type === "visibility");
+  if (vis) parts.push(vis.text);
+
+  // Static (keyword child, not a field)
+  for (const child of defNode.children) {
+    if (child.type === "static") {
+      parts.push("static");
+      break;
+    }
+  }
+
+  // Return type
+  const returnType = defNode.childForFieldName("return_type");
+  if (returnType) {
+    parts.push(returnType.text);
+  } else {
+    parts.push("void");
+  }
+
+  // Name + params
+  const paramList = defNode.children.find((c: any) => c.type === "param_list");
+  let paramStr = "";
+  if (paramList) {
+    const params: string[] = [];
+    for (const p of paramList.children) {
+      if (p.type === "param") {
+        const pName = p.childForFieldName("name");
+        const pType = p.children.find((c: any) => c.type === "type_name");
+        if (pType && pName) {
+          params.push(`${pType.text} ${pName.text}`);
+        } else if (pName) {
+          params.push(pName.text);
+        }
+      }
+    }
+    paramStr = params.join(", ");
+  }
+  parts.push(`${sym.name}(${paramStr})`);
+
+  let extra = "";
+  if (sym.container) {
+    extra = `\n\n*in class ${sym.container}*`;
+  }
+
+  return "```umple\n" + parts.join(" ") + "\n```" + extra;
+}
+
+function buildStateMachineHover(
+  sym: SymbolEntry,
+  allSymbols: SymbolEntry[],
+): string {
+  // Collect state names from ALL matching SM definitions (handles split classes)
+  const stateNames: string[] = [];
+  const sameNameSyms = allSymbols.filter(
+    (s) => s.kind === "statemachine" && s.name === sym.name,
+  );
+  for (const s of sameNameSyms) {
+    const node = findDefNode(s);
+    if (!node) continue;
+    for (const child of node.children) {
+      if (child.type === "state") {
+        const name = child.childForFieldName("name");
+        if (name && !stateNames.includes(name.text)) {
+          stateNames.push(name.text);
+        }
+      }
+    }
+  }
+
+  let result = "```umple\n" + sym.name + " (state machine)\n```";
+  if (stateNames.length > 0) {
+    result += `\n\nStates: ${stateNames.join(", ")}`;
+  }
+
+  if (sym.container) {
+    result += `\n\n*in class ${sym.container}*`;
+  }
+
+  return result;
+}
+
+function buildStateHover(
+  sym: SymbolEntry,
+  defNode: /* SyntaxNode */ any,
+): string {
+  const lines: string[] = [`${sym.name} (state)`];
+
+  // Transitions
+  for (const child of defNode.children) {
+    if (child.type === "transition") {
+      const event = child.childForFieldName("event");
+      const target = child.childForFieldName("target");
+      const guard = child.children.find((c: any) => c.type === "guard");
+
+      let transStr = "  ";
+      if (event) transStr += event.text;
+      else transStr += "(auto)";
+      if (guard) transStr += ` ${guard.text}`;
+      if (target) transStr += ` -> ${target.text}`;
+      lines.push(transStr);
+    }
+
+    if (child.type === "entry_exit_action") {
+      // First named child is "entry" or "exit"
+      const keyword =
+        child.children.find(
+          (c: any) => c.text === "entry" || c.text === "exit",
+        )?.text ?? "action";
+      lines.push(`  ${keyword} / { ... }`);
+    }
+  }
+
+  // Nested states
+  const nestedStates: string[] = [];
+  for (const child of defNode.children) {
+    if (child.type === "state") {
+      const name = child.childForFieldName("name");
+      if (name) nestedStates.push(name.text);
+    }
+  }
+  if (nestedStates.length > 0) {
+    lines.push(`  nested: ${nestedStates.join(", ")}`);
+  }
+
+  let result = "```umple\n" + lines.join("\n") + "\n```";
+
+  if (sym.container) {
+    result += `\n\n*in state machine ${sym.container}*`;
+  }
+
+  return result;
+}
+
+function buildAssociationHover(
+  sym: SymbolEntry,
+  defNode: /* SyntaxNode */ any,
+): string {
+  // Handle both association_definition (standalone) and inline_association
+  const nodeType = defNode.type;
+
+  if (nodeType === "association_definition") {
+    const members = defNode.children.filter(
+      (c: any) => c.type === "association_member",
+    );
+    if (members.length > 0) {
+      const lines: string[] = [];
+      for (const member of members) {
+        lines.push(member.text.trim());
+      }
+      let result = "```umple\nassociation";
+      if (sym.name) result += ` ${sym.name}`;
+      result += `\n  ${lines.join("\n  ")}\n\`\`\``;
+      return result;
+    }
+  }
+
+  if (nodeType === "inline_association" || nodeType === "association_inline") {
+    return "```umple\n" + defNode.text.trim() + "\n```";
+  }
+
+  // Fallback: show the raw text
+  return "```umple\nassociation " + sym.name + "\n```";
+}
+
+/**
+ * Build markdown hover content for a resolved symbol.
+ * allSymbols is the full match list (needed for merging split definitions).
+ */
+function buildHoverMarkdown(
+  sym: SymbolEntry,
+  allSymbols: SymbolEntry[],
+): string | null {
+  const defNode = findDefNode(sym);
+  if (!defNode) return null;
+
+  switch (sym.kind) {
+    case "class":
+    case "interface":
+    case "trait":
+    case "enum":
+      return buildClassLikeHover(sym, defNode);
+    case "attribute":
+      return buildAttributeHover(sym, defNode);
+    case "method":
+      return buildMethodHover(sym, defNode);
+    case "statemachine":
+      return buildStateMachineHover(sym, allSymbols);
+    case "state":
+      return buildStateHover(sym, defNode);
+    case "association":
+      return buildAssociationHover(sym, defNode);
+    case "enum_value": {
+      let result = "```umple\n" + sym.name + "\n```";
+      if (sym.container) {
+        result += `\n\n*in enum ${sym.container}*`;
+      }
+      return result;
+    }
+    case "mixset":
+      return "```umple\nmixset " + sym.name + "\n```";
+    case "requirement":
+      return "```umple\nrequirement " + sym.name + "\n```";
+    case "template":
+      return "```umple\ntemplate " + sym.name + "\n```";
+    default:
+      return "```umple\n" + sym.kind + " " + sym.name + "\n```";
+  }
+}
+
+connection.onHover(async (params) => {
+  const document = getDocument(params.textDocument.uri);
+  if (!document || !symbolIndexReady) return null;
+
+  const docPath = getDocumentFilePath(document);
+  if (!docPath) return null;
+
+  const resolved = resolveSymbolAtPosition(
+    docPath,
+    document.getText(),
+    params.position.line,
+    params.position.character,
+  );
+  if (!resolved || resolved.symbols.length === 0) return null;
+
+  const sym = resolved.symbols[0];
+  const markdown = buildHoverMarkdown(sym, resolved.symbols);
+  if (!markdown) return null;
+
+  return { contents: { kind: "markdown" as const, value: markdown } };
 });
 
 // ── Document Symbols (Outline) ──────────────────────────────────────────────
@@ -509,6 +851,8 @@ function umpleKindToLspSymbolKind(kind: UmpleSymbolKind): SymbolKind {
       return SymbolKind.Interface;
     case "enum":
       return SymbolKind.Enum;
+    case "enum_value":
+      return SymbolKind.EnumMember;
     case "attribute":
       return SymbolKind.Field;
     case "method":
