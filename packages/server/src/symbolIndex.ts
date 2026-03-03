@@ -22,6 +22,7 @@ export type SymbolKind =
   | "trait"
   | "enum"
   | "enum_value"
+  | "const"
   | "attribute"
   | "state"
   | "statemachine"
@@ -33,7 +34,7 @@ export type SymbolKind =
 
 /** All SymbolKind values sorted longest-first for greedy capture name parsing. */
 const SYMBOL_KINDS_LONGEST_FIRST: SymbolKind[] = ([
-  "class", "interface", "trait", "enum", "enum_value",
+  "class", "interface", "trait", "enum", "enum_value", "const",
   "attribute", "state", "statemachine", "method",
   "association", "mixset", "requirement", "template",
 ] as SymbolKind[]).sort((a, b) => b.length - a.length);
@@ -1134,6 +1135,7 @@ export class SymbolIndex {
         container = this.resolveStateMachineContainer(node);
       } else if (
         kind === "attribute" ||
+        kind === "const" ||
         kind === "method" ||
         kind === "template"
       ) {

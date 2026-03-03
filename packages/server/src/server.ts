@@ -431,6 +431,7 @@ function resolveSymbolAtPosition(
 
   const containerKinds = new Set<string>([
     "attribute",
+    "const",
     "method",
     "template",
     "state",
@@ -614,6 +615,38 @@ function buildAttributeHover(
   }
 
   return "```umple\n" + parts.join(" ") + "\n```" + extra;
+}
+
+function buildConstHover(
+  sym: SymbolEntry,
+  defNode: /* SyntaxNode */ any,
+): string {
+  // const_declaration: const Type name = value ;
+  const typeNode = defNode.childForFieldName("type");
+  const typeName = typeNode ? typeNode.text : "String";
+
+  // Extract the value (everything between = and ;)
+  let value = "";
+  let seenEquals = false;
+  for (const child of defNode.children) {
+    if ((child as any).type === "=" || (child as any).text === "=") {
+      seenEquals = true;
+      continue;
+    }
+    if (seenEquals && (child as any).text !== ";") {
+      value = (child as any).text;
+      break;
+    }
+  }
+
+  let result = "```umple\nconst " + typeName + " " + sym.name;
+  if (value) result += " = " + value;
+  result += "\n```";
+
+  if (sym.container) {
+    result += `\n\n*in class ${sym.container}*`;
+  }
+  return result;
 }
 
 function buildMethodHover(
@@ -829,6 +862,8 @@ function buildHoverMarkdown(
       return buildClassLikeHover(sym, allSymbols);
     case "attribute":
       return buildAttributeHover(sym, defNode);
+    case "const":
+      return buildConstHover(sym, defNode);
     case "method":
       return buildMethodHover(sym, defNode);
     case "statemachine":
@@ -893,6 +928,8 @@ function umpleKindToLspSymbolKind(kind: UmpleSymbolKind): SymbolKind {
       return SymbolKind.EnumMember;
     case "attribute":
       return SymbolKind.Field;
+    case "const":
+      return SymbolKind.Constant;
     case "method":
       return SymbolKind.Method;
     case "template":
@@ -1842,6 +1879,8 @@ function symbolKindToCompletionKind(kind: UmpleSymbolKind): CompletionItemKind {
       return CompletionItemKind.Enum;
     case "attribute":
       return CompletionItemKind.Field;
+    case "const":
+      return CompletionItemKind.Constant;
     case "method":
       return CompletionItemKind.Method;
     case "association":

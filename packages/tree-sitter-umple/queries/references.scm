@@ -30,6 +30,7 @@
 (state name: (identifier) @reference.state)
 (association_definition name: (identifier) @reference.association)
 (attribute_declaration name: (identifier) @reference.attribute)
+(const_declaration name: (identifier) @reference.const)
 (method_declaration name: (identifier) @reference.method)
 (method_signature name: (identifier) @reference.method)
 
@@ -97,9 +98,9 @@
 ; =====================
 ; CONSTRAINT IDENTIFIERS
 ; =====================
-; Identifiers inside constraints reference attributes
+; Identifiers inside constraints reference attributes or constants
 
-(constraint (identifier) @reference.attribute)
+(constraint (identifier) @reference.attribute_const)
 
 ; =====================
 ; EMIT METHOD & TEMPLATE
