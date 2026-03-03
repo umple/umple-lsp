@@ -314,6 +314,13 @@ export class SymbolIndex {
     return this.files.get(filePath)?.symbols ?? [];
   }
 
+  /**
+   * Get the parsed tree for a file (for formatting, etc.).
+   */
+  getTree(filePath: string): Tree | null {
+    return this.files.get(filePath)?.tree ?? null;
+  }
+
   private collectFromContainerChain(
     container: string,
     kindSet: Set<SymbolKind> | null,
