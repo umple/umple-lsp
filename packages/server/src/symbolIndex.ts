@@ -33,11 +33,24 @@ export type SymbolKind =
   | "template";
 
 /** All SymbolKind values sorted longest-first for greedy capture name parsing. */
-const SYMBOL_KINDS_LONGEST_FIRST: SymbolKind[] = ([
-  "class", "interface", "trait", "enum", "enum_value", "const",
-  "attribute", "state", "statemachine", "method",
-  "association", "mixset", "requirement", "template",
-] as SymbolKind[]).sort((a, b) => b.length - a.length);
+const SYMBOL_KINDS_LONGEST_FIRST: SymbolKind[] = (
+  [
+    "class",
+    "interface",
+    "trait",
+    "enum",
+    "enum_value",
+    "const",
+    "attribute",
+    "state",
+    "statemachine",
+    "method",
+    "association",
+    "mixset",
+    "requirement",
+    "template",
+  ] as SymbolKind[]
+).sort((a, b) => b.length - a.length);
 
 /**
  * Keywords after which the next token is always a new name (definition).
@@ -869,6 +882,11 @@ export class SymbolIndex {
       node = node.parent;
     }
 
+    // Qualify SM name with class name for unique container identification
+    if (enclosingStateMachine && enclosingClass) {
+      enclosingStateMachine = `${enclosingClass}.${enclosingStateMachine}`;
+    }
+
     return { enclosingClass, enclosingStateMachine };
   }
 
@@ -1086,6 +1104,7 @@ export class SymbolIndex {
    */
   private resolveStateMachineContainer(node: SyntaxNode): string | undefined {
     let rootSmName: string | undefined;
+    let className: string | undefined;
     let current = node.parent;
     while (current) {
       if (current.type === "state_machine") {
@@ -1094,9 +1113,21 @@ export class SymbolIndex {
       if (current.type === "statemachine_definition") {
         rootSmName = current.childForFieldName("name")?.text ?? rootSmName;
       }
+      if (
+        !className &&
+        [
+          "class_definition",
+          "trait_definition",
+          "interface_definition",
+          "association_class_definition",
+        ].includes(current.type)
+      ) {
+        className = current.childForFieldName("name")?.text;
+      }
       current = current.parent;
     }
-    return rootSmName;
+    if (!rootSmName) return undefined;
+    return className ? `${className}.${rootSmName}` : rootSmName;
   }
 
   /** For enum values: walk up to find the enclosing enum_definition name. */

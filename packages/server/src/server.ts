@@ -435,11 +435,14 @@ function resolveSymbolAtPosition(
     "method",
     "template",
     "state",
+    "statemachine",
   ]);
   const isScoped = token.kinds.some((k) => containerKinds.has(k));
   let container: string | undefined;
   if (isScoped) {
-    container = token.kinds.some((k) => k === "state")
+    container = token.kinds.some(
+      (k) => k === "state" || k === "statemachine",
+    )
       ? token.enclosingStateMachine
       : token.enclosingClass;
   }
@@ -806,7 +809,10 @@ function buildStateHover(sym: SymbolEntry, allSymbols: SymbolEntry[]): string {
   let result = "```umple\n" + lines.join("\n") + "\n```";
 
   if (sym.container) {
-    result += `\n\n*in state machine ${sym.container}*`;
+    const smDisplay = sym.container.includes(".")
+      ? sym.container.substring(sym.container.indexOf(".") + 1)
+      : sym.container;
+    result += `\n\n*in state machine ${smDisplay}*`;
   }
 
   return result;
