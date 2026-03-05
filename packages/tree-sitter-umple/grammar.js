@@ -18,7 +18,6 @@ module.exports = grammar({
   word: ($) => $.identifier,
 
   conflicts: ($) => [
-    [$.event_spec, $.state],
     [$._definition, $._class_content],
     [$.transition, $.standalone_transition],
   ],
@@ -442,24 +441,20 @@ module.exports = grammar({
       seq(
         optional(field("change_type", choice("+", "-", "*"))),
         field("name", $.identifier),
-        optional(
-          seq(
-            "{",
-            repeat(
-              choice(
-                $.transition,
-                $.entry_exit_action,
-                $.do_activity,
-                $.state,
-                $.standalone_transition,
-                $.display_color,
-                "||",
-                ";", // bare semicolons allowed in state bodies
-              ),
-            ),
-            "}",
+        "{",
+        repeat(
+          choice(
+            $.transition,
+            $.entry_exit_action,
+            $.do_activity,
+            $.state,
+            $.standalone_transition,
+            $.display_color,
+            "||",
+            ";", // bare semicolons allowed in state bodies
           ),
         ),
+        "}",
       ),
 
     transition: ($) =>
@@ -471,7 +466,7 @@ module.exports = grammar({
           seq("->", $.action_code), // post-arrow only: e [g] -> / { code } T;
           "->",                     // no action:       e [g] -> T;
         ),
-        field("target", $.identifier),
+        field("target", $.qualified_name),
         ";",
       ),
 
@@ -697,7 +692,17 @@ module.exports = grammar({
     // BASIC TOKENS
     // =====================
     qualified_name: ($) =>
-      prec.left(seq($.identifier, repeat(seq(".", $.identifier)))),
+      prec.left(
+        seq(
+          $.identifier,
+          repeat(
+            seq(
+              token.immediate("."),
+              alias(token.immediate(/[a-zA-Z_][a-zA-Z0-9_]*/), $.identifier),
+            ),
+          ),
+        ),
+      ),
 
     identifier: ($) => /[a-zA-Z_][a-zA-Z0-9_]*/,
 

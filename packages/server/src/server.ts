@@ -133,7 +133,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
       textDocumentSync: TextDocumentSyncKind.Incremental,
       completionProvider: {
         resolveProvider: false,
-        triggerCharacters: ["/"],
+        triggerCharacters: ["/", "."],
       },
       definitionProvider: true,
       hoverProvider: true,
@@ -193,7 +193,7 @@ connection.onDidOpenTextDocument((params) => {
   if (symbolIndexReady) {
     try {
       const filePath = fileURLToPath(params.textDocument.uri);
-      symbolIndex.updateFile(filePath, params.textDocument.text);
+      symbolIndex.indexFile(filePath, params.textDocument.text);
     } catch {
       // Ignore errors for non-file URIs
     }
@@ -308,6 +308,23 @@ connection.onCompletion(async (params): Promise<CompletionItem[]> => {
     symbolKinds = ["mixset"] as UmpleSymbolKind[];
   } else if (params.context?.triggerCharacter === "/") {
     return [];
+  } else if (params.context?.triggerCharacter === ".") {
+    if (!info.dottedStatePrefix) return [];
+    // Dot-state completion: return only child state names, skip all
+    // generic phases (keywords, operators, types, other symbol kinds).
+    const childNames = info.enclosingStateMachine
+      ? symbolIndex.getChildStateNames(
+          info.dottedStatePrefix,
+          info.enclosingStateMachine,
+          reachableFiles,
+        )
+      : [];
+    return childNames.map((name) => ({
+      label: name,
+      kind: symbolKindToCompletionKind("state"),
+      detail: "state",
+      sortText: `0_${name}`,
+    }));
   }
 
   // 5a. Keywords from LookaheadIterator
@@ -376,6 +393,24 @@ connection.onCompletion(async (params): Promise<CompletionItem[]> => {
           })
           .filter((s) => reachableFiles.has(path.normalize(s.file)));
       } else if (symKind === "state" && info.enclosingStateMachine) {
+        if (info.dottedStatePrefix) {
+          const childNames = symbolIndex.getChildStateNames(
+            info.dottedStatePrefix,
+            info.enclosingStateMachine,
+            reachableFiles,
+          );
+          for (const name of childNames) {
+            if (!seen.has(name)) {
+              seen.add(name);
+              items.push({
+                label: name,
+                kind: symbolKindToCompletionKind("state"),
+                detail: "state",
+              });
+            }
+          }
+          continue;
+        }
         symbols = symbolIndex
           .getSymbols({ container: info.enclosingStateMachine, kind: "state" })
           .filter((s) => reachableFiles.has(path.normalize(s.file)));
@@ -440,9 +475,7 @@ function resolveSymbolAtPosition(
   const isScoped = token.kinds.some((k) => containerKinds.has(k));
   let container: string | undefined;
   if (isScoped) {
-    container = token.kinds.some(
-      (k) => k === "state" || k === "statemachine",
-    )
+    container = token.kinds.some((k) => k === "state" || k === "statemachine")
       ? token.enclosingStateMachine
       : token.enclosingClass;
   }
@@ -463,6 +496,26 @@ function resolveSymbolAtPosition(
     symbols = symbolIndex
       .getSymbols({ name: token.word, kind: token.kinds })
       .filter((s) => reachableFiles.has(path.normalize(s.file)));
+  }
+
+  // Disambiguate dotted state paths (e.g., EEE.Open.Inner → only Inner inside Open)
+  if (
+    token.qualifiedPath &&
+    token.pathIndex !== undefined &&
+    token.pathIndex > 0 &&
+    symbols.length > 1 &&
+    token.enclosingStateMachine
+  ) {
+    const precedingPath = token.qualifiedPath.slice(0, token.pathIndex);
+    const resolved = symbolIndex.resolveStateInPath(
+      precedingPath,
+      token.word,
+      token.enclosingStateMachine,
+      reachableFiles,
+    );
+    if (resolved) {
+      symbols = [resolved];
+    }
   }
 
   return { token, symbols };

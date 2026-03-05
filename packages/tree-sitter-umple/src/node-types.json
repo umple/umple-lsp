@@ -2331,7 +2331,7 @@
         "required": true,
         "types": [
           {
-            "type": "identifier",
+            "type": "qualified_name",
             "named": true
           }
         ]

@@ -235,7 +235,7 @@
   name: (identifier) @constant)
 
 (transition
-  target: (identifier) @constant)
+  target: (qualified_name (identifier) @constant))
 
 ; Standalone transition states
 (standalone_transition

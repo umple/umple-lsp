@@ -84,7 +84,7 @@
 ; STATE REFERENCES
 ; =====================
 
-(transition target: (identifier) @reference.state)
+(transition target: (qualified_name (identifier) @reference.state))
 (standalone_transition from_state: (identifier) @reference.state)
 (standalone_transition to_state: (identifier) @reference.state)
 

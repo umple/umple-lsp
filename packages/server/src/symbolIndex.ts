@@ -116,6 +116,8 @@ export interface CompletionInfo {
   enclosingClass?: string;
   /** Name of enclosing root state machine (for scoped state lookups). */
   enclosingStateMachine?: string;
+  /** Dotted path prefix for state completions (e.g., ["EEE", "Open"] when typing "EEE.Open."). */
+  dottedStatePrefix?: string[];
 }
 
 export interface SymbolEntry {
@@ -132,6 +134,8 @@ export interface SymbolEntry {
   defColumn?: number;
   defEndLine?: number;
   defEndColumn?: number;
+  // For states: nesting path from root SM, e.g., ["EEE", "Open", "Inner"]
+  statePath?: string[];
 }
 
 export interface UseStatementWithPosition {
@@ -234,15 +238,24 @@ export class SymbolIndex {
       return false;
     }
 
-    // Remove old symbols for this file from the name index
+    // Parse the file
+    const tree = this.parser.parse(fileContent);
+
+    // When the tree has errors and we already have clean symbols,
+    // keep the clean symbols but update the tree for cursor queries.
+    // This prevents error recovery from corrupting the symbol index
+    // (e.g., states swallowed by ERROR nodes during mid-typing).
+    if (tree.rootNode.hasError && existing) {
+      existing.tree = tree;
+      existing.contentHash = hash;
+      return false;
+    }
+
+    // Remove old symbols for this file from the container index
     if (existing) {
       this.removeFileSymbols(filePath);
     }
 
-    // Parse the file
-    const tree = this.parser.parse(fileContent);
-
-    // Extract symbols from the AST
     const symbols = this.extractSymbols(filePath, tree.rootNode);
 
     // Extract isA relationships
@@ -271,8 +284,7 @@ export class SymbolIndex {
   }
 
   /**
-   * Update a file with new content.
-   * For web-tree-sitter, we do a full reparse but the index diffing is still efficient.
+   * Update a file with new content from the live editor.
    */
   updateFile(filePath: string, content: string): boolean {
     return this.indexFile(filePath, content);
@@ -335,6 +347,7 @@ export class SymbolIndex {
   getFileSymbols(filePath: string): SymbolEntry[] {
     return this.files.get(filePath)?.symbols ?? [];
   }
+
 
   /**
    * Get the parsed tree for a file (for formatting, etc.).
@@ -574,6 +587,27 @@ export class SymbolIndex {
     // --- Enclosing scope for scoped lookups ---
     const { enclosingClass, enclosingStateMachine } =
       this.resolveEnclosingScope(tree, line, column);
+
+    // --- Dotted state prefix for path-scoped completions ---
+    // Gate on enclosingStateMachine rather than symbolKinds from the scope
+    // query — the scope query can fail on errored trees where we still want
+    // dotted completion.  Being inside a state machine + detecting "->" on
+    // the line is a sufficient safety check (isInTransitionTarget validates).
+    let dottedStatePrefix: string[] | undefined;
+    if (
+      enclosingStateMachine &&
+      this.isInTransitionTarget(tree, line, column, content)
+    ) {
+      const lineText = content.split("\n")[line] ?? "";
+      let pos = column;
+      while (pos > 0 && /[a-zA-Z_0-9]/.test(lineText[pos - 1])) {
+        pos--;
+      }
+      if (pos > 0 && lineText[pos - 1] === ".") {
+        dottedStatePrefix = this.extractDottedPrefix(lineText, pos - 1);
+      }
+    }
+
     return {
       keywords,
       operators,
@@ -583,6 +617,7 @@ export class SymbolIndex {
       prefix,
       enclosingClass,
       enclosingStateMachine,
+      dottedStatePrefix,
     };
   }
 
@@ -603,6 +638,8 @@ export class SymbolIndex {
     kinds: SymbolKind[] | null;
     enclosingClass?: string;
     enclosingStateMachine?: string;
+    qualifiedPath?: string[];
+    pathIndex?: number;
   } | null {
     if (!this.initialized || !this.parser) {
       return null;
@@ -640,7 +677,41 @@ export class SymbolIndex {
     const kinds = this.resolveDefinitionKinds(tree, node);
     const { enclosingClass, enclosingStateMachine } =
       this.resolveEnclosingScope(tree, line, column);
-    return { word, kinds, enclosingClass, enclosingStateMachine };
+
+    // Detect dotted state path in transition targets
+    let qualifiedPath: string[] | undefined;
+    let pathIndex: number | undefined;
+    const parent = node.parent;
+    if (node.type === "identifier" && parent?.type === "qualified_name") {
+      const grandparent = parent.parent;
+      if (grandparent?.type === "transition") {
+        const targetNode = grandparent.childForFieldName("target");
+        if (targetNode?.id === parent.id) {
+          const ids: string[] = [];
+          let idx = -1;
+          for (let i = 0; i < parent.namedChildCount; i++) {
+            const child = parent.namedChild(i);
+            if (child?.type === "identifier") {
+              if (child.id === node.id) idx = ids.length;
+              ids.push(child.text);
+            }
+          }
+          if (ids.length > 1 && idx >= 0) {
+            qualifiedPath = ids;
+            pathIndex = idx;
+          }
+        }
+      }
+    }
+
+    return {
+      word,
+      kinds,
+      enclosingClass,
+      enclosingStateMachine,
+      qualifiedPath,
+      pathIndex,
+    };
   }
 
   /**
@@ -705,6 +776,87 @@ export class SymbolIndex {
       if (rest.startsWith("_")) rest = rest.substring(1);
     }
     return kinds.length > 0 ? kinds : null;
+  }
+
+  /**
+   * Get the names of direct child states of a given state path within a state machine.
+   * Uses pre-computed statePath on each SymbolEntry for O(n) lookup without AST walking.
+   *
+   * @param parentPath Path segments to the parent state (e.g., ["EEE", "Open"])
+   * @param smContainer Qualified SM container (e.g., "ClassName.smName")
+   * @returns Names of direct child states of the resolved parent
+   */
+  getChildStateNames(
+    parentPath: string[],
+    smContainer: string,
+    reachableFiles?: Set<string>,
+  ): string[] {
+    if (parentPath.length === 0) return [];
+
+    const effectivePath = this.stripSmPrefix(parentPath, smContainer);
+    if (effectivePath.length === 0) return [];
+
+    const allStates = this.getSymbols({
+      container: smContainer,
+      kind: "state",
+    });
+    const targetDepth = effectivePath.length + 1;
+    const names = new Set<string>();
+
+    for (const s of allStates) {
+      if (reachableFiles && !reachableFiles.has(path.normalize(s.file)))
+        continue;
+      if (!s.statePath || s.statePath.length !== targetDepth) continue;
+      let match = true;
+      for (let i = 0; i < effectivePath.length; i++) {
+        if (s.statePath[i] !== effectivePath[i]) {
+          match = false;
+          break;
+        }
+      }
+      if (match) names.add(s.name);
+    }
+
+    return [...names];
+  }
+
+  /**
+   * Resolve a state within a dotted path context, returning the matching SymbolEntry.
+   * Uses pre-computed statePath for exact path matching without AST walking.
+   *
+   * @param precedingPath Path segments before the target (e.g., ["EEE", "Open"])
+   * @param targetName The target state name (e.g., "Inner")
+   * @param smContainer Qualified SM container (e.g., "ClassName.smName")
+   * @returns The SymbolEntry for the target state, or undefined if not found
+   */
+  resolveStateInPath(
+    precedingPath: string[],
+    targetName: string,
+    smContainer: string,
+    reachableFiles?: Set<string>,
+  ): SymbolEntry | undefined {
+    if (precedingPath.length === 0) return undefined;
+
+    const effectivePath = this.stripSmPrefix(precedingPath, smContainer);
+    const targetPath = [...effectivePath, targetName];
+
+    let candidates = this.getSymbols({
+      container: smContainer,
+      kind: "state",
+      name: targetName,
+    });
+    if (reachableFiles) {
+      candidates = candidates.filter((s) =>
+        reachableFiles.has(path.normalize(s.file)),
+      );
+    }
+
+    return candidates.find(
+      (s) =>
+        s.statePath &&
+        s.statePath.length === targetPath.length &&
+        s.statePath.every((seg, i) => seg === targetPath[i]),
+    );
   }
 
   // =====================
@@ -974,6 +1126,111 @@ export class SymbolIndex {
     return content.substring(start, pos);
   }
 
+  /**
+   * Strip a leading state-machine name from a dotted path if it matches
+   * the bare SM name of the container. E.g., path ["bulb","EEE"] with
+   * container "TrafficLight.bulb" → ["EEE"].
+   */
+  private stripSmPrefix(pathSegments: string[], smContainer: string): string[] {
+    const dotIdx = smContainer.lastIndexOf(".");
+    const bareSmName =
+      dotIdx >= 0 ? smContainer.substring(dotIdx + 1) : smContainer;
+    if (pathSegments[0] === bareSmName) {
+      return pathSegments.slice(1);
+    }
+    return pathSegments;
+  }
+
+  /**
+   * Check if the cursor is inside the target field of a transition node.
+   * Uses a layered strategy:
+   *   1. AST check: walk ancestors for qualified_name → transition.target
+   *   2. Lexical fallback: scan line for "->" before cursor position
+   *
+   * Layer 2 handles ERROR recovery cases where tree-sitter doesn't produce
+   * a transition node (e.g., "dddd -> EEE." produces state + ERROR).
+   * This is safe because we only call this when resolveCompletionScope
+   * already confirmed @scope.state context, and within state/SM bodies
+   * "->" exclusively marks transition targets.
+   */
+  private isInTransitionTarget(
+    tree: Tree,
+    line: number,
+    column: number,
+    content: string,
+  ): boolean {
+    // Layer 1: AST — walk ancestors for qualified_name inside transition.target
+    let node: SyntaxNode | null = tree.rootNode.descendantForPosition({
+      row: line,
+      column: Math.max(0, column - 1),
+    });
+
+    while (node) {
+      if (node.type === "qualified_name") {
+        const parent = node.parent;
+        if (parent?.type === "transition") {
+          const targetNode = parent.childForFieldName("target");
+          if (targetNode?.id === node.id) return true;
+        }
+        break;
+      }
+      // Stop at scope boundaries — don't walk past state/SM
+      if (
+        node.type === "transition" ||
+        node.type === "state" ||
+        node.type === "state_machine" ||
+        node.type === "statemachine_definition"
+      ) {
+        break;
+      }
+      node = node.parent;
+    }
+
+    // Layer 2: Lexical — scan line text for "->" before cursor.
+    // Within @scope.state (already confirmed by caller), "->" exclusively
+    // marks transition targets. We just check for its presence before the
+    // cursor — no need to validate what's between (action code like
+    // "/act" is valid between "->" and target in Umple: `e -> /act T;`).
+    const lineText = content.split("\n")[line] ?? "";
+    const beforeCursor = lineText.substring(0, column);
+    if (beforeCursor.includes("->")) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Extract dotted prefix segments from a line, scanning backward from a dot position.
+   * E.g., for "-> EEE.Open." at dotPos pointing to the last '.', returns ["EEE", "Open"].
+   */
+  private extractDottedPrefix(
+    lineText: string,
+    dotPos: number,
+  ): string[] | undefined {
+    const segments: string[] = [];
+    let pos = dotPos;
+
+    while (pos >= 0 && lineText[pos] === ".") {
+      const identEnd = pos;
+      let identStart = pos;
+      while (identStart > 0 && /[a-zA-Z_0-9]/.test(lineText[identStart - 1])) {
+        identStart--;
+      }
+      if (identStart === identEnd) break;
+
+      segments.unshift(lineText.substring(identStart, identEnd));
+
+      if (identStart > 0 && lineText[identStart - 1] === ".") {
+        pos = identStart - 1;
+      } else {
+        break;
+      }
+    }
+
+    return segments.length > 0 ? segments : undefined;
+  }
+
   private readFileSafe(filePath: string): string | null {
     try {
       return fs.readFileSync(filePath, "utf-8");
@@ -1143,6 +1400,31 @@ export class SymbolIndex {
   }
 
   /**
+   * Build the nesting path for a state by walking up parent state nodes.
+   * E.g., for Inner inside Open inside EEE: ["EEE", "Open", "Inner"]
+   */
+  private resolveStatePath(nameNode: SyntaxNode): string[] {
+    const segments: string[] = [nameNode.text];
+    let current = nameNode.parent; // The state node itself
+    if (current) current = current.parent; // Go above it
+
+    while (current) {
+      if (current.type === "state") {
+        const name = current.childForFieldName("name");
+        if (name) segments.unshift(name.text);
+      }
+      if (
+        current.type === "state_machine" ||
+        current.type === "statemachine_definition"
+      ) {
+        break;
+      }
+      current = current.parent;
+    }
+    return segments;
+  }
+
+  /**
    * Extract symbol definitions from the AST using the definitions.scm query.
    * Falls back to an empty list if the query isn't loaded.
    */
@@ -1180,7 +1462,7 @@ export class SymbolIndex {
       }
 
       const defNode = node.parent;
-      symbols.push({
+      const entry: SymbolEntry = {
         name: node.text,
         kind,
         file: filePath,
@@ -1193,10 +1475,15 @@ export class SymbolIndex {
         defColumn: defNode?.startPosition.column,
         defEndLine: defNode?.endPosition.row,
         defEndColumn: defNode?.endPosition.column,
-      });
+      };
+      if (kind === "state") {
+        entry.statePath = this.resolveStatePath(node);
+      }
+      symbols.push(entry);
     }
     return symbols;
   }
+
 }
 
 // Singleton instance
