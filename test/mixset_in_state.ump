@@ -1,0 +1,66 @@
+// Mixset inside state body: transition
+class TrafficLight {
+  signal {
+    Red {
+      mixset EmergencyMode {
+        emergency -> FlashingRed;
+      }
+      timer -> Green;
+    }
+    Green {
+      timer -> Yellow;
+    }
+    Yellow {
+      timer -> Red;
+    }
+  }
+}
+
+// Mixset inside state body: nested state + entry action
+class Door {
+  status {
+    Open {
+      mixset SecurityFeatures {
+        Locked {}
+        entry / { logAccess(); }
+      }
+      close -> Closed;
+    }
+    Closed {
+      open -> Open;
+    }
+  }
+}
+
+// Mixset inside state_machine body (existing support, regression)
+class Elevator {
+  mode {
+    mixset ExpressMode {
+      Express {
+        stop -> Normal;
+      }
+    }
+    Normal {
+      express -> Express;
+    }
+  }
+}
+
+// Top-level mixset with transition (global-widening regression)
+mixset GlobalTest {
+  emergency -> FlashingRed;
+}
+
+// Top-level mixset with nested state (global-widening regression)
+mixset GlobalStateTest {
+  SubState {
+    enter -> SubState;
+  }
+}
+
+// Class-level mixset (regression)
+class Vehicle {
+  mixset ElectricMode {
+    Integer batteryLevel;
+  }
+}

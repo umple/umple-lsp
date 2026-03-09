@@ -19,7 +19,11 @@ module.exports = grammar({
 
   conflicts: ($) => [
     [$._definition, $._class_content],
-    [$.transition, $.standalone_transition],
+    [$.multiplicity, $.state],
+    [$.event_spec, $.qualified_name],
+    [$._class_content, $.mixset_definition],
+    [$.state_machine, $.state],
+    [$.event_spec, $.method_declaration],
   ],
 
   rules: {
@@ -220,7 +224,18 @@ module.exports = grammar({
         "mixset",
         field("name", $.identifier),
         "{",
-        repeat(choice($._definition, $._class_content)),
+        repeat(choice(
+          $._definition,
+          $._class_content,
+          // State-level content (mixset bodies are context-free in real Umple)
+          $.transition,
+          $.entry_exit_action,
+          $.do_activity,
+          $.state,
+          $.standalone_transition,
+          $.display_color,
+          "||",
+        )),
         "}",
       ),
 
@@ -450,6 +465,7 @@ module.exports = grammar({
             $.state,
             $.standalone_transition,
             $.display_color,
+            $.mixset_definition,
             "||",
             ";", // bare semicolons allowed in state bodies
           ),

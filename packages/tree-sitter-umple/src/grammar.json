@@ -888,6 +888,34 @@
               {
                 "type": "SYMBOL",
                 "name": "_class_content"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "transition"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "entry_exit_action"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "do_activity"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "state"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "standalone_transition"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "display_color"
+              },
+              {
+                "type": "STRING",
+                "value": "||"
               }
             ]
           }
@@ -1993,6 +2021,10 @@
               {
                 "type": "SYMBOL",
                 "name": "display_color"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "mixset_definition"
               },
               {
                 "type": "STRING",
@@ -3573,8 +3605,24 @@
       "_class_content"
     ],
     [
-      "transition",
-      "standalone_transition"
+      "multiplicity",
+      "state"
+    ],
+    [
+      "event_spec",
+      "qualified_name"
+    ],
+    [
+      "_class_content",
+      "mixset_definition"
+    ],
+    [
+      "state_machine",
+      "state"
+    ],
+    [
+      "event_spec",
+      "method_declaration"
     ]
   ],
   "precedences": [],

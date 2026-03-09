@@ -1453,7 +1453,15 @@
           "named": true
         },
         {
+          "type": "do_activity",
+          "named": true
+        },
+        {
           "type": "emit_method",
+          "named": true
+        },
+        {
+          "type": "entry_exit_action",
           "named": true
         },
         {
@@ -1517,6 +1525,14 @@
           "named": true
         },
         {
+          "type": "standalone_transition",
+          "named": true
+        },
+        {
+          "type": "state",
+          "named": true
+        },
+        {
           "type": "state_machine",
           "named": true
         },
@@ -1538,6 +1554,10 @@
         },
         {
           "type": "trait_definition",
+          "named": true
+        },
+        {
+          "type": "transition",
           "named": true
         },
         {
@@ -1964,6 +1984,10 @@
         },
         {
           "type": "entry_exit_action",
+          "named": true
+        },
+        {
+          "type": "mixset_definition",
           "named": true
         },
         {
