@@ -162,6 +162,10 @@ export class SymbolIndex {
   private isAByFile: Map<string, Map<string, string[]>> = new Map();
   // Global isA graph: className → parent names (merged from all files)
   private isAGraph: Map<string, string[]> = new Map();
+  // Forward import graph: file → set of files it imports via `use`
+  private forwardImports: Map<string, Set<string>> = new Map();
+  // Reverse import graph: file → set of files that import it
+  private reverseImports: Map<string, Set<string>> = new Map();
   private initialized = false;
 
   /**
@@ -279,6 +283,9 @@ export class SymbolIndex {
         this.symbolsByContainer.set(symbol.container, containerSyms);
       }
     }
+
+    // Update forward/reverse import maps
+    this.updateImportMaps(filePath, fileContent);
 
     return true;
   }
@@ -640,6 +647,7 @@ export class SymbolIndex {
     enclosingStateMachine?: string;
     qualifiedPath?: string[];
     pathIndex?: number;
+    stateDefinitionPath?: string[];
   } | null {
     if (!this.initialized || !this.parser) {
       return null;
@@ -704,6 +712,16 @@ export class SymbolIndex {
       }
     }
 
+    // Detect state definition names — identifier is the `name` field of a `state` node
+    let stateDefinitionPath: string[] | undefined;
+    if (
+      node.type === "identifier" &&
+      parent?.type === "state" &&
+      parent.childForFieldName("name")?.id === node.id
+    ) {
+      stateDefinitionPath = this.resolveStatePath(node);
+    }
+
     return {
       word,
       kinds,
@@ -711,6 +729,7 @@ export class SymbolIndex {
       enclosingStateMachine,
       qualifiedPath,
       pathIndex,
+      stateDefinitionPath,
     };
   }
 
@@ -1482,6 +1501,429 @@ export class SymbolIndex {
       symbols.push(entry);
     }
     return symbols;
+  }
+
+  // ── Workspace indexing & import graph ──────────────────────────────────
+
+  /**
+   * Scan workspace roots for all .ump files, follow use chains to external
+   * files, and index everything. Content-hash skips unchanged files.
+   *
+   * @param workspaceRoots Workspace root directories
+   * @param getOpenDocContent Returns in-memory editor content if the file is open, undefined otherwise
+   */
+  indexWorkspace(
+    workspaceRoots: string[],
+    getOpenDocContent: (filePath: string) => string | undefined,
+  ): void {
+    if (!this.initialized || !this.parser) return;
+
+    // 1. Discover all .ump files under workspace roots
+    const discoveredFiles = new Set<string>();
+    for (const root of workspaceRoots) {
+      this.globUmpFiles(root, discoveredFiles);
+    }
+
+    // 2. Index each discovered file (open-doc content takes precedence)
+    for (const filePath of discoveredFiles) {
+      const openContent = getOpenDocContent(filePath);
+      if (openContent !== undefined) {
+        this.indexFile(filePath, openContent);
+      } else {
+        this.indexFile(filePath);
+      }
+    }
+
+    // 3. Follow use chains to index external files (outside workspace roots)
+    //    Only treat an external file as live if it's open in the editor or exists on disk.
+    //    This prevents stale forward-import edges from re-adding deleted files.
+    const externalFiles = new Set<string>();
+    for (const filePath of discoveredFiles) {
+      const imports = this.forwardImports.get(filePath);
+      if (imports) {
+        for (const imp of imports) {
+          if (
+            !discoveredFiles.has(imp) &&
+            !externalFiles.has(imp) &&
+            (getOpenDocContent(imp) !== undefined || fs.existsSync(imp))
+          ) {
+            externalFiles.add(imp);
+          }
+        }
+      }
+    }
+    // Index external files and follow their chains too (transitive)
+    const queue = [...externalFiles];
+    while (queue.length > 0) {
+      const filePath = queue.pop()!;
+      const openContent = getOpenDocContent(filePath);
+      if (openContent !== undefined) {
+        this.indexFile(filePath, openContent);
+      } else {
+        this.indexFile(filePath);
+      }
+      const imports = this.forwardImports.get(filePath);
+      if (imports) {
+        for (const imp of imports) {
+          if (
+            !discoveredFiles.has(imp) &&
+            !externalFiles.has(imp) &&
+            (getOpenDocContent(imp) !== undefined || fs.existsSync(imp))
+          ) {
+            externalFiles.add(imp);
+            queue.push(imp);
+          }
+        }
+      }
+    }
+
+    // 4. Remove stale indexed files.
+    //    A file is removed if it's not in the discovered/external set AND not open in the editor.
+    //    Note: fs.existsSync is intentionally NOT checked here — a file that still exists on disk
+    //    but is no longer reachable (e.g., use statement removed) should be dropped from the index.
+    const allKnownFiles = new Set([...discoveredFiles, ...externalFiles]);
+    for (const filePath of this.files.keys()) {
+      if (
+        !allKnownFiles.has(filePath) &&
+        getOpenDocContent(filePath) === undefined
+      ) {
+        this.removeFile(filePath);
+      }
+    }
+  }
+
+  /**
+   * Get all files whose use chain can reach any of the given declaration files.
+   * Transitive reverse closure.
+   */
+  getReverseImporters(declarationFiles: Set<string>): Set<string> {
+    const result = new Set<string>();
+    const queue = [...declarationFiles];
+    while (queue.length > 0) {
+      const file = queue.pop()!;
+      const importers = this.reverseImports.get(file);
+      if (!importers) continue;
+      for (const importer of importers) {
+        if (!result.has(importer) && !declarationFiles.has(importer)) {
+          result.add(importer);
+          queue.push(importer);
+        }
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Find all references to a symbol across the given files.
+   * Uses references.scm query to find candidate sites, then filters
+   * by name, kind, and container/path context.
+   */
+  findReferences(
+    declarations: SymbolEntry[],
+    filesToSearch: Set<string>,
+    includeDeclaration: boolean,
+  ): { file: string; line: number; column: number; endLine: number; endColumn: number }[] {
+    if (!this.referencesQuery || declarations.length === 0) return [];
+
+    const sym = declarations[0];
+    const symName = sym.name;
+    const symKind = sym.kind;
+    const symContainer = sym.container;
+
+    // Collect definition positions for deduplication and includeDeclaration
+    const defPositions = new Set<string>();
+    for (const d of declarations) {
+      defPositions.add(`${d.file}:${d.line}:${d.column}:${d.endLine}:${d.endColumn}`);
+    }
+
+    // Container-scoped kinds need enclosing scope verification
+    const containerScopedKinds = new Set<SymbolKind>([
+      "attribute", "const", "method", "template", "state", "statemachine",
+    ]);
+    const isContainerScoped = containerScopedKinds.has(symKind);
+
+    const results: { file: string; line: number; column: number; endLine: number; endColumn: number }[] = [];
+    const seen = new Set<string>();
+
+    const addResult = (file: string, line: number, column: number, endLine: number, endColumn: number) => {
+      const key = `${file}:${line}:${column}:${endLine}:${endColumn}`;
+      if (seen.has(key)) return;
+      // Skip definition sites unless includeDeclaration
+      if (!includeDeclaration && defPositions.has(key)) return;
+      seen.add(key);
+      results.push({ file, line, column, endLine, endColumn });
+    };
+
+    // If includeDeclaration, add all definition sites first
+    if (includeDeclaration) {
+      for (const d of declarations) {
+        addResult(d.file, d.line, d.column, d.endLine, d.endColumn);
+      }
+    }
+
+    // Scan each file
+    for (const filePath of filesToSearch) {
+      const fileIndex = this.files.get(filePath);
+      if (!fileIndex?.tree) continue;
+
+      const captures = this.referencesQuery.captures(fileIndex.tree.rootNode);
+
+      for (const capture of captures) {
+        const node = capture.node;
+        if (node.text !== symName) continue;
+
+        // Parse capture name to get reference kinds
+        const refKinds = this.parseCaptureKinds(capture.name);
+        if (!refKinds || !refKinds.includes(symKind)) continue;
+
+        // For container-scoped kinds, verify enclosing scope matches
+        if (isContainerScoped && symContainer) {
+          const enclosing = this.resolveEnclosingScopeFromNode(node, symKind);
+          if (enclosing && enclosing !== symContainer) {
+            // Check inheritance: enclosing class may inherit from container's class
+            if (symKind === "state" || symKind === "statemachine") {
+              // SM container is "ClassName.smName" — no inheritance walk needed,
+              // must match exactly
+              continue;
+            }
+            // For attribute/method/etc: enclosing is class name, check isA chain
+            const containerClass = symContainer;
+            if (!this.isInheritanceChain(enclosing, containerClass)) {
+              continue;
+            }
+          }
+        }
+
+        // For nested states, disambiguate by path context.
+        // Three cases:
+        //   1. Dotted path (inside qualified_name, index > 0): compare preceding segments
+        //   2. Definition site (node.parent is "state"): walk ancestor states, exact path match
+        //   3. Bare reference (everything else): no path synthesis, existing rules apply
+        if (symKind === "state" && sym.statePath && sym.statePath.length > 1) {
+          const pathCtx = this.extractPathContextFromNode(node);
+          if (pathCtx) {
+            // Case 1: dotted transition target (e.g., EEE.Open.Inner)
+            const targetPrecedingPath = sym.statePath.slice(0, sym.statePath.length - 1);
+            if (!this.pathPrefixMatches(pathCtx.preceding, targetPrecedingPath)) {
+              continue;
+            }
+          } else if (node.parent?.type === "state") {
+            // Case 2: state definition name (e.g., Open {})
+            const candidatePath = this.resolveStatePath(node);
+            if (!this.pathPrefixMatches(candidatePath, sym.statePath)) {
+              continue;
+            }
+          }
+          // Case 3: bare reference — fall through, no path filtering
+        }
+
+        addResult(
+          filePath,
+          node.startPosition.row,
+          node.startPosition.column,
+          node.endPosition.row,
+          node.endPosition.column,
+        );
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Parse a references.scm capture name into symbol kinds.
+   * e.g., "reference.class_interface_trait" → ["class", "interface", "trait"]
+   */
+  private parseCaptureKinds(captureName: string): SymbolKind[] | null {
+    const prefix = "reference.";
+    if (!captureName.startsWith(prefix)) return null;
+    let rest = captureName.substring(prefix.length);
+    const kinds: SymbolKind[] = [];
+    while (rest.length > 0) {
+      const match = SYMBOL_KINDS_LONGEST_FIRST.find((k) => rest.startsWith(k));
+      if (!match) break;
+      kinds.push(match);
+      rest = rest.substring(match.length);
+      if (rest.startsWith("_")) rest = rest.substring(1);
+    }
+    return kinds.length > 0 ? kinds : null;
+  }
+
+  /**
+   * Resolve the enclosing container for a node, for scoped reference matching.
+   * Returns the container string (e.g., "ClassName" for attributes, "ClassName.smName" for states).
+   */
+  private resolveEnclosingScopeFromNode(
+    node: SyntaxNode,
+    targetKind: SymbolKind,
+  ): string | undefined {
+    let current: SyntaxNode | null = node.parent;
+    let enclosingClass: string | undefined;
+    let enclosingSM: string | undefined;
+
+    while (current) {
+      if (current.type === "state_machine" || current.type === "statemachine_definition") {
+        enclosingSM = current.childForFieldName("name")?.text ?? enclosingSM;
+      }
+      if (
+        !enclosingClass &&
+        ["class_definition", "trait_definition", "interface_definition", "association_class_definition"].includes(current.type)
+      ) {
+        enclosingClass = current.childForFieldName("name")?.text;
+      }
+      current = current.parent;
+    }
+
+    if (targetKind === "state" || targetKind === "statemachine") {
+      if (enclosingClass && enclosingSM) return `${enclosingClass}.${enclosingSM}`;
+      if (enclosingSM) return enclosingSM; // top-level statemachine
+      return undefined;
+    }
+    return enclosingClass;
+  }
+
+  /**
+   * Check if childClass inherits from parentClass (directly or transitively).
+   */
+  private isInheritanceChain(childClass: string, parentClass: string): boolean {
+    const visited = new Set<string>();
+    const queue = [childClass];
+    while (queue.length > 0) {
+      const cls = queue.pop()!;
+      if (cls === parentClass) return true;
+      if (visited.has(cls)) continue;
+      visited.add(cls);
+      const parents = this.isAGraph.get(cls);
+      if (parents) queue.push(...parents);
+    }
+    return false;
+  }
+
+  /**
+   * Extract dotted path context for a state reference node inside a qualified_name.
+   * Returns the preceding path segments, or null if not in a qualified_name.
+   */
+  private extractPathContextFromNode(
+    node: SyntaxNode,
+  ): { preceding: string[] } | null {
+    const parent = node.parent;
+    if (!parent || parent.type !== "qualified_name") return null;
+
+    const segments: string[] = [];
+    let nodeIndex = -1;
+    for (let i = 0; i < parent.namedChildCount; i++) {
+      const child = parent.namedChild(i);
+      if (child?.type === "identifier") {
+        if (child.id === node.id) nodeIndex = segments.length;
+        segments.push(child.text);
+      }
+    }
+    if (nodeIndex <= 0) return null; // first segment or not found
+    return { preceding: segments.slice(0, nodeIndex) };
+  }
+
+  /**
+   * Check if an actual preceding path matches the target preceding path.
+   */
+  private pathPrefixMatches(actual: string[], target: string[]): boolean {
+    if (actual.length !== target.length) return false;
+    for (let i = 0; i < actual.length; i++) {
+      if (actual[i] !== target[i]) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Update forward/reverse import maps for a file.
+   */
+  private updateImportMaps(filePath: string, content: string): void {
+    // Remove old forward edges from reverse map
+    const oldImports = this.forwardImports.get(filePath);
+    if (oldImports) {
+      for (const imp of oldImports) {
+        const rev = this.reverseImports.get(imp);
+        if (rev) {
+          rev.delete(filePath);
+          if (rev.size === 0) this.reverseImports.delete(imp);
+        }
+      }
+    }
+
+    // Compute new forward imports
+    const usePaths = this.extractUseStatements(filePath, content);
+    const fileDir = path.dirname(filePath);
+    const newImports = new Set<string>();
+    for (const usePath of usePaths) {
+      if (!usePath.endsWith(".ump")) continue;
+      const resolved = path.isAbsolute(usePath)
+        ? path.normalize(usePath)
+        : path.normalize(path.resolve(fileDir, usePath));
+      if (fs.existsSync(resolved)) {
+        newImports.add(resolved);
+      }
+    }
+    this.forwardImports.set(filePath, newImports);
+
+    // Add new reverse edges
+    for (const imp of newImports) {
+      let rev = this.reverseImports.get(imp);
+      if (!rev) {
+        rev = new Set();
+        this.reverseImports.set(imp, rev);
+      }
+      rev.add(filePath);
+    }
+  }
+
+  /**
+   * Fully remove a file from the index (symbols, imports, isA).
+   */
+  private removeFile(filePath: string): void {
+    this.removeFileSymbols(filePath);
+    this.files.delete(filePath);
+
+    // Clean import maps
+    const oldImports = this.forwardImports.get(filePath);
+    if (oldImports) {
+      for (const imp of oldImports) {
+        const rev = this.reverseImports.get(imp);
+        if (rev) {
+          rev.delete(filePath);
+          if (rev.size === 0) this.reverseImports.delete(imp);
+        }
+      }
+    }
+    this.forwardImports.delete(filePath);
+    // Also remove as a target in reverse map
+    this.reverseImports.delete(filePath);
+
+    // Clean isA
+    this.isAByFile.delete(filePath);
+    this.rebuildIsAGraph();
+  }
+
+  /**
+   * Recursively find all .ump files under a directory.
+   */
+  private globUmpFiles(dir: string, result: Set<string>): void {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return; // permission denied, etc.
+    }
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        // Skip common non-source directories
+        if (entry.name === "node_modules" || entry.name === ".git" || entry.name === "out") {
+          continue;
+        }
+        this.globUmpFiles(fullPath, result);
+      } else if (entry.name.endsWith(".ump")) {
+        result.add(path.normalize(fullPath));
+      }
+    }
   }
 
 }

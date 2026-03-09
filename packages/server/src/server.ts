@@ -136,6 +136,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
         triggerCharacters: ["/", "."],
       },
       definitionProvider: true,
+      referencesProvider: true,
       hoverProvider: true,
       documentSymbolProvider: true,
       documentFormattingProvider: true,
@@ -518,6 +519,25 @@ function resolveSymbolAtPosition(
     }
   }
 
+  // Disambiguate state definition sites (e.g., cursor on Inner in `Inner {}` inside EEE.Open)
+  if (
+    token.stateDefinitionPath &&
+    token.kinds?.includes("state") &&
+    symbols.length > 1
+  ) {
+    const defPath = token.stateDefinitionPath;
+    const narrowed = symbols.filter(
+      (s) =>
+        s.kind === "state" &&
+        s.statePath &&
+        s.statePath.length === defPath.length &&
+        s.statePath.every((seg, i) => seg === defPath[i]),
+    );
+    if (narrowed.length > 0) {
+      symbols = narrowed;
+    }
+  }
+
   return { token, symbols };
 }
 
@@ -565,6 +585,57 @@ connection.onDefinition(async (params) => {
       Range.create(
         Position.create(sym.line, sym.column),
         Position.create(sym.endLine, sym.endColumn),
+      ),
+    ),
+  );
+});
+
+// ── Find References ──────────────────────────────────────────────────────────
+
+connection.onReferences(async (params) => {
+  const document = getDocument(params.textDocument.uri);
+  if (!document || !symbolIndexReady) return [];
+
+  const docPath = getDocumentFilePath(document);
+  if (!docPath) return [];
+
+  // 1. Identify symbol (full declaration set)
+  const resolved = resolveSymbolAtPosition(
+    docPath,
+    document.getText(),
+    params.position.line,
+    params.position.character,
+  );
+  if (!resolved || resolved.symbols.length === 0) return [];
+
+  // 2. Index all workspace files (content-hash skips unchanged files)
+  symbolIndex.indexWorkspace(workspaceRoots, (filePath) => {
+    const uri = pathToFileURL(filePath).toString();
+    return getDocument(uri)?.getText();
+  });
+
+  // 3. Compute search scope: declaration files + reverse importers
+  const declFiles = new Set(
+    resolved.symbols.map((s) => path.normalize(s.file)),
+  );
+  const filesToSearch = symbolIndex.getReverseImporters(declFiles);
+  // Include declaration files themselves
+  for (const f of declFiles) filesToSearch.add(f);
+
+  // 4. Find references
+  const refs = symbolIndex.findReferences(
+    resolved.symbols,
+    filesToSearch,
+    params.context.includeDeclaration,
+  );
+
+  // 5. Convert to Location[]
+  return refs.map((r) =>
+    Location.create(
+      pathToFileURL(r.file).toString(),
+      Range.create(
+        Position.create(r.line, r.column),
+        Position.create(r.endLine, r.endColumn),
       ),
     ),
   );
