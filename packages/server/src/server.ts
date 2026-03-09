@@ -19,6 +19,7 @@ import {
   TextEdit,
   Position,
   Range,
+  WorkspaceEdit,
 } from "vscode-languageserver/node";
 import { TextDocument } from "vscode-languageserver-textdocument";
 import { BUILTIN_TYPES } from "./keywords";
@@ -137,6 +138,9 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
       },
       definitionProvider: true,
       referencesProvider: true,
+      renameProvider: {
+        prepareProvider: true,
+      },
       hoverProvider: true,
       documentSymbolProvider: true,
       documentFormattingProvider: true,
@@ -639,6 +643,152 @@ connection.onReferences(async (params) => {
       ),
     ),
   );
+});
+
+// ── Rename ───────────────────────────────────────────────────────────────────
+
+const RENAMEABLE_KINDS = new Set<UmpleSymbolKind>([
+  "class",
+  "interface",
+  "trait",
+  "enum",
+  "mixset",
+  "attribute",
+  "const",
+  "state",
+  "statemachine",
+]);
+
+function isUnambiguousRename(symbols: SymbolEntry[]): boolean {
+  if (symbols.length <= 1) return symbols.length === 1;
+
+  // All symbols must share the same kind
+  const kind = symbols[0].kind;
+  if (!symbols.every((s) => s.kind === kind)) return false;
+
+  // State: must share same statePath (different paths = different states)
+  if (kind === "state") {
+    const refPath = symbols[0].statePath?.join(".");
+    return symbols.every((s) => s.statePath?.join(".") === refPath);
+  }
+
+  // Container-scoped kinds: must share container + name
+  const containerScoped = new Set<UmpleSymbolKind>([
+    "attribute",
+    "const",
+    "method",
+    "template",
+    "statemachine",
+  ]);
+  if (containerScoped.has(kind)) {
+    const { container, name } = symbols[0];
+    return symbols.every((s) => s.container === container && s.name === name);
+  }
+
+  // Top-level mergeable kinds (class, interface, trait, enum, mixset):
+  // same name = partial definitions of the same entity
+  const name = symbols[0].name;
+  return symbols.every((s) => s.name === name);
+}
+
+connection.onPrepareRename(async (params) => {
+  const document = getDocument(params.textDocument.uri);
+  if (!document || !symbolIndexReady) return null;
+
+  const docPath = getDocumentFilePath(document);
+  if (!docPath) return null;
+
+  // Full semantic resolution
+  const resolved = resolveSymbolAtPosition(
+    docPath,
+    document.getText(),
+    params.position.line,
+    params.position.character,
+  );
+  if (!resolved || resolved.symbols.length === 0) return null;
+
+  // Kind must be in the renameable set
+  if (!RENAMEABLE_KINDS.has(resolved.symbols[0].kind)) return null;
+
+  // Identity must be unambiguous
+  if (!isUnambiguousRename(resolved.symbols)) return null;
+
+  // Get precise identifier range
+  const range = symbolIndex.getNodeRangeAtPosition(
+    docPath,
+    document.getText(),
+    params.position.line,
+    params.position.character,
+  );
+  if (!range) return null;
+
+  return {
+    range: Range.create(
+      Position.create(range.startLine, range.startColumn),
+      Position.create(range.endLine, range.endColumn),
+    ),
+    placeholder: resolved.token.word,
+  };
+});
+
+connection.onRenameRequest(async (params) => {
+  const document = getDocument(params.textDocument.uri);
+  if (!document || !symbolIndexReady) return null;
+
+  const docPath = getDocumentFilePath(document);
+  if (!docPath) return null;
+
+  // Validate new name is a legal identifier
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(params.newName)) return null;
+
+  // 1. Full semantic resolution (same checks as prepareRename)
+  const resolved = resolveSymbolAtPosition(
+    docPath,
+    document.getText(),
+    params.position.line,
+    params.position.character,
+  );
+  if (!resolved || resolved.symbols.length === 0) return null;
+  if (!RENAMEABLE_KINDS.has(resolved.symbols[0].kind)) return null;
+  if (!isUnambiguousRename(resolved.symbols)) return null;
+
+  // 2. Index workspace
+  symbolIndex.indexWorkspace(workspaceRoots, (filePath) => {
+    const uri = pathToFileURL(filePath).toString();
+    return getDocument(uri)?.getText();
+  });
+
+  // 3. Compute search scope
+  const declFiles = new Set(
+    resolved.symbols.map((s) => path.normalize(s.file)),
+  );
+  const filesToSearch = symbolIndex.getReverseImporters(declFiles);
+  for (const f of declFiles) filesToSearch.add(f);
+
+  // 4. Find ALL references including declarations
+  const refs = symbolIndex.findReferences(
+    resolved.symbols,
+    filesToSearch,
+    true,
+  );
+
+  // 5. Build WorkspaceEdit
+  const changes: { [uri: string]: TextEdit[] } = {};
+  for (const r of refs) {
+    const uri = pathToFileURL(r.file).toString();
+    if (!changes[uri]) changes[uri] = [];
+    changes[uri].push(
+      TextEdit.replace(
+        Range.create(
+          Position.create(r.line, r.column),
+          Position.create(r.endLine, r.endColumn),
+        ),
+        params.newName,
+      ),
+    );
+  }
+
+  return { changes };
 });
 
 // ── Hover ───────────────────────────────────────────────────────────────────

@@ -734,6 +734,54 @@ export class SymbolIndex {
   }
 
   /**
+   * Get the exact range of the token node at a position.
+   * Used by prepareRename to return the precise rename range.
+   * Accepts the same node types as getTokenAtPosition(): identifier,
+   * use_path, and filter_pattern.
+   */
+  getNodeRangeAtPosition(
+    filePath: string,
+    content: string,
+    line: number,
+    column: number,
+  ): {
+    startLine: number;
+    startColumn: number;
+    endLine: number;
+    endColumn: number;
+  } | null {
+    if (!this.initialized || !this.parser) return null;
+
+    const fileIndex = this.files.get(filePath);
+    let tree: Tree;
+    if (
+      fileIndex?.tree &&
+      fileIndex.contentHash === this.hashContent(content)
+    ) {
+      tree = fileIndex.tree;
+    } else {
+      tree = this.parser.parse(content);
+    }
+
+    const node = tree.rootNode.descendantForPosition({ row: line, column });
+    if (
+      !node ||
+      (node.type !== "identifier" &&
+        node.type !== "use_path" &&
+        node.type !== "filter_pattern")
+    ) {
+      return null;
+    }
+
+    return {
+      startLine: node.startPosition.row,
+      startColumn: node.startPosition.column,
+      endLine: node.endPosition.row,
+      endColumn: node.endPosition.column,
+    };
+  }
+
+  /**
    * Use the references.scm query to determine which symbol kinds an
    * identifier can reference based on its position in the AST.
    *
