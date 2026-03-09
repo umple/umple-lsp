@@ -245,22 +245,32 @@ export class SymbolIndex {
     // Parse the file
     const tree = this.parser.parse(fileContent);
 
-    // When the tree has errors and we already have clean symbols,
-    // keep the clean symbols but update the tree for cursor queries.
-    // This prevents error recovery from corrupting the symbol index
-    // (e.g., states swallowed by ERROR nodes during mid-typing).
-    if (tree.rootNode.hasError && existing) {
-      existing.tree = tree;
-      existing.contentHash = hash;
-      return false;
-    }
-
     // Remove old symbols for this file from the container index
     if (existing) {
       this.removeFileSymbols(filePath);
     }
 
-    const symbols = this.extractSymbols(filePath, tree.rootNode);
+    const newSymbols = this.extractSymbols(filePath, tree.rootNode);
+
+    // Kind-sensitive error preservation: when the tree has errors,
+    // live-update recovery-safe kinds (whose identity doesn't depend
+    // on AST nesting) but preserve recovery-fragile kinds (state,
+    // statemachine) from the last clean snapshot.
+    let symbols: SymbolEntry[];
+    if (tree.rootNode.hasError) {
+      const LIVE_KINDS: Set<SymbolKind> = new Set([
+        "class", "interface", "trait", "enum",
+        "mixset", "attribute", "const",
+      ]);
+
+      const liveSymbols = newSymbols.filter((s) => LIVE_KINDS.has(s.kind));
+      const preservedSymbols = existing
+        ? existing.symbols.filter((s) => !LIVE_KINDS.has(s.kind))
+        : [];
+      symbols = [...liveSymbols, ...preservedSymbols];
+    } else {
+      symbols = newSymbols;
+    }
 
     // Extract isA relationships
     const isAMap = this.extractIsARelationships(tree.rootNode);
