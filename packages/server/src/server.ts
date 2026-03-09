@@ -240,6 +240,16 @@ connection.onDidChangeTextDocument((params) => {
     params.textDocument.version,
   );
   setDocument(params.textDocument.uri, updated);
+
+  // Keep the symbol index current so the clean baseline stays fresh.
+  // Without this, state symbols added during clean edits would be lost
+  // when the file later enters an errored state (error preservation
+  // would use a stale clean snapshot).
+  const changedPath = getDocumentFilePath(updated);
+  if (changedPath && symbolIndexReady) {
+    symbolIndex.updateFile(changedPath, updated.getText());
+  }
+
   scheduleValidation(updated);
 
   // Re-validate other open documents that might depend on this file
