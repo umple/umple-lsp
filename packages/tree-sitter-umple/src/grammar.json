@@ -2027,6 +2027,10 @@
                 "name": "mixset_definition"
               },
               {
+                "type": "SYMBOL",
+                "name": "method_declaration"
+              },
+              {
                 "type": "STRING",
                 "value": "||"
               },

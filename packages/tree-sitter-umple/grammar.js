@@ -466,6 +466,7 @@ module.exports = grammar({
             $.standalone_transition,
             $.display_color,
             $.mixset_definition,
+            $.method_declaration,
             "||",
             ";", // bare semicolons allowed in state bodies
           ),

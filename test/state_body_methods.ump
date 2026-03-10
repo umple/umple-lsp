@@ -1,0 +1,37 @@
+// Test: concrete method declarations inside state bodies
+// Verified against real Umple compiler (umplesync.jar -generate nothing)
+
+class GarageDoor {
+  Boolean entranceClear = true;
+  GarageDoor {
+    Open {
+      void logEntry() { System.out.println("entered Open"); }
+      String describe(Integer x) { return "open:" + x; }
+      pressButton -> Closing;
+    }
+    Closing {
+      void logEntry() { System.out.println("entered Closing"); }
+      reachBottom -> Closed;
+    }
+    Closed {
+      pressButton -> Opening;
+    }
+    Opening {
+      reachTop -> Open;
+    }
+  }
+}
+
+// Test: same method name in multiple states (both index under class container)
+class Door {
+  status {
+    Open {
+      void describe() { System.out.println("open"); }
+      close -> Closed;
+    }
+    Closed {
+      void describe() { System.out.println("closed"); }
+      open -> Open;
+    }
+  }
+}

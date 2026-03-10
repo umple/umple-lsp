@@ -1987,6 +1987,10 @@
           "named": true
         },
         {
+          "type": "method_declaration",
+          "named": true
+        },
+        {
           "type": "mixset_definition",
           "named": true
         },
