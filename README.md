@@ -51,7 +51,7 @@ The table below shows the LSP's support for Umple language features, based on th
 | changeType markers (+/-/\*) | ** | ✅ | |
 | standaloneTransition | ** | ✅ | In SM body and state body |
 | mixsetDefinition (in SM) | ** | ✅ | |
-| activeDefinition | * | ✅ | `active { code }` or `active name { code }` |
+| activeDefinition | * | ✅ | `active [codeLangs] [name] moreCode+`; comma-separated lang tags are spec-valid but crash current compiler (E9100 bug) |
 | **Top-level entities** | | | |
 | traitDefinition | * | ⚠️ | Simple `<T>` type parameters supported; broader official trait clauses may not be |
 | interfaceDefinition | ** | ✅ | |

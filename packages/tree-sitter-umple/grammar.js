@@ -380,14 +380,26 @@ module.exports = grammar({
 
     immutable_declaration: ($) => prec(1, seq("immutable", ";")),
 
-    // active { code } — runs in its own thread on construction
+    // active [codeLangs] [name]? moreCode+ — runs in its own thread on construction
+    //
+    // NOTE: comma-separated lang tags (e.g. active Java, Cpp { code }) are spec-valid
+    // but crash the current compiler with E9100 (NullPointerException in analyzeActiveObject).
+    // This is a known compiler bug. The grammar correctly accepts the spec-valid form.
+    //
+    // Two parse forms are used to avoid GLR ambiguity:
+    //   Form A: active codeLangs name moreCode+  — prefix lang, name is required
+    //   Form B: active [name] moreCode+           — no prefix lang; lang tags go inside moreCode
+    //
+    // After "active code_lang {" the lookahead { is unambiguous → Form B (lang is in more_code).
+    // After "active code_lang identifier" the lookahead identifier is unambiguous → Form A.
+    // "active Java { code }" → Form B: more_code = Java { code }
+    // "active Cpp Worker { code }" → Form A: code_langs=Cpp, name=Worker
     active_definition: ($) =>
-      seq(
-        "active",
-        optional(field("name", $.identifier)),
-        "{",
-        optional($.code_content),
-        "}",
+      choice(
+        // Form A: explicit prefix lang tag followed by a thread name
+        seq("active", $.code_langs, field("name", $.identifier), repeat1($.more_code)),
+        // Form B: optional thread name; any lang tags live inside moreCode blocks
+        seq("active", optional(field("name", $.identifier)), repeat1($.more_code)),
       ),
 
     symmetric_reflexive_association: ($) =>
