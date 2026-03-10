@@ -413,10 +413,25 @@ module.exports = grammar({
         ";",
       ),
 
+    // Header for regular transitions inside a state body.
+    // Guard-only is valid: [x>0] -> T; compiles cleanly.
+    _transition_header: ($) =>
+      choice(
+        seq(field("event", $.event_spec), optional($.guard)), // e [g]?
+        seq($.guard, optional(field("event", $.event_spec))), // [g] e?
+      ),
+
+    // Header for standalone transitions (SM body level).
+    // Guard-only standalone ([x>0] Open -> Closed) is W1006 — event is always required.
+    _standalone_transition_header: ($) =>
+      choice(
+        seq(field("event", $.event_spec), optional($.guard)), // e [g]?
+        seq($.guard, field("event", $.event_spec)),           // [g] e  (event required)
+      ),
+
     standalone_transition: ($) =>
       seq(
-        field("event", $.event_spec),
-        optional($.guard),
+        $._standalone_transition_header,
         field("from_state", $.identifier),
         optional($.action_code),
         "->",
@@ -538,8 +553,7 @@ module.exports = grammar({
 
     transition: ($) =>
       seq(
-        optional(field("event", $.event_spec)),
-        optional($.guard),
+        optional($._transition_header),
         choice(
           seq($.action_code, "->"), // pre-arrow only:  e [g] / { code } -> T;
           seq("->", $.action_code), // post-arrow only: e [g] -> / { code } T;
@@ -555,7 +569,7 @@ module.exports = grammar({
     guard: ($) => seq("[", /[^\]]+/, "]"),
 
     action_code: ($) =>
-      seq("/", choice(seq("{", optional($.code_content), "}"), $.identifier)),
+      seq("/", repeat1($.more_code)),
 
     // code_lang / code_langs: optional target-language tags on code blocks
     // e.g. entry / Java { ... }  or  entry / Java, Cpp { ... }
