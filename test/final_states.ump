@@ -1,0 +1,28 @@
+// Test: final keyword on state declarations
+// All forms verified against umplesync.jar -generate nothing
+
+class Door {
+  status {
+    Open {
+      close -> Closed;
+    }
+    final Closed {}
+  }
+}
+
+class AutoDoor {
+  status {
+    Open {
+      do { Thread.sleep(1000); }
+      -> Closing;
+    }
+    Closing {
+      reachBottom -> Closed;
+    }
+    final Closed {}
+  }
+}
+
+mixset Locking {
+  + final Locked {}
+}

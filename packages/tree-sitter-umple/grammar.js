@@ -503,6 +503,7 @@ module.exports = grammar({
     state: ($) =>
       seq(
         optional(field("change_type", choice("+", "-", "*"))),
+        optional(field("is_final", "final")),
         field("name", $.identifier),
         "{",
         repeat(

@@ -109,6 +109,7 @@
   "exit"
   "do"
   "active"
+  "final"
   "trace"
   "tracecase"
   "activate"
