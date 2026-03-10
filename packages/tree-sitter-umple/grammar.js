@@ -545,10 +545,24 @@ module.exports = grammar({
     action_code: ($) =>
       seq("/", choice(seq("{", optional($.code_content), "}"), $.identifier)),
 
-    entry_exit_action: ($) =>
-      seq(choice("entry", "exit"), "/", "{", optional($.code_content), "}"),
+    // code_lang / code_langs: optional target-language tags on code blocks
+    // e.g. entry / Java { ... }  or  entry / Java, Cpp { ... }
+    code_lang: ($) =>
+      choice(
+        "Java", "RTCpp", "SimpleCpp", "Cpp", "Php",
+        "Ruby", "Python", "Alloy", "UmpleSelf",
+      ),
 
-    do_activity: ($) => seq("do", "{", optional($.code_content), "}"),
+    code_langs: ($) => seq($.code_lang, repeat(seq(",", $.code_lang))),
+
+    // moreCode in official grammar: codeLangs? { code }
+    more_code: ($) =>
+      seq(optional($.code_langs), "{", optional($.code_content), "}"),
+
+    entry_exit_action: ($) =>
+      seq(choice("entry", "exit"), optional($.guard), "/", repeat1($.more_code)),
+
+    do_activity: ($) => seq("do", repeat1($.more_code)),
 
     // =====================
     // METHODS

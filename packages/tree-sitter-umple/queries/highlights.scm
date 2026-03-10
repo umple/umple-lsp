@@ -63,6 +63,8 @@
 
 (generate_statement language: _ @string.special)
 
+(code_lang) @string.special
+
 [
   "--override"
   "--override-all"
