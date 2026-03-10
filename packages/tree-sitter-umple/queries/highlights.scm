@@ -109,7 +109,17 @@
   "exit"
   "do"
   "active"
+  "trace"
+  "tracecase"
+  "activate"
+  "deactivate"
 ] @keyword
+
+; Trace-specific sub-keywords highlighted only inside trace_statement
+(trace_statement [
+  "where" "until" "after" "giving" "record"
+  "onAllObjects" "onThisThreadOnly" "onThisObject"
+] @keyword)
 
 [
   "new"

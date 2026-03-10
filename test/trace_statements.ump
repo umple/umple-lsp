@@ -1,0 +1,39 @@
+// Test: trace statements in class, SM, and state bodies
+// All forms verified against umplesync.jar -generate nothing
+
+class Counter {
+  Integer count = 0;
+  void increment() { count++; }
+
+  // trace in class body
+  trace count;
+  trace increment;
+  trace count where [count > 0];
+  trace count after [count == 5];
+  trace count until [count > 100];
+  trace count record count;
+
+  // tracecase + activate/deactivate in class body
+  tracecase debugMode {
+    trace count;
+    trace increment;
+  }
+  activate debugMode;
+  deactivate debugMode onThisObject;
+
+  counter {
+    // trace in state machine body
+    trace count;
+
+    Active {
+      // trace in state body
+      trace count;
+      trace count where [count > 0];
+      go -> Idle;
+    }
+    Idle {
+      trace count;
+      go -> Active;
+    }
+  }
+}

@@ -117,6 +117,7 @@ module.exports = grammar({
         $.emit_method,
         $.template_attribute,
         $.active_definition,
+        $.trace_statement,
         ";", // bare semicolons are valid in class/mixset bodies
       ),
 
@@ -237,6 +238,53 @@ module.exports = grammar({
           "||",
         )),
         "}",
+      ),
+
+    // =====================
+    // TRACE STATEMENTS
+    // =====================
+    // Parse-only support. Supported forms:
+    //   trace entity [()]? postfix* ;
+    //   tracecase name { trace entity [()]? postfix* ; ... }
+    //   activate name (onAllObjects|onThisThreadOnly)? ;
+    //   deactivate name onThisObject ;
+    // Postfix: where/until/after/giving [condition], record entity
+    // Deferred: execute { code }, prefix keywords (set/get/in/out etc.), logLevel/for/period/during
+    trace_statement: ($) =>
+      choice(
+        seq(
+          "trace",
+          $.identifier,
+          optional(seq("(", ")")),
+          repeat($.trace_postfix),
+          ";",
+        ),
+        seq(
+          "tracecase",
+          field("name", $.identifier),
+          "{",
+          repeat(seq(
+            "trace",
+            $.identifier,
+            optional(seq("(", ")")),
+            repeat($.trace_postfix),
+            ";",
+          )),
+          "}",
+        ),
+        seq(
+          "activate",
+          $.identifier,
+          optional(choice("onAllObjects", "onThisThreadOnly")),
+          ";",
+        ),
+        seq("deactivate", $.identifier, "onThisObject", ";"),
+      ),
+
+    trace_postfix: ($) =>
+      choice(
+        seq(choice("where", "until", "after", "giving"), $.guard),
+        seq("record", $.identifier),
       ),
 
     // =====================
@@ -448,7 +496,7 @@ module.exports = grammar({
         optional("pooled"),
         field("name", $.identifier),
         "{",
-        repeat(choice($.state, $.standalone_transition, $.mixset_definition)),
+        repeat(choice($.state, $.standalone_transition, $.mixset_definition, $.trace_statement)),
         "}",
       ),
 
@@ -467,6 +515,7 @@ module.exports = grammar({
             $.display_color,
             $.mixset_definition,
             $.method_declaration,
+            $.trace_statement,
             "||",
             ";", // bare semicolons allowed in state bodies
           ),
