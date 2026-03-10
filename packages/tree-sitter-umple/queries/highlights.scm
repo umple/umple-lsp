@@ -115,11 +115,10 @@
   "deactivate"
 ] @keyword
 
-; Trace-specific sub-keywords highlighted only inside trace_statement
-(trace_statement [
-  "where" "until" "after" "giving" "record"
-  "onAllObjects" "onThisThreadOnly" "onThisObject"
-] @keyword)
+; Trace postfix sub-keywords (children of trace_postfix, not trace_statement)
+(trace_postfix ["where" "until" "after" "giving" "record"] @keyword)
+; activate/deactivate modifiers (direct children of trace_statement)
+(trace_statement ["onAllObjects" "onThisThreadOnly" "onThisObject"] @keyword)
 
 [
   "new"
