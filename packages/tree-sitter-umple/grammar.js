@@ -457,9 +457,12 @@ module.exports = grammar({
         ";",
       ),
 
-    // Attribute: [modifier] [Type] name [= value];
+    // Attribute: [unique]? [lazy]? [modifier]? [Type] name [= value];
+    // Official grammar has fixed-order positional slots, not a free-form modifier bag.
     attribute_declaration: ($) =>
       seq(
+        optional("unique"),
+        optional("lazy"),
         optional($.attribute_modifier),
         optional(field("type", $.type_name)),
         field("name", $.identifier),
@@ -477,16 +480,17 @@ module.exports = grammar({
         ";",
       ),
 
+    // Modifier keywords for attributes. `unique` and `lazy` are separate positional
+    // slots in the official grammar and live directly in `attribute_declaration`.
+    // `autounique` is officially its own rule, kept here as a compatibility shortcut.
     attribute_modifier: ($) =>
       choice(
-        "lazy",
+        "immutable",
         "settable",
         "internal",
         "defaulted",
-        "immutable",
-        "autounique",
-        "unique",
         "const",
+        "autounique",
       ),
 
     // =====================
@@ -494,6 +498,7 @@ module.exports = grammar({
     // =====================
     association_inline: ($) =>
       seq(
+        optional("immutable"),
         $.multiplicity,
         optional(field("left_role", $.identifier)),
         $.arrow,
@@ -521,6 +526,7 @@ module.exports = grammar({
 
     association_member: ($) =>
       seq(
+        optional("immutable"),
         $.multiplicity,
         field("left_type", $.identifier),
         optional(field("left_role", $.identifier)),
