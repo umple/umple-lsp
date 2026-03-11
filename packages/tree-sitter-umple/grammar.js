@@ -211,11 +211,28 @@ module.exports = grammar({
       seq(
         "req",
         field("name", $.identifier),
-        optional($.identifier),
+        optional(field("language", $.req_language)),
         "{",
-        optional(/[^}]*/),
+        optional(field("content", $.req_content)),
         "}",
       ),
+
+    // Requirement language is a single token before "{". Verified compiler-valid
+    // forms include bare identifiers, dotted/dashed names, and quoted one-token
+    // names. Multi-word quoted strings are intentionally not accepted here.
+    req_language: ($) =>
+      token(
+        choice(
+          /[A-Za-z0-9_.-]+/,
+          seq('"', /[^"\s{}]+/, '"'),
+          seq("'", /[^'\s{}]+/, "'"),
+        ),
+      ),
+
+    // Requirement content remains intentionally opaque. This only makes the body
+    // brace-tolerant so compiler-valid nested text does not break indexing.
+    req_content: ($) =>
+      repeat1(choice(/[^\{\}]+/, seq("{", optional($.req_content), "}"))),
 
     // =====================
     // MIXSET DEFINITION
