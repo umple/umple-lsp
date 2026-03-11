@@ -18,6 +18,16 @@
 (interface_definition name: (identifier) @reference.interface)
 (trait_definition name: (identifier) @reference.trait)
 (enum_definition name: (identifier) @reference.enum)
+
+; =====================
+; TRAIT PARAMETER REFERENCES
+; =====================
+; Constraint interfaces in <TP isA I1 & I2> — must be interfaces
+(trait_parameter_constraint (qualified_name (identifier) @reference.interface))
+; Default types in <TP = DefaultClass> — can be any named type
+(trait_parameter default: (qualified_name (identifier) @reference.class_interface_trait))
+; Binding values in isA T<TP = C1> — can be any named type
+(trait_binding value: (qualified_name (identifier) @reference.class_interface_trait))
 (enum_value name: (identifier) @reference.enum_value)
 (external_definition name: (identifier) @reference.class)
 (mixset_definition name: (identifier) @reference.mixset)
@@ -33,6 +43,7 @@
 (const_declaration name: (identifier) @reference.const)
 (method_declaration name: (identifier) @reference.method)
 (method_signature name: (identifier) @reference.method)
+(trait_method_signature name: (identifier) @reference.method)
 
 ; =====================
 ; TYPE REFERENCES

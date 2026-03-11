@@ -32,6 +32,7 @@
 (const_declaration name: (identifier) @definition.const)
 (method_declaration name: (identifier) @definition.method)
 (method_signature name: (identifier) @definition.method)
+(trait_method_signature name: (identifier) @definition.method)
 (state_machine name: (identifier) @definition.statemachine)
 (state name: (identifier) @definition.state)
 (referenced_statemachine name: (identifier) @definition.statemachine)

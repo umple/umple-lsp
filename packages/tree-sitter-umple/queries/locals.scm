@@ -110,6 +110,10 @@
 (type_name
   (qualified_name) @local.reference)
 
+; Trait binding values reference types
+(trait_binding
+  value: (qualified_name) @local.reference)
+
 ; Transition targets reference states
 (transition
   target: (identifier) @local.reference)

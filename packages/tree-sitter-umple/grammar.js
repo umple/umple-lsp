@@ -172,11 +172,31 @@ module.exports = grammar({
       seq(
         "trait",
         field("name", $.identifier),
-        optional($.type_parameters),
+        optional($.trait_parameters),
         "{",
-        repeat($._class_content),
+        repeat($._trait_content),
         "}",
       ),
+
+    // Trait bodies accept everything class bodies accept, plus abstract method
+    // signatures (semicolon-terminated) and nested trait definitions.
+    _trait_content: ($) =>
+      choice($._class_content, $.trait_method_signature, $.trait_definition),
+
+    // Trait template parameters: <TP isA I1 & I2 = Default, TP2>
+    // Official grammar: traitParameters, traitFullParameters, traitParametersInterface
+    trait_parameters: ($) =>
+      seq("<", $.trait_parameter, repeat(seq(",", $.trait_parameter)), ">"),
+
+    trait_parameter: ($) =>
+      seq(
+        field("name", $.identifier),
+        optional($.trait_parameter_constraint),
+        optional(seq("=", field("default", $.qualified_name))),
+      ),
+
+    trait_parameter_constraint: ($) =>
+      seq("isA", $.qualified_name, repeat(seq("&", $.qualified_name))),
 
     // =====================
     // EXTERNAL DEFINITION
@@ -643,6 +663,36 @@ module.exports = grammar({
         ";",
       ),
 
+    // Semicolon-terminated method declaration for trait bodies only.
+    // Two valid forms per compiler testing:
+    //   1. Implicit abstract: return type required (e.g. void f();)
+    //   2. Explicit abstract: keyword required, visibility optional
+    //      (e.g. abstract f();  /  public abstract void f();)
+    // Rejects: f();  public void f();  protected void f();  (all W1007)
+    trait_method_signature: ($) =>
+      choice(
+        // Branch 1: implicit abstract — return type required
+        seq(
+          field("return_type", $.type_name),
+          field("name", $.identifier),
+          "(",
+          optional($.param_list),
+          ")",
+          ";",
+        ),
+        // Branch 2: explicit abstract — keyword required, visibility optional
+        seq(
+          optional(choice("public", "protected")),
+          "abstract",
+          optional(field("return_type", $.type_name)),
+          field("name", $.identifier),
+          "(",
+          optional($.param_list),
+          ")",
+          ";",
+        ),
+      ),
+
     visibility: ($) => choice("public", "private", "protected"),
 
     param_list: ($) => seq($.param, repeat(seq(",", $.param))),
@@ -722,14 +772,21 @@ module.exports = grammar({
     type_name: ($) =>
       seq(
         $.qualified_name,
-        optional(seq("<", $.type_list, ">")),
+        optional(
+          seq("<", $._type_argument, repeat(seq(",", $._type_argument)), ">"),
+        ),
         optional("[]"),
       ),
 
-    type_list: ($) => seq($.type_name, repeat(seq(",", $.type_name))),
+    // Each angle-bracket argument is either a regular type or a trait binding.
+    // trait_binding requires "=", so <X> unambiguously resolves to type_name.
+    _type_argument: ($) => choice($.trait_binding, $.type_name),
 
-    type_parameters: ($) =>
-      seq("<", $.identifier, repeat(seq(",", $.identifier)), ">"),
+    // Trait parameter application: TP = ClassName (inside <> of isA type)
+    trait_binding: ($) =>
+      seq(field("param", $.identifier), "=", field("value", $.qualified_name)),
+
+    type_list: ($) => seq($.type_name, repeat(seq(",", $.type_name))),
 
     // =====================
     // VALUES

@@ -175,6 +175,10 @@
   (type_list
     (type_name) @type))
 
+(trait_binding
+  param: (identifier) @variable
+  value: (qualified_name) @type)
+
 ; Built-in types
 ((identifier) @type.builtin
   (#any-of? @type.builtin
@@ -195,6 +199,9 @@
   name: (identifier) @function)
 
 (method_signature
+  name: (identifier) @function)
+
+(trait_method_signature
   name: (identifier) @function)
 
 (event_spec
