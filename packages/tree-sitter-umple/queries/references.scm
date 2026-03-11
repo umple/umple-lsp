@@ -73,12 +73,12 @@
 ; =====================
 ; ASSOCIATION TYPE REFERENCES
 ; =====================
-; Types in associations can only be classes
+; Types in associations — can be classes, interfaces, or traits
 
-(association_inline right_type: (identifier) @reference.class)
-(association_member left_type: (identifier) @reference.class)
-(association_member right_type: (identifier) @reference.class)
-(single_association_end type: (identifier) @reference.class)
+(association_inline right_type: (identifier) @reference.class_interface_trait)
+(association_member left_type: (identifier) @reference.class_interface_trait)
+(association_member right_type: (identifier) @reference.class_interface_trait)
+(single_association_end type: (identifier) @reference.class_interface_trait)
 
 ; =====================
 ; STATE REFERENCES

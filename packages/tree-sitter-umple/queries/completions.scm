@@ -40,11 +40,11 @@
 (isa_declaration) @scope.class_interface_trait_enum
 
 ; =====================
-; ASSOCIATION SCOPES (offer class names only)
+; ASSOCIATION SCOPES (offer type names — classes, interfaces, traits)
 ; =====================
-(association_definition) @scope.class
-(association_inline) @scope.class
-(association_member) @scope.class
+(association_definition) @scope.class_interface_trait
+(association_inline) @scope.class_interface_trait
+(association_member) @scope.class_interface_trait
 
 ; =====================
 ; STATE MACHINE SCOPES (offer state names)
