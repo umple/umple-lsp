@@ -1,0 +1,104 @@
+// Test file: Guard semantic support (Round 1)
+//
+// Covers: go-to-def and completion on identifiers inside guards.
+// Guards share _constraint_expr internals with constraints but have
+// broader scope (own + inherited attributes, not just own).
+//
+// Deferred: event parameter resolution, method call resolution.
+
+// --- Own attributes and constants in guards ---
+
+class Elevator {
+  Integer currentFloor = 1;
+  Integer maxFloor = 10;
+  Boolean enabled = true;
+  const Integer LIMIT = 50;
+
+  status {
+    Idle {
+      // Lone boolean guard
+      start [enabled] -> Moving;
+      // Attribute comparison
+      check [currentFloor < maxFloor] -> Moving;
+      // Attribute vs constant
+      limit [currentFloor < LIMIT] -> Moving;
+      // Negation
+      deny [!enabled] -> Error;
+    }
+    Moving {
+      arrive -> Idle;
+    }
+    Error {
+      reset -> Idle;
+    }
+  }
+}
+
+// --- Inherited attributes in guards ---
+
+class Base {
+  Boolean active = true;
+  Integer baseLimit = 100;
+}
+
+class Child {
+  isA Base;
+  Integer value = 0;
+
+  childStatus {
+    Ready {
+      // Guard references inherited attribute (valid per compiler)
+      go [active] -> Working;
+      // Guard references own + inherited
+      proceed [value < baseLimit] -> Working;
+    }
+    Working {
+      stop -> Ready;
+    }
+  }
+}
+
+// --- Event parameters in guards (deferred for LSP resolution) ---
+
+class Door {
+  Integer maxWeight = 200;
+
+  doorStatus {
+    Closed {
+      // Event param referenced in guard — compiles clean,
+      // but go-to-def on "weight" is deferred (not indexed)
+      open(Integer weight) [weight <= maxWeight] -> Open;
+    }
+    Open {
+      close -> Closed;
+    }
+  }
+}
+
+// --- Constraint comparison (own attributes only, E028) ---
+
+class ConstraintTest {
+  Integer age;
+  const Integer MAX_AGE = 120;
+  // Own attribute vs own constant: valid
+  [age <= MAX_AGE]
+}
+
+// --- Auto-transition with guard ---
+
+class Bro {
+  bb;
+}
+
+class AutoTrans {
+  Boolean ready = false;
+
+  mode {
+    Waiting {
+      [ready] -> Active;
+    }
+    Active {
+      stop -> Waiting;
+    }
+  }
+}

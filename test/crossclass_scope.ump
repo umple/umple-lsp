@@ -1,0 +1,108 @@
+// === Cross-class go-to-def comprehensive test ===
+
+// --- Case 1: Constraint -> unrelated class attribute ---
+class Other { Integer ghost; }
+class A {
+  Integer own;
+  [ghost > 0]
+}
+
+// --- Case 2: Constraint -> unrelated trait attribute ---
+trait T { Integer ghost; }
+class B {
+  Integer own;
+  [ghost > 0]
+}
+
+// --- Case 3: Constraint -> unrelated interface constant ---
+interface I { const Integer LIMIT = 5; }
+class C {
+  Integer own;
+  [own < LIMIT]
+}
+
+// --- Case 4: Key definition -> unrelated attribute ---
+class Other2 { Integer ghost; }
+class D {
+  Integer own;
+  key { ghost }
+}
+
+// --- Case 5: Guard -> unrelated attribute ---
+class Other3 { Boolean ghost = true; }
+class E {
+  status {
+    S {
+      go [ghost] -> T;
+    }
+    T {}
+  }
+}
+
+// --- Case 6: Transition target -> unrelated state ---
+class F {
+  status {
+    Missing {}
+  }
+}
+class G {
+  status {
+    S { go -> Missing; }
+    T {}
+  }
+}
+
+// --- Case 7: Guard -> unrelated trait attribute ---
+trait T2 { Boolean ghost = true; }
+class H {
+  status {
+    S {
+      go [ghost] -> T;
+    }
+    T {}
+  }
+}
+
+// --- Case 8: Inherited guard attribute (SHOULD work) ---
+class Base { Boolean active = true; Integer baseLimit = 100; }
+class Child {
+  isA Base;
+  Integer value = 0;
+  childStatus {
+    Ready {
+      go [active] -> Working;
+      proceed [value < baseLimit] -> Working;
+    }
+    Working { stop -> Ready; }
+  }
+}
+
+// --- Case 9: Own constraint attribute (SHOULD work) ---
+class OwnTest {
+  Integer age;
+  [age > 0]
+}
+
+// --- Case 10: Own guard attribute (SHOULD work) ---
+class OwnGuard {
+  Boolean ready = false;
+  mode {
+    Waiting { [ready] -> Active; }
+    Active { stop -> Waiting; }
+  }
+}
+
+// --- Case 11: Own key attribute (SHOULD work) ---
+class OwnKey {
+  Integer id;
+  String name;
+  key { id, name }
+}
+
+// --- Case 12: Local state target (SHOULD work) ---
+class LocalState {
+  status {
+    Missing {}
+    S { go -> Missing; }
+  }
+}

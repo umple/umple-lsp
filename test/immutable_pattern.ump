@@ -1,0 +1,56 @@
+// Test file: Immutable pattern fidelity
+// Covers all compiler-verified immutable forms
+
+// === CLASS-LEVEL IMMUTABLE ===
+class Point2D {
+  immutable;
+  Float x;
+  Float y;
+}
+
+// === ATTRIBUTE MODIFIERS ===
+class AttrMods {
+  // Single modifiers (existing, regression)
+  immutable Integer a;
+  lazy Integer b;
+  unique Integer c;
+  settable Integer d;
+  autounique e;
+
+  // Combined modifiers (NEW — fixed-order positional slots)
+  lazy immutable Integer f;
+  unique lazy immutable Integer g;
+  unique immutable Integer h;
+
+  // Derived attribute with modifier (semicolon required by our grammar)
+  immutable String fullName = { firstName + " " + lastName };
+  lazy immutable String greeting = { "Hello " + firstName };
+  String firstName;
+  String lastName;
+
+  // Assigned attribute with modifier
+  immutable Integer limit = 100;
+}
+
+// === IMMUTABLE INLINE ASSOCIATION ===
+class Order {
+  Integer orderId;
+  immutable * -> 0..1 Customer;
+  immutable 1 -> * Item;
+}
+class Customer {
+  immutable;
+  String name;
+}
+class Item {
+  String desc;
+}
+
+// === IMMUTABLE STANDALONE ASSOCIATION ===
+association {
+  immutable 0..1 Customer -> * Order;
+}
+
+// === REJECTED FORM (should be ERROR — wrong modifier order) ===
+// Uncomment to verify ERROR node:
+// class Bad { immutable lazy Integer z; }

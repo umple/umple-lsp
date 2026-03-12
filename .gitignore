@@ -25,6 +25,6 @@ packages/server/completions.scm
 
 # TypeScript incremental build info
 *.tsbuildinfo
-test/*
+test/scratch/
 versionRunning.txt
 .DS_Store

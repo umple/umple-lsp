@@ -1,0 +1,81 @@
+// Test file: transition header fidelity
+// Covers all compiler-verified guard/event orderings
+//
+// Manual test checklist:
+//   1. Go-to-def: click on target state names (A, B, Idle, Done) — should jump to definition
+//   2. Hover: hover on event names (go, reset, unspecified) — should show transition info
+//   3. Completion: type "-> " inside a state body — should offer state completions
+//   4. No ERROR nodes: all transitions should have clean syntax highlighting
+
+class TransHeader {
+  Integer x = 5;
+
+  status {
+
+    // --- Regular transitions (inside state body) ---
+
+    Start {
+      // existing: event only
+      go -> A;
+
+      // existing: event + guard
+      go [x > 0] -> A;
+
+      // existing: guard only
+      [x > 0] -> A;
+
+      // NEW: guard + event (reversed order)
+      [x > 0] go -> A;
+
+      // NEW: guard + unspecified event
+      [x > 0] unspecified -> A;
+
+      // NEW: guard only + pre-arrow action
+      [x > 0] / { doWork(); } -> A;
+
+      // NEW: guard + event + pre-arrow action
+      [x > 0] go / { doWork(); } -> A;
+
+      // NEW: guard only + post-arrow action
+      [x > 0] -> / { doWork(); } A;
+
+      // NEW: guard + event + post-arrow action
+      [x > 0] go -> / { doWork(); } A;
+    }
+
+    A {
+      reset -> Start;
+    }
+
+  }
+
+}
+
+class TransStandalone {
+  Integer x = 5;
+
+  status {
+
+    // --- Standalone transitions (SM body level) ---
+
+    // existing: event + guard
+    go [x > 0] Idle -> Done;
+
+    // NEW: guard + event (reversed order)
+    [x > 0] go Idle -> Done;
+
+    // NEW: guard + unspecified event
+    [x > 0] unspecified Idle -> Done;
+
+    // NEW: guard + event + pre-arrow action
+    [x > 0] go Idle / { doWork(); } -> Done;
+
+    // NEW: guard + event + post-arrow action
+    [x > 0] go Idle -> / { doWork(); } Done;
+
+    Idle {}
+    Done {}
+
+  }
+
+}

@@ -1,0 +1,142 @@
+// Comprehensive rename test file — covers all symbol kinds
+
+// ── Interfaces ──
+interface Printable {
+  void print();
+}
+
+interface Serializable {
+  void serialize();
+}
+
+// ── Traits ──
+trait Timestamped {
+  Date createdAt;
+  Date updatedAt;
+}
+
+// ── Enums ──
+enum Priority { High, Medium, Low }
+enum Status { Active, Inactive }
+
+// ── Classes ──
+class Animal {
+  name;
+  Integer age;
+  const MAX_AGE = 100;
+
+  isA Printable;
+
+  key { name }
+
+  [age > 0]
+  [age < MAX_AGE]
+
+  status {
+    Alive {
+      die -> Dead;
+    }
+    Dead {}
+  }
+
+  void makeSound() {
+    // opaque body
+  }
+}
+
+class Dog {
+  isA Animal;
+  breed;
+
+  status {
+    Trained {
+      forget -> Untrained;
+    }
+    Untrained {
+      learn -> Trained;
+    }
+  }
+}
+
+// ── Associations ──
+association Ownership {
+  0..1 Animal owner -- * Dog pets;
+}
+
+// ── Split class (partial definition) ──
+class Animal {
+  Boolean isWild;
+}
+
+// ── Mixsets ──
+mixset AdvancedFeatures {
+  class Animal {
+    Integer speed;
+  }
+}
+
+// ── State machine references ──
+class Cat {
+  isA Animal;
+  Integer lives;
+
+  mood {
+    Happy {
+      scare -> Scared;
+    }
+    Scared {
+      calm -> Happy;
+    }
+  }
+}
+
+// ── Type references in various contexts ──
+class Shelter {
+  isA Serializable;
+  0..1 -- * Animal residents;
+  Cat favoriteCat;
+}
+
+// ── Standalone transition ──
+class TrafficLight {
+  signal {
+    Red {
+      timer -> Green;
+    }
+    Green {
+      timer -> Yellow;
+    }
+    Yellow {
+      timer -> Red;
+    }
+  }
+}
+
+// ── Nested states for disambiguation ──
+class Robot {
+  mode {
+    Manual {
+      Idle {
+        start -> Manual.Active;
+      }
+      Active {
+        stop -> Manual.Idle;
+        Inner {}
+      }
+    }
+    Auto {
+      Idle {
+        start -> Auto.Active;
+      }
+      Active {
+        stop -> Auto.Idle;
+        Inner {}
+      }
+    }
+  }
+}
+
+// ── Emit method & template ──
+class Report {
+  emit genReport()();
+}

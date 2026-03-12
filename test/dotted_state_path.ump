@@ -1,0 +1,53 @@
+// Test file for dotted state path disambiguation (go-to-def + completion)
+//
+// Scenario (a): Ambiguous unqualified → multi result
+//   Click "Inner" in "e1 -> Inner;"  →  both Open.Inner and Closed.Inner
+//
+// Scenario (b): Disambiguated dotted path → single result
+//   Click "Inner" in "e2 -> Open.Inner;"    → only Open's Inner
+//   Click "Inner" in "e3 -> Closed.Inner;"  → only Closed's Inner
+//
+// Scenario (c): Cross-class same SM name isolation
+//   A.status and B.status both have states named Open/Closed.
+//   Go-to-def inside A must never return B's states.
+
+class A {
+  status {
+    EEE {
+      Open {
+        Inner {
+          stay -> Inner;
+        }
+      }
+      Closed {
+        Inner {
+          stay -> Inner;
+        }
+      }
+    }
+
+    TestState {
+      // (a) ambiguous: unqualified → 2 results (Open.Inner + Closed.Inner)
+      e1 -> Inner;
+
+      // (b) disambiguated: dotted path → 1 result each
+      e2 -> Open.Inner;
+      e3 -> Closed.Inner;
+
+      // (b) deeper: clicking each segment goes to the right state
+      e4 -> EEE.Open.Inner;
+    }
+  }
+}
+
+// (c) Cross-class isolation: same SM name "status", same state names
+class B {
+  status {
+    Open {
+      enter -> Closed;
+    }
+    Closed {
+      enter -> Open;
+    }
+  }
+}
