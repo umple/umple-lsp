@@ -107,11 +107,12 @@
 (key_definition (identifier) @reference.attribute)
 
 ; =====================
-; CONSTRAINT IDENTIFIERS
+; CONSTRAINT & GUARD IDENTIFIERS
 ; =====================
-; Identifiers inside constraints reference attributes or constants
+; Identifiers inside constraints/guards reference attributes or constants
 
 (constraint (identifier) @reference.attribute_const)
+(guard (identifier) @reference.attribute_const)
 
 ; =====================
 ; EMIT METHOD & TEMPLATE

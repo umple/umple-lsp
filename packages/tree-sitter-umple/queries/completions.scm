@@ -60,6 +60,8 @@
 ; =====================
 ; key { attr1, attr2 } — offer attribute names (scoped to class + inherited)
 (key_definition) @scope.attribute
+; Guard expressions — offer attributes (own + inherited)
+(guard) @scope.attribute
 
 ; depend java.util.* — suppress (not a symbol reference)
 (depend_statement) @scope.suppress

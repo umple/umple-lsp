@@ -24,6 +24,7 @@ module.exports = grammar({
     [$._class_content, $.mixset_definition],
     [$.state_machine, $.state],
     [$.event_spec, $.method_declaration],
+    [$.constraint, $.guard],
   ],
 
   rules: {
@@ -645,7 +646,7 @@ module.exports = grammar({
     event_spec: ($) =>
       seq($.identifier, optional(seq("(", optional($.param_list), ")"))),
 
-    guard: ($) => seq("[", /[^\]]+/, "]"),
+    guard: ($) => seq("[", repeat1($._constraint_expr), "]"),
 
     action_code: ($) =>
       seq("/", repeat1($.more_code)),
