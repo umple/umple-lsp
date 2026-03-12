@@ -496,18 +496,23 @@ function resolveSymbolAtPosition(
   }
 
   let symbols: SymbolEntry[] = [];
-  if (container) {
-    symbols = symbolIndex
-      .getSymbols({
-        name: token.word,
-        kind: token.kinds,
-        container,
-        inherited: true,
-      })
-      .filter((s) => reachableFiles.has(path.normalize(s.file)));
-  }
-
-  if (symbols.length === 0) {
+  if (isScoped) {
+    // Container-scoped kinds (attribute, const, method, template, state, statemachine):
+    // only search within the enclosing class/SM (with inheritance).
+    // Never fall back to global lookup — that would cross class boundaries.
+    if (container) {
+      symbols = symbolIndex
+        .getSymbols({
+          name: token.word,
+          kind: token.kinds,
+          container,
+          inherited: true,
+        })
+        .filter((s) => reachableFiles.has(path.normalize(s.file)));
+    }
+  } else {
+    // Global kinds (class, interface, trait, enum, mixset, requirement, association):
+    // search all reachable files without container restriction.
     symbols = symbolIndex
       .getSymbols({ name: token.word, kind: token.kinds })
       .filter((s) => reachableFiles.has(path.normalize(s.file)));
