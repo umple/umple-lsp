@@ -6,6 +6,7 @@ out/
 .zed/
 umple/
 CLAUDE.md
+UMPLE_FEATURE_COVERAGE.md
 
 # Tree-sitter native build output
 packages/tree-sitter-umple/build/

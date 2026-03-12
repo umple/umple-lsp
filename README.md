@@ -5,7 +5,7 @@ A Language Server Protocol implementation for the [Umple](https://www.umple.org)
 ## Features
 
 - **Diagnostics** - Real-time error and warning detection via the Umple compiler
-- **Go-to-definition** - Jump to classes, interfaces, traits, enums, attributes, methods, state machines, states, associations, mixsets, and requirements
+- **Go-to-definition** - Jump to classes, interfaces, traits, enums, attributes, methods, state machines, states, associations, mixsets, and requirements. Container-scoped resolution prevents false cross-class jumps.
 - **Code completion** - Context-aware keyword and symbol suggestions
 - **Syntax highlighting** - Tree-sitter grammar for accurate highlighting
 - **Cross-file support** - Transitive `use` statement resolution and cross-file diagnostics
@@ -21,7 +21,9 @@ The table below shows the LSP's support for Umple language features, based on th
 | generate | * | ✅ | Language names, path, `--override`, `-s` suboption |
 | suboption | * | ⚠️ | Syntax works; specific suboption names not enumerated |
 | filter | * | ✅ | Named/unnamed, numeric names, glob patterns, hops; class completions in `include`; go-to-def for plain names |
-| useStatement | ** | ✅ | file completions and go-to-def work; `lib:` paths parse cleanly, but runtime `lib:` resolution/go-to-def is deferred |
+| useStatement | ** | ✅ | File completions and go-to-def; `lib:` paths parse cleanly (runtime resolution deferred); comma-separated `use A.ump, B.ump;` |
+| requireStatement | ** | ✅ | `require [mixset]`, `require subfeature [...]` with boolean operators |
+| isFeature | * | ✅ | Feature declarations in mixsets and top-level |
 | requirement | ** | ✅ | Parsed, indexed, go-to-def |
 | reqImplementation | ** | ✅ | Identifiers reference requirements; go-to-def |
 | **Entity** | | | |
@@ -35,8 +37,8 @@ The table below shows the LSP's support for Umple language features, based on th
 | softwarePattern (isA, singleton, codeInjection) | ** | ✅ | |
 | depend | ** | ✅ | |
 | symmetricReflexiveAssociation | ** | ✅ | |
-| attribute | ** | ✅ | All modifiers, typed/untyped, defaults |
-| inlineAssociation | ** | ✅ | All arrow types |
+| attribute | ** | ✅ | All modifiers (incl. `immutable`), typed/untyped, defaults |
+| inlineAssociation | ** | ✅ | All arrow types; type refs include traits and interfaces |
 | concreteMethodDeclaration | ** | ✅ | Visibility, static, return type, params |
 | constantDeclaration | ** | ✅ | |
 | enumerationDefinition | ** | ✅ | Inside class or top-level |
@@ -46,14 +48,18 @@ The table below shows the LSP's support for Umple language features, based on th
 | **State machine** | | | |
 | inlineStateMachine | ** | ✅ | With queued/pooled |
 | state | ** | ✅ | Nested states, concurrent regions (`\|\|`) |
-| transitions (event/guard/action) | ** | ✅ | All forms: event, guard, pre-arrow action, post-arrow action |
-| entry / exit / do | ** | ✅ | |
+| transitions (event/guard/action) | ** | ✅ | All forms: event, guard, pre-arrow action, post-arrow action; guard-before-event ordering |
+| guard semantics | ** | ✅ | Structured constraint expressions; go-to-def and completion on attributes/constants inside guards (own + inherited); event params and method calls deferred |
+| entry / exit / do | ** | ✅ | Optional guard and language-tagged code blocks |
 | changeType markers (+/-/\*) | ** | ✅ | |
 | standaloneTransition | ** | ✅ | In SM body and state body |
-| mixsetDefinition (in SM) | ** | ✅ | |
+| final states | ** | ✅ | `Final` auto-terminal; `final stateName {}` explicit final |
+| trace statements | * | ✅ | Common forms: `trace`, `tracecase`, `activate`/`deactivate`; postfix clauses; full MOTL coverage not yet verified |
+| concreteMethodDeclaration (in state body) | * | ✅ | Methods inside state bodies |
+| mixsetDefinition (in SM/state) | ** | ✅ | In SM body, state body, and top-level |
 | activeDefinition | * | ✅ | `active [codeLangs] [name] moreCode+`; comma-separated lang tags are spec-valid but crash current compiler (E9100 bug) |
 | **Top-level entities** | | | |
-| traitDefinition | * | ✅ | Scoped project support includes declaration-side params, application-side bindings, trait semicolon methods, and nested traits; trait-only extras remain out of scope |
+| traitDefinition | * | ✅ | Parameters (isA constraints, default types, `&`-multi-constraint), abstract methods, nested traits, application-side bindings |
 | interfaceDefinition | ** | ✅ | |
 | associationDefinition | ** | ✅ | |
 | associationClassDefinition | ** | ✅ | |
@@ -61,7 +67,7 @@ The table below shows the LSP's support for Umple language features, based on th
 | topLevelCodeInjection | * | ✅ | `before/after/around { Class } op { code }` |
 | templateDefinition (top-level) | * | ✅ | Excluded for project scope: official grammar defines it, but non-empty top-level templates crash the current compiler and no manual examples exist |
 
-**Summary**: ✅ 37 supported, ❌ 0 not supported, ⚠️ 1 partial
+**Summary**: ✅ 43 supported, ❌ 0 not supported, ⚠️ 1 partial
 
 ## Editor Plugins
 
