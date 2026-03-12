@@ -75,7 +75,13 @@
 [
   "isA"
   "implementsReq"
+  "isFeature"
 ] @keyword.modifier
+
+[
+  "require"
+  "subfeature"
+] @keyword.directive
 
 [
   "abstract"
@@ -383,3 +389,9 @@
 
 ; Named invariant label: [myInvariant: expr]
 (constraint_name (identifier) @property)
+
+; =============
+; REQUIRE STATEMENT
+; =============
+
+(require_body) @string.special

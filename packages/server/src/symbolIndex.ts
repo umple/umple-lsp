@@ -431,8 +431,8 @@ export class SymbolIndex {
     const usePaths: string[] = [];
     const visit = (node: SyntaxNode) => {
       if (node.type === "use_statement") {
-        const pathNode = node.childForFieldName("path");
-        if (pathNode) {
+        const pathNodes = node.childrenForFieldName("path");
+        for (const pathNode of pathNodes) {
           usePaths.push(pathNode.text);
         }
       } else {
@@ -478,8 +478,8 @@ export class SymbolIndex {
     const useStatements: UseStatementWithPosition[] = [];
     const visit = (node: SyntaxNode) => {
       if (node.type === "use_statement") {
-        const pathNode = node.childForFieldName("path");
-        if (pathNode) {
+        const pathNodes = node.childrenForFieldName("path");
+        for (const pathNode of pathNodes) {
           useStatements.push({
             path: pathNode.text,
             line: node.startPosition.row,

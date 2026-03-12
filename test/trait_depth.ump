@@ -1,0 +1,121 @@
+// Test file: Trait definition depth (Round 1)
+//
+// Covers: trait parameters (isA constraints, default types, &-multi-constraint),
+//         abstract methods in traits, nested trait definitions.
+//
+// Note: trait parameter APPLICATION (isA T<TP = C>) is deferred to Round 2
+// and will still produce a partial parse error.
+
+// --- Interfaces for trait parameter constraints ---
+
+interface Printable {
+  String toPrintString();
+}
+
+interface Serializable {
+  String serialize();
+}
+
+// --- Default type ---
+
+class DefaultEntity {
+  String label;
+}
+
+// --- Trait parameter: isA constraint ---
+
+trait Displayable<TP isA Printable> {
+  abstract TP getDisplayItem();
+  String display() {
+    return getDisplayItem().toPrintString();
+  }
+}
+
+// --- Trait parameter: default type ---
+
+trait Storable<TP = DefaultEntity> {
+  String store(TP item) { return "stored"; }
+}
+
+// --- Trait parameter: combined isA + default ---
+
+trait Processable<TP isA Printable = DefaultEntity> {
+  abstract TP process();
+}
+
+// --- Trait parameter: multiple params with different constraints ---
+
+trait BiMapper<TP1 isA Printable, TP2 isA Serializable> {
+  abstract String mapBoth(TP1 a, TP2 b);
+}
+
+// --- Trait parameter: multiple interface constraints with & ---
+
+trait StrictMapper<TP isA Printable & Serializable> {
+  abstract String mapStrict(TP item);
+}
+
+// --- Abstract methods in traits (implicit and explicit) ---
+
+trait Equality {
+  // Implicit abstract (no body, no keyword)
+  Boolean isEqual(Object other);
+  Boolean isNotEqual(Object other);
+  // Explicit abstract keyword
+  abstract Integer hashValue();
+  // Visibility + abstract (compiler-valid order)
+  public abstract String toDebugString();
+  protected abstract Integer rank();
+  // Concrete method using the abstract ones
+  Boolean isSame(Object other) {
+    return isEqual(other);
+  }
+}
+
+// --- Nested trait definition ---
+
+trait Container {
+  String containerName;
+
+  trait Itemizable {
+    Integer itemCount;
+    String describeItems() { return "items"; }
+  }
+}
+
+// --- Simple params (regression check) ---
+
+trait Pair<A, B> {
+  String describe(A first, B second) { return "pair"; }
+}
+
+// --- Class using a trait (basic, no parameter binding) ---
+
+class Document {
+  isA Equality;
+  Boolean isEqual(Object other) { return true; }
+  Boolean isNotEqual(Object other) { return false; }
+  Integer hashValue() { return 42; }
+}
+
+// --- Trait parameter application (Round 2) ---
+
+// Single binding
+class PrintableDoc {
+  isA Printable;
+  isA Displayable<TP = Printable>;
+  String toPrintString() { return "doc"; }
+  PrintableDoc getDisplayItem() { return this; }
+}
+
+// Multiple bindings
+class BiDoc {
+  isA Pair<A = Document, B = PrintableDoc>;
+}
+
+// Mixed: regular isA + trait with binding
+class FullDoc {
+  isA Printable, Displayable<TP = FullDoc>;
+  String toPrintString() { return "full"; }
+  FullDoc getDisplayItem() { return this; }
+}

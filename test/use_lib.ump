@@ -1,0 +1,35 @@
+// Test file: use lib: parse support
+// Note: lib: paths parse cleanly but go-to-def on them does NOT navigate
+// to the library file (server-side lib: resolution is deferred).
+
+// Library pattern imports
+use lib:AbstractionOccurrence.ump;
+use lib:PlayerRole.ump;
+use lib:TransportationPatternA.ump;
+
+// Regular use statements (regression check)
+use Person.ump;
+
+// Class using a library pattern with trait parameter binding
+class Book {
+  String title;
+  String isbn;
+}
+
+class Copy {
+  isA Occurrence <Abstraction = Book>;
+  Integer copyNumber;
+}
+
+class Team {
+  String name;
+}
+
+class Player {
+  String name;
+}
+
+class Member {
+  isA Role<Player = Player>;
+  Integer jerseyNumber;
+}

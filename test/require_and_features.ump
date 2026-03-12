@@ -1,0 +1,92 @@
+// Test file: require statements, isFeature, and comma-separated use
+//
+// Covers: require [mixset], require subfeature [...], boolean operators
+//         (and, or, xor, opt, not), multiplicity (N..M of {A, B}),
+//         nested parentheses, isFeature inside mixsets and top-level,
+//         comma-separated use activation.
+
+// --- Top-level require ---
+
+require [Networking];
+
+// --- require subfeature with boolean operators ---
+
+require subfeature [GSMProtocol opt Mp3Recording and Playback and AudioFormat opt Camera];
+
+// --- Mixsets with require inside body ---
+
+mixset GSMProtocol {
+  require subfeature [GSM1800 opt GSM1900];
+}
+
+mixset AudioFormat {
+  require subfeature [1..2 of {Mp3, Wav}];
+}
+
+mixset Mp3Recording {
+  require [Mp3];
+}
+
+mixset Camera {
+  require subfeature [Resolution];
+}
+
+mixset Resolution {
+  require subfeature [0..1 of {Res21MP, Res31MP, Res50MP}];
+}
+
+// --- Boolean operator variants ---
+
+mixset BoolTest1 {
+  require [A or B];
+}
+
+mixset BoolTest2 {
+  require [A xor B];
+}
+
+mixset BoolTest3 {
+  require [not A];
+}
+
+mixset BoolTest4 {
+  require [A and (B or C)];
+}
+
+mixset BoolTest5 {
+  require [A && B || C];
+}
+
+// --- isFeature ---
+
+mixset Debug {
+  isFeature;
+  mixset ConsolePrint {
+    isFeature;
+  }
+}
+
+// Top-level isFeature (valid per compiler)
+isFeature;
+
+// --- Comma-separated use ---
+
+use GSMProtocol, Mp3Recording, AudioFormat;
+
+// Single use (regression)
+use Debug;
+
+// --- Declare all referenced mixsets ---
+
+mixset Networking { }
+mixset GSM1800 { }
+mixset GSM1900 { }
+mixset Mp3 { }
+mixset Wav { }
+mixset Playback { }
+mixset A { }
+mixset B { }
+mixset C { }
+mixset Res21MP { }
+mixset Res31MP { }
+mixset Res50MP { }

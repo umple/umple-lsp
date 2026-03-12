@@ -25,6 +25,8 @@
 (mixset_definition) @scope.none
 (statemachine_definition) @scope.none
 (requirement_definition) @scope.none
+; Suppress completions inside require body (opaque content)
+(require_body) @scope.suppress
 ; filter blocks: no symbol completions by default…
 (filter_definition) @scope.none
 ; …except inside include statements, where class names are valid targets

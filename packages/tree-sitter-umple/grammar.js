@@ -42,6 +42,8 @@ module.exports = grammar({
         $.external_definition,
         $.enum_definition,
         $.requirement_definition,
+        $.require_statement,
+        $.is_feature,
         $.mixset_definition,
         $.association_class_definition,
         $.statemachine_definition,
@@ -55,7 +57,14 @@ module.exports = grammar({
       seq("namespace", field("name", $.qualified_name), ";"),
 
     use_statement: ($) =>
-      prec.right(seq("use", field("path", $.use_path), optional(";"))),
+      prec.right(
+        seq(
+          "use",
+          field("path", $.use_path),
+          repeat(seq(",", field("path", $.use_path))),
+          optional(";"),
+        ),
+      ),
 
     use_path: ($) => /[a-zA-Z0-9_.\/:\-][a-zA-Z0-9_.\/:\-]*/,
 
@@ -253,6 +262,33 @@ module.exports = grammar({
     // brace-tolerant so compiler-valid nested text does not break indexing.
     req_content: ($) =>
       repeat1(choice(/[^\{\}]+/, seq("{", optional($.req_content), "}"))),
+
+    // =====================
+    // REQUIRE STATEMENT & IS_FEATURE
+    // =====================
+    // Feature dependency: require [M2]; require subfeature [A and B];
+    // Body is opaque (same approach as constraint) — no semantic parsing.
+    require_statement: ($) =>
+      prec.right(
+        seq(
+          "require",
+          optional("subfeature"),
+          $.require_body,
+          optional(";"),
+        ),
+      ),
+
+    require_body: ($) => seq("[", repeat1($._require_expr), "]"),
+
+    _require_expr: ($) =>
+      choice(
+        seq("{", repeat($._require_expr), "}"),
+        seq("(", repeat($._require_expr), ")"),
+        /[^\[\]\{\}\(\)]+/,
+      ),
+
+    // Feature marker: isFeature;
+    is_feature: ($) => prec.right(seq("isFeature", optional(";"))),
 
     // =====================
     // MIXSET DEFINITION

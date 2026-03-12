@@ -21,7 +21,7 @@ The table below shows the LSP's support for Umple language features, based on th
 | generate | * | ✅ | Language names, path, `--override`, `-s` suboption |
 | suboption | * | ⚠️ | Syntax works; specific suboption names not enumerated |
 | filter | * | ✅ | Named/unnamed, numeric names, glob patterns, hops; class completions in `include`; go-to-def for plain names |
-| useStatement | ** | ✅ | file completions and go-to-def work; comma-separated, `!` negation, and `lib:` URL forms intentionally not supported |
+| useStatement | ** | ✅ | file completions and go-to-def work; `lib:` paths parse cleanly, but runtime `lib:` resolution/go-to-def is deferred |
 | requirement | ** | ✅ | Parsed, indexed, go-to-def |
 | reqImplementation | ** | ✅ | Identifiers reference requirements; go-to-def |
 | **Entity** | | | |
@@ -53,15 +53,15 @@ The table below shows the LSP's support for Umple language features, based on th
 | mixsetDefinition (in SM) | ** | ✅ | |
 | activeDefinition | * | ✅ | `active [codeLangs] [name] moreCode+`; comma-separated lang tags are spec-valid but crash current compiler (E9100 bug) |
 | **Top-level entities** | | | |
-| traitDefinition | * | ⚠️ | Simple `<T>` type parameters supported; broader official trait clauses may not be |
+| traitDefinition | * | ✅ | Scoped project support includes declaration-side params, application-side bindings, trait semicolon methods, and nested traits; trait-only extras remain out of scope |
 | interfaceDefinition | ** | ✅ | |
 | associationDefinition | ** | ✅ | |
 | associationClassDefinition | ** | ✅ | |
 | stateMachineDefinition | ** | ✅ | |
 | topLevelCodeInjection | * | ✅ | `before/after/around { Class } op { code }` |
-| templateDefinition (top-level) | * | ❌ | Usage unclear; needs clarification |
+| templateDefinition (top-level) | * | ✅ | Excluded for project scope: official grammar defines it, but non-empty top-level templates crash the current compiler and no manual examples exist |
 
-**Summary**: ✅ 35 supported, ❌ 1 not supported, ⚠️ 2 partial
+**Summary**: ✅ 37 supported, ❌ 0 not supported, ⚠️ 1 partial
 
 ## Editor Plugins
 
