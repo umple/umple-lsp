@@ -185,6 +185,11 @@
   param: (identifier) @variable
   value: (qualified_name) @type)
 
+; Trait SM binding: highlight only (value is visual approximation, not semantic type)
+(trait_sm_binding
+  param: (identifier) @variable.member
+  value: (qualified_name) @type)
+
 ; Built-in types
 ((identifier) @type.builtin
   (#any-of? @type.builtin

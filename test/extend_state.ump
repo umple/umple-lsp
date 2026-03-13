@@ -1,0 +1,88 @@
+// === Trait SM Binding: Comprehensive Test ===
+//
+// Tests go-to-def, find-references, hover, rename for:
+//   isA T<param as value.path>
+//
+// Param side: sm1 → trait's statemachine
+// Value side: sm.s2 → class-side SM / state
+
+// --- Basic case: param + value path ---
+
+trait T1 {
+  sm1 {
+    m1 {
+      t2 -> m2;
+    }
+    m2 {
+      t1 -> m1;
+    }
+  }
+}
+
+class C1 {
+  isA T1<sm1 as sm.s2>;
+  sm {
+    s1 {
+      e2 -> s2;
+    }
+    s2 {
+      e1 -> s1;
+    }
+  }
+}
+
+// --- Overlapping names: SM and state share the name "sm" ---
+
+class C2 {
+  isA T1<sm1 as sm.sm>;
+  sm {
+    sm {}
+  }
+}
+
+// --- Shadowing: direct-child s2 vs nested A.s2 ---
+
+class C3 {
+  isA T1<sm1 as sm.s2>;
+  sm {
+    s1 {
+      e2 -> s2;
+    }
+    s2 {
+      e1 -> s1;
+    }
+    A {
+      s2 {}
+    }
+  }
+}
+
+// --- Sibling nested: sm.A.s2 must NOT match B.s2 ---
+
+class C4 {
+  isA T1<sm1 as sm.A.s2>;
+  sm {
+    A {
+      s2 {}
+    }
+    B {
+      s2 {}
+    }
+  }
+}
+
+// --- Cross-class isolation: C5 and C6 each have their own sm.s2 ---
+
+class C5 {
+  isA T1<sm1 as sm.s2>;
+  sm {
+    s2 {}
+  }
+}
+
+class C6 {
+  isA T1<sm1 as sm.s2>;
+  sm {
+    s2 {}
+  }
+}

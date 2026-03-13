@@ -496,7 +496,60 @@ function resolveSymbolAtPosition(
   }
 
   let symbols: SymbolEntry[] = [];
-  if (isScoped) {
+  if (token.traitSmContext) {
+    // Special case: trait_sm_binding param (e.g., sm1 in isA T1<sm1 as sm.s2>).
+    // The SM lives in the trait's scope, not the current class. Construct the
+    // self-qualified container: "TraitName.smName".
+    const smContainer = `${token.traitSmContext.traitName}.${token.word}`;
+    symbols = symbolIndex
+      .getSymbols({
+        name: token.word,
+        kind: ["statemachine"],
+        container: smContainer,
+      })
+      .filter((s) => reachableFiles.has(path.normalize(s.file)));
+  } else if (token.traitSmValueContext) {
+    // Special case: trait_sm_binding value (e.g., sm.s2 in isA T1<sm1 as sm.s2>).
+    // First segment = statemachine in current class, later = states in that SM.
+    const { pathSegments, segmentIndex } = token.traitSmValueContext;
+    const smName = pathSegments[0];
+    const smContainer = `${token.enclosingClass}.${smName}`;
+
+    if (segmentIndex === 0) {
+      symbols = symbolIndex
+        .getSymbols({
+          name: smName,
+          kind: ["statemachine"],
+          container: smContainer,
+        })
+        .filter((s) => reachableFiles.has(path.normalize(s.file)));
+    } else {
+      symbols = symbolIndex
+        .getSymbols({
+          name: token.word,
+          kind: ["state"],
+          container: smContainer,
+        })
+        .filter((s) => reachableFiles.has(path.normalize(s.file)));
+
+      // Disambiguate by direct-child depth (compiler uses direct-child-per-segment)
+      const precedingStatePath = pathSegments.slice(1, segmentIndex);
+      if (precedingStatePath.length === 0) {
+        // Direct child of SM root: require statePath.length === 1
+        symbols = symbols.filter(
+          (s) => !s.statePath || s.statePath.length === 1,
+        );
+      } else if (symbols.length > 1) {
+        const resolved = symbolIndex.resolveStateInPath(
+          precedingStatePath,
+          token.word,
+          smContainer,
+          reachableFiles,
+        );
+        if (resolved) symbols = [resolved];
+      }
+    }
+  } else if (isScoped) {
     // Container-scoped kinds (attribute, const, method, template, state, statemachine):
     // only search within the enclosing class/SM (with inheritance).
     // Never fall back to global lookup — that would cross class boundaries.

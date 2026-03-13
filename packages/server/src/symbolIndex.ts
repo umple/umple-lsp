@@ -658,6 +658,8 @@ export class SymbolIndex {
     qualifiedPath?: string[];
     pathIndex?: number;
     stateDefinitionPath?: string[];
+    traitSmContext?: { traitName: string };
+    traitSmValueContext?: { pathSegments: string[]; segmentIndex: number };
   } | null {
     if (!this.initialized || !this.parser) {
       return null;
@@ -692,7 +694,7 @@ export class SymbolIndex {
         return null;
       }
     }
-    const kinds = this.resolveDefinitionKinds(tree, node);
+    let kinds = this.resolveDefinitionKinds(tree, node);
     const { enclosingClass, enclosingStateMachine } =
       this.resolveEnclosingScope(tree, line, column);
 
@@ -732,6 +734,56 @@ export class SymbolIndex {
       stateDefinitionPath = this.resolveStatePath(node);
     }
 
+    // Detect trait_sm_binding param: isA T1<sm1 as sm.s2> — sm1 references
+    // a statemachine in the trait, not in the current class.
+    // AST: type_name > trait_sm_binding > param:identifier
+    let traitSmContext: { traitName: string } | undefined;
+    if (
+      node.type === "identifier" &&
+      parent?.type === "trait_sm_binding" &&
+      parent.childForFieldName("param")?.id === node.id
+    ) {
+      const typeName = parent.parent;
+      if (typeName?.type === "type_name") {
+        const qn = typeName.childForFieldName("name") ?? typeName.namedChild(0);
+        if (qn?.type === "qualified_name") {
+          // Use last identifier segment (handles qualified names like ns1.ns2.T1)
+          const lastId = qn.namedChild(qn.namedChildCount - 1);
+          if (lastId?.type === "identifier") {
+            traitSmContext = { traitName: lastId.text };
+          }
+        }
+      }
+    }
+
+    // Detect trait_sm_binding value: isA T1<sm1 as sm.s2> — sm.s2 references
+    // class-side statemachine and state. First segment = SM, rest = states.
+    // AST: trait_sm_binding > value:qualified_name > identifier
+    let traitSmValueContext:
+      | { pathSegments: string[]; segmentIndex: number }
+      | undefined;
+    if (
+      node.type === "identifier" &&
+      parent?.type === "qualified_name" &&
+      parent.parent?.type === "trait_sm_binding" &&
+      parent.parent.childForFieldName("value")?.id === parent.id
+    ) {
+      const segments: string[] = [];
+      let idx = -1;
+      for (let i = 0; i < parent.namedChildCount; i++) {
+        const child = parent.namedChild(i);
+        if (child?.type === "identifier") {
+          if (child.id === node.id) idx = segments.length;
+          segments.push(child.text);
+        }
+      }
+      if (idx >= 0 && segments.length >= 1) {
+        traitSmValueContext = { pathSegments: segments, segmentIndex: idx };
+        // Override kinds: first segment = statemachine, rest = state
+        kinds = idx === 0 ? ["statemachine"] : ["state"];
+      }
+    }
+
     return {
       word,
       kinds,
@@ -740,6 +792,8 @@ export class SymbolIndex {
       qualifiedPath,
       pathIndex,
       stateDefinitionPath,
+      traitSmContext,
+      traitSmValueContext,
     };
   }
 
@@ -1752,17 +1806,39 @@ export class SymbolIndex {
           }
         }
 
+        // For trait_sm_binding value paths, filter by segment position and depth
+        const valSegIdx = this.getTraitSmBindingValueSegmentIndex(node);
+        if (valSegIdx !== undefined) {
+          // Kind filtering: segment 0 = statemachine only, segment 1+ = state only
+          if (valSegIdx === 0 && symKind !== "statemachine") continue;
+          if (valSegIdx > 0 && symKind !== "state") continue;
+
+          // Depth filtering: segment index must match statePath length
+          if (symKind === "state" && sym.statePath &&
+              valSegIdx !== sym.statePath.length) continue;
+        }
+
         // For nested states, disambiguate by path context.
         // Three cases:
         //   1. Dotted path (inside qualified_name, index > 0): compare preceding segments
         //   2. Definition site (node.parent is "state"): walk ancestor states, exact path match
         //   3. Bare reference (everything else): no path synthesis, existing rules apply
-        if (symKind === "state" && sym.statePath && sym.statePath.length > 1) {
+        if (symKind === "state" && sym.statePath && sym.statePath.length >= 1) {
           const pathCtx = this.extractPathContextFromNode(node);
           if (pathCtx) {
-            // Case 1: dotted transition target (e.g., EEE.Open.Inner)
+            // Case 1: dotted path (transition target or trait_sm_binding value)
+            let preceding = pathCtx.preceding;
+            // Strip SM name prefix for trait_sm_binding value paths
+            // (first segment is the SM name, not a state ancestor)
+            if (
+              node.parent?.parent?.type === "trait_sm_binding" &&
+              node.parent?.parent?.childForFieldName("value")?.id ===
+                node.parent?.id
+            ) {
+              preceding = preceding.slice(1);
+            }
             const targetPrecedingPath = sym.statePath.slice(0, sym.statePath.length - 1);
-            if (!this.pathPrefixMatches(pathCtx.preceding, targetPrecedingPath)) {
+            if (!this.pathPrefixMatches(preceding, targetPrecedingPath)) {
               continue;
             }
           } else if (node.parent?.type === "state") {
@@ -1835,9 +1911,49 @@ export class SymbolIndex {
     if (targetKind === "state" || targetKind === "statemachine") {
       if (enclosingClass && enclosingSM) return `${enclosingClass}.${enclosingSM}`;
       if (enclosingSM) return enclosingSM; // top-level statemachine
+      // Synthetic container for trait_sm_binding value paths (no enclosing SM ancestor)
+      if (enclosingClass) {
+        const smName = this.resolveTraitSmBindingValueSM(node);
+        if (smName) return `${enclosingClass}.${smName}`;
+      }
       return undefined;
     }
     return enclosingClass;
+  }
+
+  /**
+   * If the node is inside a trait_sm_binding value qualified_name,
+   * return the first identifier segment (the statemachine name).
+   */
+  private resolveTraitSmBindingValueSM(node: SyntaxNode): string | undefined {
+    const parent = node.parent;
+    if (parent?.type !== "qualified_name") return undefined;
+    const grandparent = parent.parent;
+    if (grandparent?.type !== "trait_sm_binding") return undefined;
+    if (grandparent.childForFieldName("value")?.id !== parent.id) return undefined;
+    const firstId = parent.namedChild(0);
+    return firstId?.type === "identifier" ? firstId.text : undefined;
+  }
+
+  /**
+   * Return the 0-based segment index if this node is an identifier inside
+   * a trait_sm_binding value path, or undefined otherwise.
+   */
+  private getTraitSmBindingValueSegmentIndex(node: SyntaxNode): number | undefined {
+    const parent = node.parent;
+    if (parent?.type !== "qualified_name") return undefined;
+    const grandparent = parent.parent;
+    if (grandparent?.type !== "trait_sm_binding") return undefined;
+    if (grandparent.childForFieldName("value")?.id !== parent.id) return undefined;
+    let idx = 0;
+    for (let i = 0; i < parent.namedChildCount; i++) {
+      const child = parent.namedChild(i);
+      if (child?.type === "identifier") {
+        if (child.id === node.id) return idx;
+        idx++;
+      }
+    }
+    return undefined;
   }
 
   /**

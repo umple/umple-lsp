@@ -28,6 +28,10 @@
 (trait_parameter default: (qualified_name (identifier) @reference.class_interface_trait))
 ; Binding values in isA T<TP = C1> — can be any named type
 (trait_binding value: (qualified_name (identifier) @reference.class_interface_trait))
+; Trait SM binding: isA T<sm1 as sm.s2>
+; param references trait-side statemachine; value path references class-side SM/state
+(trait_sm_binding param: (identifier) @reference.statemachine)
+(trait_sm_binding value: (qualified_name (identifier) @reference.statemachine_state))
 (enum_value name: (identifier) @reference.enum_value)
 (external_definition name: (identifier) @reference.class)
 (mixset_definition name: (identifier) @reference.mixset)

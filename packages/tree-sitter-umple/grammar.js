@@ -815,13 +815,19 @@ module.exports = grammar({
         optional("[]"),
       ),
 
-    // Each angle-bracket argument is either a regular type or a trait binding.
-    // trait_binding requires "=", so <X> unambiguously resolves to type_name.
-    _type_argument: ($) => choice($.trait_binding, $.type_name),
+    // Each angle-bracket argument is either a regular type, a trait binding,
+    // or a trait SM binding.  trait_binding requires "=", trait_sm_binding
+    // requires "as", so <X> unambiguously resolves to type_name.
+    _type_argument: ($) =>
+      choice($.trait_binding, $.trait_sm_binding, $.type_name),
 
     // Trait parameter application: TP = ClassName (inside <> of isA type)
     trait_binding: ($) =>
       seq(field("param", $.identifier), "=", field("value", $.qualified_name)),
+
+    // Trait SM injection: sm1 as sm.s2 (Extending a State)
+    trait_sm_binding: ($) =>
+      seq(field("param", $.identifier), "as", field("value", $.qualified_name)),
 
     type_list: ($) => seq($.type_name, repeat(seq(",", $.type_name))),
 
