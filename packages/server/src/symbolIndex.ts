@@ -737,6 +737,7 @@ export class SymbolIndex {
     traitSmContext?: { traitName: string };
     traitSmValueContext?: { pathSegments: string[]; segmentIndex: number };
     referencedSmContext?: { enclosingClass: string };
+    toplevelInjectionContext?: { targetClass: string };
   } | null {
     if (!this.initialized || !this.parser) {
       return null;
@@ -873,6 +874,20 @@ export class SymbolIndex {
       referencedSmContext = { enclosingClass };
     }
 
+    // Detect toplevel_code_injection operation: "before { Counter } increment()"
+    // The operation name references a method in the target class.
+    let toplevelInjectionContext: { targetClass: string } | undefined;
+    if (
+      node.type === "identifier" &&
+      parent?.type === "toplevel_code_injection" &&
+      parent.childForFieldName("operation")?.id === node.id
+    ) {
+      const targetNode = parent.childForFieldName("target");
+      if (targetNode) {
+        toplevelInjectionContext = { targetClass: targetNode.text };
+      }
+    }
+
     // Detect default-value qualifier in "Status.ACTIVE" — non-final segment
     // is an enum name, not a value. Override kinds for qualifier position.
     // AST: attribute_declaration > qualified_name (not inside type_name) > identifier
@@ -901,6 +916,7 @@ export class SymbolIndex {
       traitSmContext,
       traitSmValueContext,
       referencedSmContext,
+      toplevelInjectionContext,
     };
   }
 
@@ -2039,6 +2055,20 @@ export class SymbolIndex {
       }
       return undefined;
     }
+
+    // Synthetic container for toplevel_code_injection operation
+    // "before { Counter } increment()" → container is "Counter"
+    if (!enclosingClass && targetKind === "method") {
+      const parent = node.parent;
+      if (
+        parent?.type === "toplevel_code_injection" &&
+        parent.childForFieldName("operation")?.id === node.id
+      ) {
+        const targetNode = parent.childForFieldName("target");
+        if (targetNode) return targetNode.text;
+      }
+    }
+
     return enclosingClass;
   }
 

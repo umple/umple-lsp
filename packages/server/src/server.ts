@@ -643,6 +643,17 @@ function resolveSymbolAtPosition(
         container: smContainer,
       })
       .filter((s) => reachableFiles.has(path.normalize(s.file)));
+  } else if (token.toplevelInjectionContext) {
+    // toplevel_code_injection: "before { Counter } increment()"
+    // Resolve operation name against the target class's own methods only.
+    // The Umple compiler does not resolve inherited methods here (W1012).
+    symbols = symbolIndex
+      .getSymbols({
+        name: token.word,
+        kind: ["method"],
+        container: token.toplevelInjectionContext.targetClass,
+      })
+      .filter((s) => reachableFiles.has(path.normalize(s.file)));
   } else {
     // Split kinds into scoped (class/SM-local) and unscoped (global).
     // Try scoped first; only fall through to unscoped if scoped finds nothing.
