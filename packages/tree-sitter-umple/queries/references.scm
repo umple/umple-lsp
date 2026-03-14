@@ -39,7 +39,6 @@
 (association_class_definition name: (identifier) @reference.class)
 (statemachine_definition name: (identifier) @reference.statemachine)
 (state_machine name: (identifier) @reference.statemachine)
-(referenced_statemachine name: (identifier) @reference.statemachine)
 (referenced_statemachine definition: (identifier) @reference.statemachine)
 (state name: (identifier) @reference.state)
 (association_definition name: (identifier) @reference.association)
@@ -55,6 +54,21 @@
 ; Attribute types, method return types, parameters — can be any named type
 
 (type_name (qualified_name (identifier) @reference.class_interface_trait_enum))
+
+; =====================
+; ATTRIBUTE/CONST DEFAULT VALUE REFERENCES
+; =====================
+; Default values can reference attributes, consts, or enum values
+; (qualified_name directly under attribute/const_declaration is the value position,
+;  not the type (which is inside type_name) or the name (which is a field identifier))
+
+; Non-final segment (qualifier): "Status" in "Status.ACTIVE" → enum reference
+(attribute_declaration (qualified_name (identifier) @reference.enum . (identifier)))
+(const_declaration (qualified_name (identifier) @reference.enum . (identifier)))
+
+; Final or only segment: "ACTIVE" in "Status.ACTIVE", or "MAX" in "x = MAX" → value reference
+(attribute_declaration (qualified_name (identifier) @reference.attribute_const_enum_value .))
+(const_declaration (qualified_name (identifier) @reference.attribute_const_enum_value .))
 
 ; =====================
 ; ISA (INHERITANCE)
@@ -82,8 +96,12 @@
 ; TOP-LEVEL CODE INJECTION
 ; =====================
 ; before/after/around { ClassName } — target must be a class
-
 (toplevel_code_injection target: (identifier) @reference.class)
+; before/after/around { ClassName } operation() — method reference
+(toplevel_code_injection operation: (identifier) @reference.method)
+
+; before/after method hook — method name reference
+(before_after (identifier) @reference.method)
 
 ; =====================
 ; ASSOCIATION TYPE REFERENCES
@@ -115,8 +133,21 @@
 ; =====================
 ; Identifiers inside constraints/guards reference attributes or constants
 
-(constraint (identifier) @reference.attribute_const)
-(guard (identifier) @reference.attribute_const)
+(constraint (identifier) @reference.attribute_const_enum_value)
+(guard (identifier) @reference.attribute_const_enum_value_method)
+
+; =====================
+; TRACE ENTITY REFERENCES
+; =====================
+; "trace count;" — identifier after "trace" keyword references attribute or method
+; Uses anonymous node anchor to skip tracecase/activate/deactivate identifiers
+(trace_statement "trace" . (identifier) @reference.attribute_method)
+; "record x" in trace postfix — additional entity reference
+(trace_postfix "record" . (identifier) @reference.attribute_method)
+; tracecase definition name and activate/deactivate references
+(trace_statement name: (identifier) @reference.tracecase)
+(trace_statement "activate" . (identifier) @reference.tracecase)
+(trace_statement "deactivate" . (identifier) @reference.tracecase)
 
 ; =====================
 ; EMIT METHOD & TEMPLATE

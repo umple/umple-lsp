@@ -23,7 +23,7 @@
 ; =====================
 (source_file) @scope.none
 (mixset_definition) @scope.none
-(statemachine_definition) @scope.none
+(statemachine_definition) @scope.state
 (requirement_definition) @scope.none
 ; Suppress completions inside require body (opaque content)
 (require_body) @scope.suppress
@@ -39,7 +39,7 @@
 (trait_definition) @scope.class_interface_trait_enum
 (interface_definition) @scope.class_interface_trait_enum
 (association_class_definition) @scope.class_interface_trait_enum
-(isa_declaration) @scope.class_interface_trait_enum
+(isa_declaration) @scope.class_interface_trait
 
 ; =====================
 ; ASSOCIATION SCOPES (offer type names — classes, interfaces, traits)
@@ -60,8 +60,15 @@
 ; =====================
 ; key { attr1, attr2 } — offer attribute names (scoped to class + inherited)
 (key_definition) @scope.attribute
-; Guard expressions — offer attributes (own + inherited)
-(guard) @scope.attribute
+; Guard expressions — sentinel for keyword filtering + scoped attr/method completion
+(guard) @scope.guard_attribute_method
+
+; trace entity references — sentinel for keyword filtering + scoped attr/method completion
+(trace_statement "trace" . (identifier) @scope.trace_attribute_method)
+(trace_postfix "record" . (identifier) @scope.trace_attribute_method)
+
+; referenced_statemachine definition — offer statemachine names from enclosing class
+(referenced_statemachine definition: (identifier) @scope.statemachine)
 
 ; depend java.util.* — suppress (not a symbol reference)
 (depend_statement) @scope.suppress

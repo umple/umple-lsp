@@ -30,7 +30,8 @@ export type SymbolKind =
   | "association"
   | "mixset"
   | "requirement"
-  | "template";
+  | "template"
+  | "tracecase";
 
 /** All SymbolKind values sorted longest-first for greedy capture name parsing. */
 const SYMBOL_KINDS_LONGEST_FIRST: SymbolKind[] = (
@@ -49,6 +50,7 @@ const SYMBOL_KINDS_LONGEST_FIRST: SymbolKind[] = (
     "mixset",
     "requirement",
     "template",
+    "tracecase",
   ] as SymbolKind[]
 ).sort((a, b) => b.length - a.length);
 
@@ -105,7 +107,7 @@ export interface CompletionInfo {
   /** Operators the parser expects at this position. */
   operators: string[];
   /** Which symbol kinds to offer, or null for none. */
-  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | null;
+  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | null;
   /** True if cursor is at a definition-name position (suppress all). */
   isDefinitionName: boolean;
   /** True if cursor is inside a comment. */
@@ -599,7 +601,81 @@ export class SymbolIndex {
     }
 
     // --- Scope query for symbol kinds ---
-    const symbolKinds = this.resolveCompletionScope(tree, line, column);
+    let symbolKinds = this.resolveCompletionScope(tree, line, column);
+
+    // --- before/after method-name completion (position-aware) ---
+    // Only the first direct identifier child of before_after is the method name.
+    // Param types, param names, and code bodies are not direct identifier children.
+    // Additional guard: cursor column must fall within the identifier's span to avoid
+    // false positives when nodeAtCursor (at column-1) bleeds into the method name
+    // while the real cursor is past it (e.g., at the '(' of a param list).
+    const baNode = nodeAtCursor?.type === "identifier" && nodeAtCursor.parent?.type === "before_after"
+      ? nodeAtCursor : (prevLeaf?.type === "identifier" && prevLeaf.parent?.type === "before_after" ? prevLeaf : null);
+    if (baNode && line === baNode.startPosition.row && column <= baNode.endPosition.column) {
+      const firstId = baNode.parent!.namedChildren.find((c: SyntaxNode) => c.type === "identifier");
+      if (firstId && firstId.id === baNode.id) {
+        symbolKinds = ["method"];
+      }
+    }
+
+    // --- Trace completion fallback for zero-identifier case ("trace |") ---
+    // When the user types "trace " without an identifier, tree-sitter produces
+    // ERROR, so the completions.scm anchored capture doesn't match. Detect via
+    // prevLeaf being the "trace" keyword inside an ERROR node.
+    if (prevLeaf?.type === "trace" && prevLeaf.parent?.type === "ERROR") {
+      symbolKinds = "trace_attribute_method";
+    }
+
+    // --- Zero-identifier completion fallbacks ---
+    // When the user types "keyword |" without an identifier yet, tree-sitter
+    // produces ERROR nodes and completions.scm can't match. Detect via prevLeaf.
+    const CLASS_LIKE_TYPES = new Set([
+      "class_definition", "trait_definition",
+      "interface_definition", "association_class_definition",
+    ]);
+
+    // "isA |" in class/trait/interface body — exclude enum from completion
+    if (prevLeaf?.type === "isA" && prevLeaf.parent?.type === "ERROR") {
+      const errorParent = prevLeaf.parent.parent;
+      if (errorParent && CLASS_LIKE_TYPES.has(errorParent.type)) {
+        symbolKinds = ["class", "interface", "trait"];
+      }
+    }
+
+    // "before |" or "after |" in class body — method completion (no body parsed yet)
+    if (
+      (prevLeaf?.type === "before" || prevLeaf?.type === "after") &&
+      prevLeaf.parent?.type === "ERROR"
+    ) {
+      const errorParent = prevLeaf.parent.parent;
+      if (errorParent && CLASS_LIKE_TYPES.has(errorParent.type)) {
+        symbolKinds = ["method"];
+      }
+    }
+
+    // "as |" in referenced_statemachine context — offer statemachines
+    if (prevLeaf?.type === "as" && prevLeaf.parent?.type === "ERROR") {
+      const errorParent = prevLeaf.parent.parent;
+      if (
+        errorParent &&
+        (CLASS_LIKE_TYPES.has(errorParent.type) || errorParent.type === "attribute_declaration")
+      ) {
+        symbolKinds = ["statemachine"];
+      }
+    }
+
+    // "-> |" inside statemachine — state completion
+    if (prevLeaf?.type === "->" && prevLeaf.parent?.type === "ERROR") {
+      let n: SyntaxNode | null = prevLeaf.parent;
+      while (n) {
+        if (n.type === "state_machine" || n.type === "statemachine_definition") {
+          symbolKinds = ["state"];
+          break;
+        }
+        if (n.type === "class_definition" || n.type === "source_file") break;
+        n = n.parent;
+      }
+    }
 
     // --- Enclosing scope for scoped lookups ---
     const { enclosingClass, enclosingStateMachine } =
@@ -660,6 +736,7 @@ export class SymbolIndex {
     stateDefinitionPath?: string[];
     traitSmContext?: { traitName: string };
     traitSmValueContext?: { pathSegments: string[]; segmentIndex: number };
+    referencedSmContext?: { enclosingClass: string };
   } | null {
     if (!this.initialized || !this.parser) {
       return null;
@@ -784,6 +861,35 @@ export class SymbolIndex {
       }
     }
 
+    // Detect referenced_statemachine: "door as status" — definition field
+    // references an SM in the enclosing class, not an enclosing SM ancestor.
+    let referencedSmContext: { enclosingClass: string } | undefined;
+    if (
+      node.type === "identifier" &&
+      parent?.type === "referenced_statemachine" &&
+      parent.childForFieldName("definition")?.id === node.id &&
+      enclosingClass
+    ) {
+      referencedSmContext = { enclosingClass };
+    }
+
+    // Detect default-value qualifier in "Status.ACTIVE" — non-final segment
+    // is an enum name, not a value. Override kinds for qualifier position.
+    // AST: attribute_declaration > qualified_name (not inside type_name) > identifier
+    if (
+      node.type === "identifier" &&
+      parent?.type === "qualified_name" &&
+      parent.namedChildCount > 1
+    ) {
+      const gp = parent.parent;
+      if (gp?.type === "attribute_declaration" || gp?.type === "const_declaration") {
+        const isLastSegment = parent.namedChild(parent.namedChildCount - 1)?.id === node.id;
+        if (!isLastSegment) {
+          kinds = ["enum"];
+        }
+      }
+    }
+
     return {
       word,
       kinds,
@@ -794,6 +900,7 @@ export class SymbolIndex {
       stateDefinitionPath,
       traitSmContext,
       traitSmValueContext,
+      referencedSmContext,
     };
   }
 
@@ -931,16 +1038,19 @@ export class SymbolIndex {
       container: smContainer,
       kind: "state",
     });
-    const targetDepth = effectivePath.length + 1;
     const names = new Set<string>();
 
     for (const s of allStates) {
       if (reachableFiles && !reachableFiles.has(path.normalize(s.file)))
         continue;
-      if (!s.statePath || s.statePath.length !== targetDepth) continue;
+      if (!s.statePath || s.statePath.length < effectivePath.length + 1)
+        continue;
+      // Suffix match: check if effectivePath matches the segments ending
+      // just before the child name (e.g., ["Closed"] matches tail of ["EEE","Closed","Inner"])
+      const suffixStart = s.statePath.length - effectivePath.length - 1;
       let match = true;
       for (let i = 0; i < effectivePath.length; i++) {
-        if (s.statePath[i] !== effectivePath[i]) {
+        if (s.statePath[suffixStart + i] !== effectivePath[i]) {
           match = false;
           break;
         }
@@ -982,12 +1092,16 @@ export class SymbolIndex {
       );
     }
 
-    return candidates.find(
-      (s) =>
-        s.statePath &&
-        s.statePath.length === targetPath.length &&
-        s.statePath.every((seg, i) => seg === targetPath[i]),
-    );
+    // Suffix match: targetPath may be a partial path (e.g., ["Closed","Inner"])
+    // that matches the tail of a full statePath (e.g., ["EEE","Closed","Inner"])
+    return candidates.find((s) => {
+      if (!s.statePath || s.statePath.length < targetPath.length) return false;
+      const offset = s.statePath.length - targetPath.length;
+      for (let i = 0; i < targetPath.length; i++) {
+        if (s.statePath[offset + i] !== targetPath[i]) return false;
+      }
+      return true;
+    });
   }
 
   // =====================
@@ -1066,7 +1180,7 @@ export class SymbolIndex {
     tree: Tree,
     line: number,
     column: number,
-  ): SymbolKind[] | "suppress" | "use_path" | "own_attribute" | null {
+  ): SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | null {
     if (!this.completionsQuery) return null;
 
     // Don't pass position filtering to the query — tree-sitter uses
@@ -1105,6 +1219,8 @@ export class SymbolIndex {
     if (kindStr === "suppress") return "suppress";
     if (kindStr === "use_path") return "use_path";
     if (kindStr === "own_attribute") return "own_attribute";
+    if (kindStr === "guard_attribute_method") return "guard_attribute_method";
+    if (kindStr === "trace_attribute_method") return "trace_attribute_method";
     if (kindStr === "none") return null;
 
     return kindStr.split("_") as SymbolKind[];
@@ -1581,7 +1697,8 @@ export class SymbolIndex {
         kind === "attribute" ||
         kind === "const" ||
         kind === "method" ||
-        kind === "template"
+        kind === "template" ||
+        kind === "tracecase"
       ) {
         container = this.resolveClassContainer(node);
       } else if (kind === "enum_value") {
@@ -1750,7 +1867,7 @@ export class SymbolIndex {
 
     // Container-scoped kinds need enclosing scope verification
     const containerScopedKinds = new Set<SymbolKind>([
-      "attribute", "const", "method", "template", "state", "statemachine",
+      "attribute", "const", "method", "template", "state", "statemachine", "tracecase",
     ]);
     const isContainerScoped = containerScopedKinds.has(symKind);
 
@@ -1838,13 +1955,13 @@ export class SymbolIndex {
               preceding = preceding.slice(1);
             }
             const targetPrecedingPath = sym.statePath.slice(0, sym.statePath.length - 1);
-            if (!this.pathPrefixMatches(preceding, targetPrecedingPath)) {
+            if (!this.pathMatches(preceding, targetPrecedingPath, true)) {
               continue;
             }
           } else if (node.parent?.type === "state") {
             // Case 2: state definition name (e.g., Open {})
             const candidatePath = this.resolveStatePath(node);
-            if (!this.pathPrefixMatches(candidatePath, sym.statePath)) {
+            if (!this.pathMatches(candidatePath, sym.statePath, false)) {
               continue;
             }
           }
@@ -1915,6 +2032,10 @@ export class SymbolIndex {
       if (enclosingClass) {
         const smName = this.resolveTraitSmBindingValueSM(node);
         if (smName) return `${enclosingClass}.${smName}`;
+        // Synthetic container for referenced_statemachine definition field
+        // "door as status" → container is "ClassName.status"
+        const refSmName = this.resolveReferencedSmDefinition(node);
+        if (refSmName) return `${enclosingClass}.${refSmName}`;
       }
       return undefined;
     }
@@ -1933,6 +2054,17 @@ export class SymbolIndex {
     if (grandparent.childForFieldName("value")?.id !== parent.id) return undefined;
     const firstId = parent.namedChild(0);
     return firstId?.type === "identifier" ? firstId.text : undefined;
+  }
+
+  /**
+   * If the node is the definition field of a referenced_statemachine
+   * ("door as status"), return the SM name ("status").
+   */
+  private resolveReferencedSmDefinition(node: SyntaxNode): string | undefined {
+    const parent = node.parent;
+    if (parent?.type !== "referenced_statemachine") return undefined;
+    if (parent.childForFieldName("definition")?.id !== node.id) return undefined;
+    return node.text;
   }
 
   /**
@@ -1997,9 +2129,19 @@ export class SymbolIndex {
   }
 
   /**
-   * Check if an actual preceding path matches the target preceding path.
+   * Check if an actual path matches the target path.
+   * When suffix is true, actual may be a relative path matching the tail of target.
+   * When suffix is false, requires exact full-path match.
    */
-  private pathPrefixMatches(actual: string[], target: string[]): boolean {
+  private pathMatches(actual: string[], target: string[], suffix: boolean): boolean {
+    if (suffix) {
+      if (actual.length > target.length) return false;
+      const offset = target.length - actual.length;
+      for (let i = 0; i < actual.length; i++) {
+        if (actual[i] !== target[offset + i]) return false;
+      }
+      return true;
+    }
     if (actual.length !== target.length) return false;
     for (let i = 0; i < actual.length; i++) {
       if (actual[i] !== target[i]) return false;

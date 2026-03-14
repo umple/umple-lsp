@@ -38,3 +38,4 @@
 (referenced_statemachine name: (identifier) @definition.statemachine)
 (emit_method name: (identifier) @definition.method)
 (template_attribute name: (identifier) @definition.template)
+(trace_statement name: (identifier) @definition.tracecase)

@@ -343,7 +343,49 @@ connection.onCompletion(async (params): Promise<CompletionItem[]> => {
   }
 
   // 5a. Keywords from LookaheadIterator
-  for (const kw of info.keywords) {
+  // Filter clearly invalid keywords from constraint context.
+  // LookaheadIterator in constraint error-recovery returns 120+ keywords
+  // including top-level definitions, generate targets, and class-level
+  // directives that can never appear inside [] brackets.
+  let keywords = info.keywords;
+  if (info.symbolKinds === "own_attribute" || info.symbolKinds === "guard_attribute_method" || info.symbolKinds === "trace_attribute_method") {
+    const constraintBlocklist = new Set([
+      "ERROR",
+      // Top-level definition keywords
+      "namespace", "class", "interface", "trait", "abstract",
+      "association", "associationClass", "statemachine",
+      "enum", "external", "mixset",
+      // Generate statement + all targets
+      "generate", "Java", "Nothing", "Php", "RTCpp", "SimpleCpp",
+      "Ruby", "Python", "Cpp", "Json", "StructureDiagram", "Yuml",
+      "Violet", "Umlet", "Simulate", "TextUml", "Scxml",
+      "GvStateDiagram", "GvClassDiagram", "GvFeatureDiagram",
+      "GvClassTraitDiagram", "GvEntityRelationshipDiagram",
+      "Alloy", "NuSMV", "NuSMVOptimizer", "Papyrus", "Ecore", "Xmi",
+      "Xtext", "Sql", "StateTables", "EventSequence", "InstanceDiagram",
+      "Umple", "UmpleSelf", "USE", "Test", "SimpleMetrics",
+      "PlainRequirementsDoc", "Uigu2", "ExternalGrammar", "Mermaid",
+      // Other top-level directives
+      "use", "strictness",
+      // Class-level keywords invalid inside constraints
+      "isA", "req", "require", "subfeature", "isFeature",
+      "depend", "singleton", "displayColor", "displayColour",
+      "implementsReq", "filter", "includeFilter",
+      // Trace/SM/attribute keywords that can't appear in expressions
+      "trace", "tracecase", "activate", "deactivate",
+      "onAllObjects", "onThisThreadOnly", "onThisObject",
+      "where", "until", "giving", "record",
+      "queued", "pooled", "as",
+      "key", "immutable", "unique", "lazy", "settable",
+      "internal", "defaulted", "autounique",
+      "entry", "exit", "do",
+      "emit", "around", "custom", "generated",
+      "include", "hops", "super", "sub",
+    ]);
+    keywords = keywords.filter((kw) => !constraintBlocklist.has(kw));
+  }
+
+  for (const kw of keywords) {
     if (!seen.has(kw)) {
       seen.add(kw);
       items.push({ label: kw, kind: CompletionItemKind.Keyword });
@@ -351,10 +393,14 @@ connection.onCompletion(async (params): Promise<CompletionItem[]> => {
   }
 
   // 5b. Operators from LookaheadIterator
-  for (const op of info.operators) {
-    if (!seen.has(op)) {
-      seen.add(op);
-      items.push({ label: op, kind: CompletionItemKind.Operator });
+  // Skip operators in guard/constraint context — association/transition operators
+  // (e.g., --override-all, ->, <@>-) can never appear inside [] brackets.
+  if (info.symbolKinds !== "own_attribute" && info.symbolKinds !== "guard_attribute_method" && info.symbolKinds !== "trace_attribute_method") {
+    for (const op of info.operators) {
+      if (!seen.has(op)) {
+        seen.add(op);
+        items.push({ label: op, kind: CompletionItemKind.Operator });
+      }
     }
   }
 
@@ -388,6 +434,26 @@ connection.onCompletion(async (params): Promise<CompletionItem[]> => {
           kind: symbolKindToCompletionKind("attribute"),
           detail: "attribute",
         });
+      }
+    }
+    return items;
+  }
+
+  // 5d2. Guard/trace scope: attributes + methods from enclosing class (with inheritance)
+  if ((symbolKinds === "guard_attribute_method" || symbolKinds === "trace_attribute_method") && info.enclosingClass) {
+    for (const kind of ["attribute", "method"] as UmpleSymbolKind[]) {
+      const symbols = symbolIndex
+        .getSymbols({ container: info.enclosingClass, kind, inherited: true })
+        .filter((s) => reachableFiles.has(path.normalize(s.file)));
+      for (const sym of symbols) {
+        if (!seen.has(sym.name)) {
+          seen.add(sym.name);
+          items.push({
+            label: sym.name,
+            kind: symbolKindToCompletionKind(kind),
+            detail: kind,
+          });
+        }
       }
     }
     return items;
@@ -429,9 +495,24 @@ connection.onCompletion(async (params): Promise<CompletionItem[]> => {
         symbols = symbolIndex
           .getSymbols({ container: info.enclosingStateMachine, kind: "state" })
           .filter((s) => reachableFiles.has(path.normalize(s.file)));
+      } else if (symKind === "statemachine" && info.enclosingClass) {
+        symbols = symbolIndex
+          .getSymbols({ kind: "statemachine" })
+          .filter((s) =>
+            s.container?.startsWith(info.enclosingClass + ".") &&
+            reachableFiles.has(path.normalize(s.file))
+          );
       } else if (symKind === "template" && info.enclosingClass) {
         symbols = symbolIndex
           .getSymbols({ container: info.enclosingClass, kind: "template" })
+          .filter((s) => reachableFiles.has(path.normalize(s.file)));
+      } else if (symKind === "method" && info.enclosingClass) {
+        symbols = symbolIndex
+          .getSymbols({
+            container: info.enclosingClass,
+            kind: "method",
+            inherited: true,
+          })
           .filter((s) => reachableFiles.has(path.normalize(s.file)));
       } else {
         symbols = symbolIndex
@@ -486,6 +567,7 @@ function resolveSymbolAtPosition(
     "template",
     "state",
     "statemachine",
+    "tracecase",
   ]);
   const isScoped = token.kinds.some((k) => containerKinds.has(k));
   let container: string | undefined;
@@ -549,26 +631,41 @@ function resolveSymbolAtPosition(
         if (resolved) symbols = [resolved];
       }
     }
-  } else if (isScoped) {
-    // Container-scoped kinds (attribute, const, method, template, state, statemachine):
-    // only search within the enclosing class/SM (with inheritance).
-    // Never fall back to global lookup — that would cross class boundaries.
-    if (container) {
+  } else if (token.referencedSmContext) {
+    // referenced_statemachine: "door as status" — SM lives in the enclosing class.
+    // Container is "ClassName.smName" (self-qualified SM container format).
+    const className = token.referencedSmContext.enclosingClass;
+    const smContainer = `${className}.${token.word}`;
+    symbols = symbolIndex
+      .getSymbols({
+        name: token.word,
+        kind: ["statemachine"],
+        container: smContainer,
+      })
+      .filter((s) => reachableFiles.has(path.normalize(s.file)));
+  } else {
+    // Split kinds into scoped (class/SM-local) and unscoped (global).
+    // Try scoped first; only fall through to unscoped if scoped finds nothing.
+    // Scoped kinds never go global — preserves cross-class isolation.
+    const scopedKinds = token.kinds.filter((k) => containerKinds.has(k));
+    const unscopedKinds = token.kinds.filter((k) => !containerKinds.has(k));
+
+    if (scopedKinds.length > 0 && container) {
       symbols = symbolIndex
         .getSymbols({
           name: token.word,
-          kind: token.kinds,
+          kind: scopedKinds,
           container,
           inherited: true,
         })
         .filter((s) => reachableFiles.has(path.normalize(s.file)));
     }
-  } else {
-    // Global kinds (class, interface, trait, enum, mixset, requirement, association):
-    // search all reachable files without container restriction.
-    symbols = symbolIndex
-      .getSymbols({ name: token.word, kind: token.kinds })
-      .filter((s) => reachableFiles.has(path.normalize(s.file)));
+
+    if (symbols.length === 0 && unscopedKinds.length > 0) {
+      symbols = symbolIndex
+        .getSymbols({ name: token.word, kind: unscopedKinds })
+        .filter((s) => reachableFiles.has(path.normalize(s.file)));
+    }
   }
 
   // Disambiguate dotted state paths (e.g., EEE.Open.Inner → only Inner inside Open)
@@ -725,6 +822,7 @@ const RENAMEABLE_KINDS = new Set<UmpleSymbolKind>([
   "const",
   "state",
   "statemachine",
+  "tracecase",
 ]);
 
 function isUnambiguousRename(symbols: SymbolEntry[]): boolean {
