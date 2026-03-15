@@ -100,6 +100,28 @@ function isOperatorToken(name: string): boolean {
   return /^[<>-]/.test(name) && name.length > 1;
 }
 
+// ── Token context model (Step 2) ────────────────────────────────────────────
+
+/** Primary lookup strategy — exactly one per token. */
+export type LookupContext =
+  | { type: "normal" }
+  | { type: "trait_sm_param"; traitName: string }
+  | { type: "trait_sm_value"; pathSegments: string[]; segmentIndex: number }
+  | { type: "referenced_sm" }
+  | { type: "toplevel_injection"; targetClass: string }
+  | { type: "default_value_qualifier" };
+
+/** Post-lookup disambiguation for dotted state references in transitions. */
+export interface DottedStateRef {
+  qualifiedPath: string[];
+  pathIndex: number;
+}
+
+/** Post-lookup disambiguation for state definition sites. */
+export interface StateDefinitionRef {
+  definitionPath: string[];
+}
+
 /** Information needed by the completion handler. */
 export interface CompletionInfo {
   /** Keywords the parser expects at this position. */
@@ -738,6 +760,10 @@ export class SymbolIndex {
     traitSmValueContext?: { pathSegments: string[]; segmentIndex: number };
     referencedSmContext?: { enclosingClass: string };
     toplevelInjectionContext?: { targetClass: string };
+    // New discriminated context model (Phase 1: dual-write alongside old fields)
+    context: LookupContext;
+    dottedStateRef?: DottedStateRef;
+    stateDefinitionRef?: StateDefinitionRef;
   } | null {
     if (!this.initialized || !this.parser) {
       return null;
@@ -891,6 +917,7 @@ export class SymbolIndex {
     // Detect default-value qualifier in "Status.ACTIVE" — non-final segment
     // is an enum name, not a value. Override kinds for qualifier position.
     // AST: attribute_declaration > qualified_name (not inside type_name) > identifier
+    let isDefaultValueQualifier = false;
     if (
       node.type === "identifier" &&
       parent?.type === "qualified_name" &&
@@ -901,9 +928,40 @@ export class SymbolIndex {
         const isLastSegment = parent.namedChild(parent.namedChildCount - 1)?.id === node.id;
         if (!isLastSegment) {
           kinds = ["enum"];
+          isDefaultValueQualifier = true;
         }
       }
     }
+
+    // Compute new discriminated context (Phase 1: dual-write)
+    let context: LookupContext;
+    if (traitSmContext) {
+      context = { type: "trait_sm_param", traitName: traitSmContext.traitName };
+    } else if (traitSmValueContext) {
+      context = {
+        type: "trait_sm_value",
+        pathSegments: traitSmValueContext.pathSegments,
+        segmentIndex: traitSmValueContext.segmentIndex,
+      };
+    } else if (referencedSmContext) {
+      context = { type: "referenced_sm" };
+    } else if (toplevelInjectionContext) {
+      context = { type: "toplevel_injection", targetClass: toplevelInjectionContext.targetClass };
+    } else if (isDefaultValueQualifier) {
+      context = { type: "default_value_qualifier" };
+    } else {
+      context = { type: "normal" };
+    }
+
+    const dottedStateRef: DottedStateRef | undefined =
+      qualifiedPath && pathIndex !== undefined
+        ? { qualifiedPath, pathIndex }
+        : undefined;
+
+    const stateDefinitionRef: StateDefinitionRef | undefined =
+      stateDefinitionPath
+        ? { definitionPath: stateDefinitionPath }
+        : undefined;
 
     return {
       word,
@@ -917,6 +975,9 @@ export class SymbolIndex {
       traitSmValueContext,
       referencedSmContext,
       toplevelInjectionContext,
+      context,
+      dottedStateRef,
+      stateDefinitionRef,
     };
   }
 

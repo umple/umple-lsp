@@ -155,6 +155,18 @@ export class SemanticTestHelper {
   }
 
   /**
+   * Get raw token info at a position. Used for context-model assertions.
+   */
+  tokenAt(
+    filePath: string,
+    content: string,
+    line: number,
+    col: number,
+  ) {
+    return this.si.getTokenAtPosition(filePath, content, line, col);
+  }
+
+  /**
    * Resolve symbol(s) at a marker position. Uses the real production resolver.
    */
   resolve(

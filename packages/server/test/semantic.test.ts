@@ -57,6 +57,20 @@ interface CompletionExcludesAssertion {
   expect: string[]; // labels that must NOT appear in completion items
 }
 
+interface TokenContextAssertion {
+  type: "token_context";
+  at: string;
+  expect: {
+    contextType: string;
+    dottedStateRef?: { qualifiedPath: string[]; pathIndex: number } | null;
+    stateDefinitionRef?: { definitionPath: string[] } | null;
+    traitName?: string;
+    pathSegments?: string[];
+    segmentIndex?: number;
+    targetClass?: string;
+  };
+}
+
 type Assertion =
   | GotoDefAssertion
   | GotoDefEmptyAssertion
@@ -65,7 +79,8 @@ type Assertion =
   | ChildStatesAssertion
   | CompletionKindsAssertion
   | CompletionIncludesAssertion
-  | CompletionExcludesAssertion;
+  | CompletionExcludesAssertion
+  | TokenContextAssertion;
 
 interface TestCase {
   name: string;
@@ -83,6 +98,11 @@ const TEST_CASES: TestCase[] = [
     name: "01 scoping: cross-class attribute isolation",
     fixtures: ["01_scoping.ump"],
     assertions: [
+      {
+        type: "token_context",
+        at: "b_cx",
+        expect: { contextType: "normal", dottedStateRef: null },
+      },
       {
         type: "goto_def",
         at: "b_cx",
@@ -153,6 +173,11 @@ const TEST_CASES: TestCase[] = [
     fixtures: ["04_referenced_sm.ump"],
     assertions: [
       {
+        type: "token_context",
+        at: "ref_status",
+        expect: { contextType: "referenced_sm" },
+      },
+      {
         type: "goto_def",
         at: "ref_status",
         expect: [{ at: "c1_status" }],
@@ -176,6 +201,21 @@ const TEST_CASES: TestCase[] = [
     fixtures: ["05_trait_sm.ump"],
     assertions: [
       {
+        type: "token_context",
+        at: "bind_sm1",
+        expect: { contextType: "trait_sm_param", traitName: "T1" },
+      },
+      {
+        type: "token_context",
+        at: "bind_status",
+        expect: { contextType: "trait_sm_value", pathSegments: ["status", "S1"], segmentIndex: 0 },
+      },
+      {
+        type: "token_context",
+        at: "bind_s1",
+        expect: { contextType: "trait_sm_value", pathSegments: ["status", "S1"], segmentIndex: 1 },
+      },
+      {
         type: "goto_def",
         at: "bind_sm1",
         expect: [{ at: "t_sm1" }],
@@ -198,6 +238,40 @@ const TEST_CASES: TestCase[] = [
     name: "06 dotted_state: relative path disambiguation",
     fixtures: ["06_dotted_state.ump"],
     assertions: [
+      // dottedStateRef metadata
+      {
+        type: "token_context",
+        at: "ref_closed_inner",
+        expect: {
+          contextType: "normal",
+          dottedStateRef: { qualifiedPath: ["Closed", "Inner"], pathIndex: 1 },
+        },
+      },
+      {
+        type: "token_context",
+        at: "ref_closed",
+        expect: {
+          contextType: "normal",
+          dottedStateRef: { qualifiedPath: ["Closed", "Inner"], pathIndex: 0 },
+        },
+      },
+      // stateDefinitionRef metadata
+      {
+        type: "token_context",
+        at: "open_inner",
+        expect: {
+          contextType: "normal",
+          stateDefinitionRef: { definitionPath: ["EEE", "Open", "Inner"] },
+        },
+      },
+      {
+        type: "token_context",
+        at: "closed_inner",
+        expect: {
+          contextType: "normal",
+          stateDefinitionRef: { definitionPath: ["EEE", "Closed", "Inner"] },
+        },
+      },
       {
         type: "goto_def",
         at: "ref_closed_inner",
@@ -249,6 +323,11 @@ const TEST_CASES: TestCase[] = [
     fixtures: ["10_toplevel_inject.ump"],
     assertions: [
       {
+        type: "token_context",
+        at: "hook_inc",
+        expect: { contextType: "toplevel_injection", targetClass: "Counter" },
+      },
+      {
         type: "goto_def",
         at: "hook_inc",
         expect: [{ at: "def_inc" }],
@@ -289,6 +368,19 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+  // 13: Default value qualifier context
+  {
+    name: "13 default_value: qualifier context detection",
+    fixtures: ["13_default_value.ump"],
+    assertions: [
+      {
+        type: "token_context",
+        at: "qual_Status",
+        expect: { contextType: "default_value_qualifier" },
+      },
+    ],
+  },
+
   // 12A: Completion fallback — zero-identifier positions
   {
     name: "12A completion_fallback: zero-identifier scope detection",
@@ -405,6 +497,122 @@ function runAssertion(
       if (pos) return { filePath: f.path, content: f.content, pos };
     }
     return null;
+  }
+
+  if (assertion.type === "token_context") {
+    const src = findMarker(assertion.at);
+    if (!src) return { ok: false, message: `marker @${assertion.at} not found` };
+
+    const token = helper.tokenAt(src.filePath, src.content, src.pos.line, src.pos.col);
+    if (!token) {
+      return { ok: false, message: `token_context @${assertion.at}: no token at position` };
+    }
+
+    const exp = assertion.expect;
+
+    // Check context type
+    if (token.context.type !== exp.contextType) {
+      return {
+        ok: false,
+        message: `token_context @${assertion.at}: expected contextType "${exp.contextType}", got "${token.context.type}"`,
+      };
+    }
+
+    // Check context-specific fields
+    if (exp.traitName !== undefined) {
+      const ctx = token.context as any;
+      if (ctx.traitName !== exp.traitName) {
+        return {
+          ok: false,
+          message: `token_context @${assertion.at}: expected traitName "${exp.traitName}", got "${ctx.traitName}"`,
+        };
+      }
+    }
+    if (exp.pathSegments !== undefined) {
+      const ctx = token.context as any;
+      if (!ctx.pathSegments || JSON.stringify(ctx.pathSegments) !== JSON.stringify(exp.pathSegments)) {
+        return {
+          ok: false,
+          message: `token_context @${assertion.at}: expected pathSegments ${JSON.stringify(exp.pathSegments)}, got ${JSON.stringify(ctx.pathSegments)}`,
+        };
+      }
+    }
+    if (exp.segmentIndex !== undefined) {
+      const ctx = token.context as any;
+      if (ctx.segmentIndex !== exp.segmentIndex) {
+        return {
+          ok: false,
+          message: `token_context @${assertion.at}: expected segmentIndex ${exp.segmentIndex}, got ${ctx.segmentIndex}`,
+        };
+      }
+    }
+    if (exp.targetClass !== undefined) {
+      const ctx = token.context as any;
+      if (ctx.targetClass !== exp.targetClass) {
+        return {
+          ok: false,
+          message: `token_context @${assertion.at}: expected targetClass "${exp.targetClass}", got "${ctx.targetClass}"`,
+        };
+      }
+    }
+
+    // Check dottedStateRef
+    if (exp.dottedStateRef !== undefined) {
+      if (exp.dottedStateRef === null) {
+        if (token.dottedStateRef) {
+          return {
+            ok: false,
+            message: `token_context @${assertion.at}: expected dottedStateRef null, got ${JSON.stringify(token.dottedStateRef)}`,
+          };
+        }
+      } else {
+        if (!token.dottedStateRef) {
+          return {
+            ok: false,
+            message: `token_context @${assertion.at}: expected dottedStateRef, got undefined`,
+          };
+        }
+        if (JSON.stringify(token.dottedStateRef.qualifiedPath) !== JSON.stringify(exp.dottedStateRef.qualifiedPath)) {
+          return {
+            ok: false,
+            message: `token_context @${assertion.at}: expected dottedStateRef.qualifiedPath ${JSON.stringify(exp.dottedStateRef.qualifiedPath)}, got ${JSON.stringify(token.dottedStateRef.qualifiedPath)}`,
+          };
+        }
+        if (token.dottedStateRef.pathIndex !== exp.dottedStateRef.pathIndex) {
+          return {
+            ok: false,
+            message: `token_context @${assertion.at}: expected dottedStateRef.pathIndex ${exp.dottedStateRef.pathIndex}, got ${token.dottedStateRef.pathIndex}`,
+          };
+        }
+      }
+    }
+
+    // Check stateDefinitionRef
+    if (exp.stateDefinitionRef !== undefined) {
+      if (exp.stateDefinitionRef === null) {
+        if (token.stateDefinitionRef) {
+          return {
+            ok: false,
+            message: `token_context @${assertion.at}: expected stateDefinitionRef null, got ${JSON.stringify(token.stateDefinitionRef)}`,
+          };
+        }
+      } else {
+        if (!token.stateDefinitionRef) {
+          return {
+            ok: false,
+            message: `token_context @${assertion.at}: expected stateDefinitionRef, got undefined`,
+          };
+        }
+        if (JSON.stringify(token.stateDefinitionRef.definitionPath) !== JSON.stringify(exp.stateDefinitionRef.definitionPath)) {
+          return {
+            ok: false,
+            message: `token_context @${assertion.at}: expected stateDefinitionRef.definitionPath ${JSON.stringify(exp.stateDefinitionRef.definitionPath)}, got ${JSON.stringify(token.stateDefinitionRef.definitionPath)}`,
+          };
+        }
+      }
+    }
+
+    return { ok: true, message: "" };
   }
 
   if (assertion.type === "goto_def") {

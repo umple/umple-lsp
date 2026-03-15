@@ -1,0 +1,4 @@
+enum Status { ACTIVE, INACTIVE }
+class Task {
+  Status st = /*@qual_Status*/Status.ACTIVE;
+}
