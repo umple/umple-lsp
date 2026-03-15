@@ -24,6 +24,9 @@ packages/server/references.scm
 packages/server/definitions.scm
 packages/server/completions.scm
 
+# Test build output
+.test-out/
+
 # TypeScript incremental build info
 *.tsbuildinfo
 test/scratch/

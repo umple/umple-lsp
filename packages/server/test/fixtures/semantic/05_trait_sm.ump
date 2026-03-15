@@ -1,0 +1,13 @@
+trait T1 {
+  /*@t_sm1*/sm1 {
+    S1 { e1 -> S2; }
+    S2 {}
+  }
+}
+class Host {
+  isA T1</*@bind_sm1*/sm1 as /*@bind_status*/status./*@bind_s1*/S1>;
+  /*@h_status*/status {
+    /*@h_s1*/S1 { e2 -> S2; }
+    S2 {}
+  }
+}

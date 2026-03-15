@@ -22,13 +22,14 @@ import {
   WorkspaceEdit,
 } from "vscode-languageserver/node";
 import { TextDocument } from "vscode-languageserver-textdocument";
-import { BUILTIN_TYPES } from "./keywords";
 import {
   symbolIndex,
   UseStatementWithPosition,
   SymbolKind as UmpleSymbolKind,
   SymbolEntry,
 } from "./symbolIndex";
+import { resolveSymbolAtPosition as resolveSymbol } from "./resolver";
+import { buildSemanticCompletionItems, symbolKindToCompletionKind } from "./completionBuilder";
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new Map<string, TextDocument>();
@@ -342,194 +343,19 @@ connection.onCompletion(async (params): Promise<CompletionItem[]> => {
     }));
   }
 
-  // 5a. Keywords from LookaheadIterator
-  // Filter clearly invalid keywords from constraint context.
-  // LookaheadIterator in constraint error-recovery returns 120+ keywords
-  // including top-level definitions, generate targets, and class-level
-  // directives that can never appear inside [] brackets.
-  let keywords = info.keywords;
-  if (info.symbolKinds === "own_attribute" || info.symbolKinds === "guard_attribute_method" || info.symbolKinds === "trace_attribute_method") {
-    const constraintBlocklist = new Set([
-      "ERROR",
-      // Top-level definition keywords
-      "namespace", "class", "interface", "trait", "abstract",
-      "association", "associationClass", "statemachine",
-      "enum", "external", "mixset",
-      // Generate statement + all targets
-      "generate", "Java", "Nothing", "Php", "RTCpp", "SimpleCpp",
-      "Ruby", "Python", "Cpp", "Json", "StructureDiagram", "Yuml",
-      "Violet", "Umlet", "Simulate", "TextUml", "Scxml",
-      "GvStateDiagram", "GvClassDiagram", "GvFeatureDiagram",
-      "GvClassTraitDiagram", "GvEntityRelationshipDiagram",
-      "Alloy", "NuSMV", "NuSMVOptimizer", "Papyrus", "Ecore", "Xmi",
-      "Xtext", "Sql", "StateTables", "EventSequence", "InstanceDiagram",
-      "Umple", "UmpleSelf", "USE", "Test", "SimpleMetrics",
-      "PlainRequirementsDoc", "Uigu2", "ExternalGrammar", "Mermaid",
-      // Other top-level directives
-      "use", "strictness",
-      // Class-level keywords invalid inside constraints
-      "isA", "req", "require", "subfeature", "isFeature",
-      "depend", "singleton", "displayColor", "displayColour",
-      "implementsReq", "filter", "includeFilter",
-      // Trace/SM/attribute keywords that can't appear in expressions
-      "trace", "tracecase", "activate", "deactivate",
-      "onAllObjects", "onThisThreadOnly", "onThisObject",
-      "where", "until", "giving", "record",
-      "queued", "pooled", "as",
-      "key", "immutable", "unique", "lazy", "settable",
-      "internal", "defaulted", "autounique",
-      "entry", "exit", "do",
-      "emit", "around", "custom", "generated",
-      "include", "hops", "super", "sub",
-    ]);
-    keywords = keywords.filter((kw) => !constraintBlocklist.has(kw));
-  }
+  // 5. Build semantic completion items (keywords, operators, types, symbols)
+  const semanticItems = buildSemanticCompletionItems(
+    info,
+    symbolKinds,
+    symbolIndex,
+    reachableFiles,
+  );
 
-  for (const kw of keywords) {
-    if (!seen.has(kw)) {
-      seen.add(kw);
-      items.push({ label: kw, kind: CompletionItemKind.Keyword });
-    }
-  }
-
-  // 5b. Operators from LookaheadIterator
-  // Skip operators in guard/constraint context — association/transition operators
-  // (e.g., --override-all, ->, <@>-) can never appear inside [] brackets.
-  if (info.symbolKinds !== "own_attribute" && info.symbolKinds !== "guard_attribute_method" && info.symbolKinds !== "trace_attribute_method") {
-    for (const op of info.operators) {
-      if (!seen.has(op)) {
-        seen.add(op);
-        items.push({ label: op, kind: CompletionItemKind.Operator });
-      }
-    }
-  }
-
-  // 5c. Built-in types (when in type-compatible scope)
-  if (
-    Array.isArray(symbolKinds) &&
-    symbolKinds.some((k) => ["class", "interface", "trait", "enum"].includes(k))
-  ) {
-    for (const typ of BUILTIN_TYPES) {
-      if (!seen.has(typ)) {
-        seen.add(typ);
-        items.push({
-          label: typ,
-          kind: CompletionItemKind.TypeParameter,
-          detail: "type",
-        });
-      }
-    }
-  }
-
-  // 5d. Constraint scope: only own attributes (Umple E28)
-  if (symbolKinds === "own_attribute" && info.enclosingClass) {
-    const symbols = symbolIndex
-      .getSymbols({ container: info.enclosingClass, kind: "attribute" })
-      .filter((s) => reachableFiles.has(path.normalize(s.file)));
-    for (const sym of symbols) {
-      if (!seen.has(sym.name)) {
-        seen.add(sym.name);
-        items.push({
-          label: sym.name,
-          kind: symbolKindToCompletionKind("attribute"),
-          detail: "attribute",
-        });
-      }
-    }
-    return items;
-  }
-
-  // 5d2. Guard/trace scope: attributes + methods from enclosing class (with inheritance)
-  if ((symbolKinds === "guard_attribute_method" || symbolKinds === "trace_attribute_method") && info.enclosingClass) {
-    for (const kind of ["attribute", "method"] as UmpleSymbolKind[]) {
-      const symbols = symbolIndex
-        .getSymbols({ container: info.enclosingClass, kind, inherited: true })
-        .filter((s) => reachableFiles.has(path.normalize(s.file)));
-      for (const sym of symbols) {
-        if (!seen.has(sym.name)) {
-          seen.add(sym.name);
-          items.push({
-            label: sym.name,
-            kind: symbolKindToCompletionKind(kind),
-            detail: kind,
-          });
-        }
-      }
-    }
-    return items;
-  }
-
-  // 5e. Symbol completions from index (scoped to reachable files)
-  if (Array.isArray(symbolKinds)) {
-    for (const symKind of symbolKinds) {
-      let symbols: SymbolEntry[];
-
-      // Scoped lookups for container-aware kinds
-      if (symKind === "attribute" && info.enclosingClass) {
-        symbols = symbolIndex
-          .getSymbols({
-            container: info.enclosingClass,
-            kind: "attribute",
-            inherited: true,
-          })
-          .filter((s) => reachableFiles.has(path.normalize(s.file)));
-      } else if (symKind === "state" && info.enclosingStateMachine) {
-        if (info.dottedStatePrefix) {
-          const childNames = symbolIndex.getChildStateNames(
-            info.dottedStatePrefix,
-            info.enclosingStateMachine,
-            reachableFiles,
-          );
-          for (const name of childNames) {
-            if (!seen.has(name)) {
-              seen.add(name);
-              items.push({
-                label: name,
-                kind: symbolKindToCompletionKind("state"),
-                detail: "state",
-              });
-            }
-          }
-          continue;
-        }
-        symbols = symbolIndex
-          .getSymbols({ container: info.enclosingStateMachine, kind: "state" })
-          .filter((s) => reachableFiles.has(path.normalize(s.file)));
-      } else if (symKind === "statemachine" && info.enclosingClass) {
-        symbols = symbolIndex
-          .getSymbols({ kind: "statemachine" })
-          .filter((s) =>
-            s.container?.startsWith(info.enclosingClass + ".") &&
-            reachableFiles.has(path.normalize(s.file))
-          );
-      } else if (symKind === "template" && info.enclosingClass) {
-        symbols = symbolIndex
-          .getSymbols({ container: info.enclosingClass, kind: "template" })
-          .filter((s) => reachableFiles.has(path.normalize(s.file)));
-      } else if (symKind === "method" && info.enclosingClass) {
-        symbols = symbolIndex
-          .getSymbols({
-            container: info.enclosingClass,
-            kind: "method",
-            inherited: true,
-          })
-          .filter((s) => reachableFiles.has(path.normalize(s.file)));
-      } else {
-        symbols = symbolIndex
-          .getSymbols({ kind: symKind })
-          .filter((s) => reachableFiles.has(path.normalize(s.file)));
-      }
-
-      for (const sym of symbols) {
-        if (!seen.has(sym.name)) {
-          seen.add(sym.name);
-          items.push({
-            label: sym.name,
-            kind: symbolKindToCompletionKind(symKind),
-            detail: symKind,
-          });
-        }
-      }
+  // Merge use_path items (if any) with semantic items, deduplicating
+  for (const item of semanticItems) {
+    if (!seen.has(item.label)) {
+      seen.add(item.label);
+      items.push(item);
     }
   }
 
@@ -539,9 +365,8 @@ connection.onCompletion(async (params): Promise<CompletionItem[]> => {
 // ── Shared symbol resolution (used by go-to-def and hover) ──────────────────
 
 /**
- * Resolve symbol(s) at a given position.  Returns the token info plus
- * matching SymbolEntry[] filtered to reachable files, or null if no
- * identifier is found at the position.
+ * Resolve symbol(s) at a given position. Thin wrapper around the shared
+ * resolver that handles reachable-file computation from the document context.
  */
 function resolveSymbolAtPosition(
   docPath: string,
@@ -552,173 +377,8 @@ function resolveSymbolAtPosition(
   token: NonNullable<ReturnType<typeof symbolIndex.getTokenAtPosition>>;
   symbols: SymbolEntry[];
 } | null {
-  const token = symbolIndex.getTokenAtPosition(docPath, content, line, col);
-  if (!token) return null;
-
-  // If references.scm didn't match any pattern, there's no valid target
-  if (!token.kinds) return { token, symbols: [] };
-
   const reachableFiles = ensureImportsIndexed(docPath, content);
-
-  const containerKinds = new Set<string>([
-    "attribute",
-    "const",
-    "method",
-    "template",
-    "state",
-    "statemachine",
-    "tracecase",
-  ]);
-  const isScoped = token.kinds.some((k) => containerKinds.has(k));
-  let container: string | undefined;
-  if (isScoped) {
-    container = token.kinds.some((k) => k === "state" || k === "statemachine")
-      ? token.enclosingStateMachine
-      : token.enclosingClass;
-  }
-
-  let symbols: SymbolEntry[] = [];
-  if (token.traitSmContext) {
-    // Special case: trait_sm_binding param (e.g., sm1 in isA T1<sm1 as sm.s2>).
-    // The SM lives in the trait's scope, not the current class. Construct the
-    // self-qualified container: "TraitName.smName".
-    const smContainer = `${token.traitSmContext.traitName}.${token.word}`;
-    symbols = symbolIndex
-      .getSymbols({
-        name: token.word,
-        kind: ["statemachine"],
-        container: smContainer,
-      })
-      .filter((s) => reachableFiles.has(path.normalize(s.file)));
-  } else if (token.traitSmValueContext) {
-    // Special case: trait_sm_binding value (e.g., sm.s2 in isA T1<sm1 as sm.s2>).
-    // First segment = statemachine in current class, later = states in that SM.
-    const { pathSegments, segmentIndex } = token.traitSmValueContext;
-    const smName = pathSegments[0];
-    const smContainer = `${token.enclosingClass}.${smName}`;
-
-    if (segmentIndex === 0) {
-      symbols = symbolIndex
-        .getSymbols({
-          name: smName,
-          kind: ["statemachine"],
-          container: smContainer,
-        })
-        .filter((s) => reachableFiles.has(path.normalize(s.file)));
-    } else {
-      symbols = symbolIndex
-        .getSymbols({
-          name: token.word,
-          kind: ["state"],
-          container: smContainer,
-        })
-        .filter((s) => reachableFiles.has(path.normalize(s.file)));
-
-      // Disambiguate by direct-child depth (compiler uses direct-child-per-segment)
-      const precedingStatePath = pathSegments.slice(1, segmentIndex);
-      if (precedingStatePath.length === 0) {
-        // Direct child of SM root: require statePath.length === 1
-        symbols = symbols.filter(
-          (s) => !s.statePath || s.statePath.length === 1,
-        );
-      } else if (symbols.length > 1) {
-        const resolved = symbolIndex.resolveStateInPath(
-          precedingStatePath,
-          token.word,
-          smContainer,
-          reachableFiles,
-        );
-        if (resolved) symbols = [resolved];
-      }
-    }
-  } else if (token.referencedSmContext) {
-    // referenced_statemachine: "door as status" — SM lives in the enclosing class.
-    // Container is "ClassName.smName" (self-qualified SM container format).
-    const className = token.referencedSmContext.enclosingClass;
-    const smContainer = `${className}.${token.word}`;
-    symbols = symbolIndex
-      .getSymbols({
-        name: token.word,
-        kind: ["statemachine"],
-        container: smContainer,
-      })
-      .filter((s) => reachableFiles.has(path.normalize(s.file)));
-  } else if (token.toplevelInjectionContext) {
-    // toplevel_code_injection: "before { Counter } increment()"
-    // Resolve operation name against the target class's own methods only.
-    // The Umple compiler does not resolve inherited methods here (W1012).
-    symbols = symbolIndex
-      .getSymbols({
-        name: token.word,
-        kind: ["method"],
-        container: token.toplevelInjectionContext.targetClass,
-      })
-      .filter((s) => reachableFiles.has(path.normalize(s.file)));
-  } else {
-    // Split kinds into scoped (class/SM-local) and unscoped (global).
-    // Try scoped first; only fall through to unscoped if scoped finds nothing.
-    // Scoped kinds never go global — preserves cross-class isolation.
-    const scopedKinds = token.kinds.filter((k) => containerKinds.has(k));
-    const unscopedKinds = token.kinds.filter((k) => !containerKinds.has(k));
-
-    if (scopedKinds.length > 0 && container) {
-      symbols = symbolIndex
-        .getSymbols({
-          name: token.word,
-          kind: scopedKinds,
-          container,
-          inherited: true,
-        })
-        .filter((s) => reachableFiles.has(path.normalize(s.file)));
-    }
-
-    if (symbols.length === 0 && unscopedKinds.length > 0) {
-      symbols = symbolIndex
-        .getSymbols({ name: token.word, kind: unscopedKinds })
-        .filter((s) => reachableFiles.has(path.normalize(s.file)));
-    }
-  }
-
-  // Disambiguate dotted state paths (e.g., EEE.Open.Inner → only Inner inside Open)
-  if (
-    token.qualifiedPath &&
-    token.pathIndex !== undefined &&
-    token.pathIndex > 0 &&
-    symbols.length > 1 &&
-    token.enclosingStateMachine
-  ) {
-    const precedingPath = token.qualifiedPath.slice(0, token.pathIndex);
-    const resolved = symbolIndex.resolveStateInPath(
-      precedingPath,
-      token.word,
-      token.enclosingStateMachine,
-      reachableFiles,
-    );
-    if (resolved) {
-      symbols = [resolved];
-    }
-  }
-
-  // Disambiguate state definition sites (e.g., cursor on Inner in `Inner {}` inside EEE.Open)
-  if (
-    token.stateDefinitionPath &&
-    token.kinds?.includes("state") &&
-    symbols.length > 1
-  ) {
-    const defPath = token.stateDefinitionPath;
-    const narrowed = symbols.filter(
-      (s) =>
-        s.kind === "state" &&
-        s.statePath &&
-        s.statePath.length === defPath.length &&
-        s.statePath.every((seg, i) => seg === defPath[i]),
-    );
-    if (narrowed.length > 0) {
-      symbols = narrowed;
-    }
-  }
-
-  return { token, symbols };
+  return resolveSymbol(symbolIndex, docPath, content, line, col, reachableFiles);
 }
 
 connection.onDefinition(async (params) => {
@@ -2317,41 +1977,6 @@ function getDocumentFilePath(document: TextDocument): string | null {
   }
 }
 
-/**
- * Map a SymbolKind to the appropriate LSP CompletionItemKind.
- */
-function symbolKindToCompletionKind(kind: UmpleSymbolKind): CompletionItemKind {
-  switch (kind) {
-    case "class":
-      return CompletionItemKind.Class;
-    case "interface":
-      return CompletionItemKind.Interface;
-    case "trait":
-      return CompletionItemKind.Class;
-    case "enum":
-      return CompletionItemKind.Enum;
-    case "state":
-      return CompletionItemKind.EnumMember;
-    case "statemachine":
-      return CompletionItemKind.Enum;
-    case "attribute":
-      return CompletionItemKind.Field;
-    case "const":
-      return CompletionItemKind.Constant;
-    case "method":
-      return CompletionItemKind.Method;
-    case "association":
-      return CompletionItemKind.Reference;
-    case "mixset":
-      return CompletionItemKind.Module;
-    case "requirement":
-      return CompletionItemKind.Reference;
-    case "template":
-      return CompletionItemKind.Property;
-    default:
-      return CompletionItemKind.Text;
-  }
-}
 
 function getUseFileCompletions(
   document: TextDocument,

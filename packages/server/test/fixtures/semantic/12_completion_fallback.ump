@@ -1,0 +1,26 @@
+// Each incomplete construct isolated in its own class to prevent cascading parse errors
+interface I {}
+enum Color { RED }
+
+class IsATest {
+  isA /*@isA_empty*/
+}
+
+class BeforeTest {
+  void ping() {}
+  before /*@before_empty*/
+}
+
+class ArrowTest {
+  status {
+    Open {
+      go -> /*@arrow_empty*/
+    }
+    Closed {}
+  }
+}
+
+class RefSmTest {
+  status { On {} Off {} }
+  door as /*@refsm_empty*/
+}

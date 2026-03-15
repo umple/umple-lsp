@@ -1,0 +1,2 @@
+class A { Integer /*@a_x*/x; }
+class B { Integer /*@b_x*/x; [/*@b_cx*/x > 0] }

@@ -1,0 +1,1 @@
+class /*@def_shared_c*/Shared { Integer other; }

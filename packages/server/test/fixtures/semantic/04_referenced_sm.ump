@@ -1,0 +1,7 @@
+class C1 {
+  /*@c1_status*/status { On {} Off {} }
+  door as /*@ref_status*/status;
+}
+class C2 {
+  /*@c2_status*/status { Open {} Closed {} }
+}

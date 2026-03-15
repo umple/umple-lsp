@@ -1,0 +1,12 @@
+class Elevator {
+  status {
+    EEE {
+      Open {
+        /*@open_inner*/Inner { close -> /*@ref_closed*/Closed./*@ref_closed_inner*/Inner; }
+      }
+      Closed {
+        /*@closed_inner*/Inner { open -> /*@ref_open*/Open./*@ref_open_inner*/Inner; }
+      }
+    }
+  }
+}

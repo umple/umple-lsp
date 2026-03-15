@@ -16,7 +16,9 @@
   ],
   "scripts": {
     "compile": "tsc -p .",
-    "watch": "tsc -watch -p ."
+    "compile:test": "tsc -p tsconfig.test.json",
+    "watch": "tsc -watch -p .",
+    "test": "npm run compile:test && node .test-out/test/semantic.test.js"
   },
   "repository": {
     "type": "git",

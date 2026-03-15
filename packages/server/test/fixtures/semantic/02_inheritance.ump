@@ -1,0 +1,5 @@
+class Base { Integer /*@base_max*/max; }
+class Child {
+  isA Base;
+  [/*@child_max*/max > 0]
+}

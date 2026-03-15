@@ -1,0 +1,4 @@
+use 11_cross_file_b.ump;
+class Consumer {
+  /*@use_shared*/Shared s;
+}

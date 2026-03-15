@@ -1,0 +1,6 @@
+class A {
+  void /*@def_ping*/ping() {}
+  void /*@def_pong*/pong() {}
+  before /*@hook_ping*/ping { }
+  after /*@hook_pong*/pong { }
+}

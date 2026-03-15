@@ -1,0 +1,23 @@
+interface /*@iface_I*/I {}
+enum /*@enum_Color*/Color { RED }
+class Parent {
+  void inheritedPing() {}
+}
+class ItemTest {
+  isA /*@isA_item*/Parent;
+
+  void ownPing() {}
+  before o/*@before_item*/wnPing { }
+
+  Integer limit;
+  boolean canOpen() { return true; }
+
+  status {
+    Open {
+      go [/*@guard_item*/limit > 0] -> /*@arrow_item*/Closed;
+    }
+    Closed {}
+  }
+
+  door as /*@refsm_item*/status;
+}

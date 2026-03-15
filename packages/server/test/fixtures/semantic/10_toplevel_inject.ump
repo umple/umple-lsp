@@ -1,0 +1,9 @@
+class Counter {
+  void /*@def_inc*/increment() {}
+  void /*@def_dec*/decrement() {}
+}
+class Timer {
+  void /*@timer_inc*/increment() {}
+}
+before { Counter } /*@hook_inc*/increment { }
+after { Counter } /*@hook_dec*/decrement { }
