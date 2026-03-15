@@ -81,12 +81,20 @@ type Assertion =
   | CompletionIncludesAssertion
   | CompletionExcludesAssertion
   | TokenContextAssertion
-  | HoverOutputAssertion;
+  | HoverOutputAssertion
+  | DocumentSymbolsAssertion;
 
 interface HoverOutputAssertion {
   type: "hover_output";
   at: string;
   expectContains: string[];
+}
+
+interface DocumentSymbolsAssertion {
+  type: "document_symbols";
+  fixture: string;
+  expectRoots: string[];
+  expectChild: { parent: string; child: string };
 }
 
 interface TestCase {
@@ -412,6 +420,12 @@ const TEST_CASES: TestCase[] = [
         type: "hover_output",
         at: "hover_state",
         expectContains: ["Alive", "die -> Dead"],
+      },
+      {
+        type: "document_symbols",
+        fixture: "14_hover.ump",
+        expectRoots: ["Animal", "Creature"],
+        expectChild: { parent: "Animal", child: "status" },
       },
     ],
   },
@@ -786,6 +800,43 @@ function runAssertion(
         };
       }
     }
+    return { ok: true, message: "" };
+  }
+
+  if (assertion.type === "document_symbols") {
+    const fileInfo = files.get(assertion.fixture);
+    if (!fileInfo) return { ok: false, message: `fixture ${assertion.fixture} not found` };
+
+    const tree = helper.documentSymbols(fileInfo.path);
+    const rootNames = tree.map((s) => s.name).sort();
+    const expectedRoots = [...assertion.expectRoots].sort();
+
+    // Check root names
+    for (const expected of expectedRoots) {
+      if (!rootNames.includes(expected)) {
+        return {
+          ok: false,
+          message: `document_symbols: expected root "${expected}" not found in [${rootNames.join(", ")}]`,
+        };
+      }
+    }
+
+    // Check parent→child nesting
+    const parentSym = tree.find((s) => s.name === assertion.expectChild.parent);
+    if (!parentSym) {
+      return {
+        ok: false,
+        message: `document_symbols: parent "${assertion.expectChild.parent}" not found in roots`,
+      };
+    }
+    const childNames = (parentSym.children ?? []).map((c) => c.name);
+    if (!childNames.includes(assertion.expectChild.child)) {
+      return {
+        ok: false,
+        message: `document_symbols: expected child "${assertion.expectChild.child}" not found in "${assertion.expectChild.parent}" children [${childNames.join(", ")}]`,
+      };
+    }
+
     return { ok: true, message: "" };
   }
 

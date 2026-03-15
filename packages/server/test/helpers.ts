@@ -11,6 +11,7 @@ import { SymbolIndex, SymbolEntry, SymbolKind, CompletionInfo } from "../src/sym
 import { resolveSymbolAtPosition } from "../src/resolver";
 import { buildSemanticCompletionItems } from "../src/completionBuilder";
 import { buildHoverMarkdown } from "../src/hoverBuilder";
+import { buildDocumentSymbolTree } from "../src/documentSymbolBuilder";
 import { CompletionItem } from "vscode-languageserver/node";
 
 // __dirname at runtime is .test-out/test/, so ../../ reaches the package root
@@ -254,6 +255,14 @@ export class SemanticTestHelper {
       getTree: (fp: string) => this.si.getTree(fp),
       getIsAParents: (name: string) => this.si.getIsAParents(name),
     });
+  }
+
+  /**
+   * Build document symbol tree for a file's symbols.
+   */
+  documentSymbols(filePath: string) {
+    const symbols = this.si.getFileSymbols(filePath);
+    return buildDocumentSymbolTree(symbols);
   }
 
   /**
