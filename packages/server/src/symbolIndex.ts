@@ -753,14 +753,6 @@ export class SymbolIndex {
     kinds: SymbolKind[] | null;
     enclosingClass?: string;
     enclosingStateMachine?: string;
-    qualifiedPath?: string[];
-    pathIndex?: number;
-    stateDefinitionPath?: string[];
-    traitSmContext?: { traitName: string };
-    traitSmValueContext?: { pathSegments: string[]; segmentIndex: number };
-    referencedSmContext?: { enclosingClass: string };
-    toplevelInjectionContext?: { targetClass: string };
-    // New discriminated context model (Phase 1: dual-write alongside old fields)
     context: LookupContext;
     dottedStateRef?: DottedStateRef;
     stateDefinitionRef?: StateDefinitionRef;
@@ -802,9 +794,10 @@ export class SymbolIndex {
     const { enclosingClass, enclosingStateMachine } =
       this.resolveEnclosingScope(tree, line, column);
 
-    // Detect dotted state path in transition targets
-    let qualifiedPath: string[] | undefined;
-    let pathIndex: number | undefined;
+    // ── Detect orthogonal metadata ──────────────────────────────────────────
+
+    // Dotted state path in transition targets
+    let dottedStateRef: DottedStateRef | undefined;
     const parent = node.parent;
     if (node.type === "identifier" && parent?.type === "qualified_name") {
       const grandparent = parent.parent;
@@ -821,27 +814,28 @@ export class SymbolIndex {
             }
           }
           if (ids.length > 1 && idx >= 0) {
-            qualifiedPath = ids;
-            pathIndex = idx;
+            dottedStateRef = { qualifiedPath: ids, pathIndex: idx };
           }
         }
       }
     }
 
-    // Detect state definition names — identifier is the `name` field of a `state` node
-    let stateDefinitionPath: string[] | undefined;
+    // State definition names — identifier is the `name` field of a `state` node
+    let stateDefinitionRef: StateDefinitionRef | undefined;
     if (
       node.type === "identifier" &&
       parent?.type === "state" &&
       parent.childForFieldName("name")?.id === node.id
     ) {
-      stateDefinitionPath = this.resolveStatePath(node);
+      stateDefinitionRef = { definitionPath: this.resolveStatePath(node) };
     }
 
-    // Detect trait_sm_binding param: isA T1<sm1 as sm.s2> — sm1 references
+    // ── Detect primary lookup context ────────────────────────────────────────
+
+    let context: LookupContext = { type: "normal" };
+
+    // trait_sm_binding param: isA T1<sm1 as sm.s2> — sm1 references
     // a statemachine in the trait, not in the current class.
-    // AST: type_name > trait_sm_binding > param:identifier
-    let traitSmContext: { traitName: string } | undefined;
     if (
       node.type === "identifier" &&
       parent?.type === "trait_sm_binding" &&
@@ -851,21 +845,16 @@ export class SymbolIndex {
       if (typeName?.type === "type_name") {
         const qn = typeName.childForFieldName("name") ?? typeName.namedChild(0);
         if (qn?.type === "qualified_name") {
-          // Use last identifier segment (handles qualified names like ns1.ns2.T1)
           const lastId = qn.namedChild(qn.namedChildCount - 1);
           if (lastId?.type === "identifier") {
-            traitSmContext = { traitName: lastId.text };
+            context = { type: "trait_sm_param", traitName: lastId.text };
           }
         }
       }
     }
 
-    // Detect trait_sm_binding value: isA T1<sm1 as sm.s2> — sm.s2 references
+    // trait_sm_binding value: isA T1<sm1 as sm.s2> — sm.s2 references
     // class-side statemachine and state. First segment = SM, rest = states.
-    // AST: trait_sm_binding > value:qualified_name > identifier
-    let traitSmValueContext:
-      | { pathSegments: string[]; segmentIndex: number }
-      | undefined;
     if (
       node.type === "identifier" &&
       parent?.type === "qualified_name" &&
@@ -882,27 +871,24 @@ export class SymbolIndex {
         }
       }
       if (idx >= 0 && segments.length >= 1) {
-        traitSmValueContext = { pathSegments: segments, segmentIndex: idx };
-        // Override kinds: first segment = statemachine, rest = state
+        context = { type: "trait_sm_value", pathSegments: segments, segmentIndex: idx };
         kinds = idx === 0 ? ["statemachine"] : ["state"];
       }
     }
 
-    // Detect referenced_statemachine: "door as status" — definition field
+    // referenced_statemachine: "door as status" — definition field
     // references an SM in the enclosing class, not an enclosing SM ancestor.
-    let referencedSmContext: { enclosingClass: string } | undefined;
     if (
       node.type === "identifier" &&
       parent?.type === "referenced_statemachine" &&
       parent.childForFieldName("definition")?.id === node.id &&
       enclosingClass
     ) {
-      referencedSmContext = { enclosingClass };
+      context = { type: "referenced_sm" };
     }
 
-    // Detect toplevel_code_injection operation: "before { Counter } increment()"
+    // toplevel_code_injection operation: "before { Counter } increment()"
     // The operation name references a method in the target class.
-    let toplevelInjectionContext: { targetClass: string } | undefined;
     if (
       node.type === "identifier" &&
       parent?.type === "toplevel_code_injection" &&
@@ -910,14 +896,12 @@ export class SymbolIndex {
     ) {
       const targetNode = parent.childForFieldName("target");
       if (targetNode) {
-        toplevelInjectionContext = { targetClass: targetNode.text };
+        context = { type: "toplevel_injection", targetClass: targetNode.text };
       }
     }
 
-    // Detect default-value qualifier in "Status.ACTIVE" — non-final segment
+    // Default-value qualifier in "Status.ACTIVE" — non-final segment
     // is an enum name, not a value. Override kinds for qualifier position.
-    // AST: attribute_declaration > qualified_name (not inside type_name) > identifier
-    let isDefaultValueQualifier = false;
     if (
       node.type === "identifier" &&
       parent?.type === "qualified_name" &&
@@ -928,53 +912,16 @@ export class SymbolIndex {
         const isLastSegment = parent.namedChild(parent.namedChildCount - 1)?.id === node.id;
         if (!isLastSegment) {
           kinds = ["enum"];
-          isDefaultValueQualifier = true;
+          context = { type: "default_value_qualifier" };
         }
       }
     }
-
-    // Compute new discriminated context (Phase 1: dual-write)
-    let context: LookupContext;
-    if (traitSmContext) {
-      context = { type: "trait_sm_param", traitName: traitSmContext.traitName };
-    } else if (traitSmValueContext) {
-      context = {
-        type: "trait_sm_value",
-        pathSegments: traitSmValueContext.pathSegments,
-        segmentIndex: traitSmValueContext.segmentIndex,
-      };
-    } else if (referencedSmContext) {
-      context = { type: "referenced_sm" };
-    } else if (toplevelInjectionContext) {
-      context = { type: "toplevel_injection", targetClass: toplevelInjectionContext.targetClass };
-    } else if (isDefaultValueQualifier) {
-      context = { type: "default_value_qualifier" };
-    } else {
-      context = { type: "normal" };
-    }
-
-    const dottedStateRef: DottedStateRef | undefined =
-      qualifiedPath && pathIndex !== undefined
-        ? { qualifiedPath, pathIndex }
-        : undefined;
-
-    const stateDefinitionRef: StateDefinitionRef | undefined =
-      stateDefinitionPath
-        ? { definitionPath: stateDefinitionPath }
-        : undefined;
 
     return {
       word,
       kinds,
       enclosingClass,
       enclosingStateMachine,
-      qualifiedPath,
-      pathIndex,
-      stateDefinitionPath,
-      traitSmContext,
-      traitSmValueContext,
-      referencedSmContext,
-      toplevelInjectionContext,
       context,
       dottedStateRef,
       stateDefinitionRef,
