@@ -10,6 +10,7 @@ import * as fs from "fs";
 import { SymbolIndex, SymbolEntry, SymbolKind, CompletionInfo } from "../src/symbolIndex";
 import { resolveSymbolAtPosition } from "../src/resolver";
 import { buildSemanticCompletionItems } from "../src/completionBuilder";
+import { buildHoverMarkdown } from "../src/hoverBuilder";
 import { CompletionItem } from "vscode-languageserver/node";
 
 // __dirname at runtime is .test-out/test/, so ../../ reaches the package root
@@ -234,6 +235,25 @@ export class SemanticTestHelper {
     const symbolKinds = info.symbolKinds === "use_path" ? null : info.symbolKinds;
     if (!symbolKinds) return [];
     return buildSemanticCompletionItems(info, symbolKinds, this.si, reachable);
+  }
+
+  /**
+   * Get hover markdown for a symbol at a position.
+   */
+  hoverAt(
+    filePath: string,
+    content: string,
+    line: number,
+    col: number,
+    reachable: Set<string>,
+  ): string | null {
+    const result = this.resolve(filePath, content, line, col, reachable);
+    if (!result || result.symbols.length === 0) return null;
+    const sym = result.symbols[0];
+    return buildHoverMarkdown(sym, result.symbols, {
+      getTree: (fp: string) => this.si.getTree(fp),
+      getIsAParents: (name: string) => this.si.getIsAParents(name),
+    });
   }
 
   /**

@@ -80,7 +80,14 @@ type Assertion =
   | CompletionKindsAssertion
   | CompletionIncludesAssertion
   | CompletionExcludesAssertion
-  | TokenContextAssertion;
+  | TokenContextAssertion
+  | HoverOutputAssertion;
+
+interface HoverOutputAssertion {
+  type: "hover_output";
+  at: string;
+  expectContains: string[];
+}
 
 interface TestCase {
   name: string;
@@ -377,6 +384,34 @@ const TEST_CASES: TestCase[] = [
         type: "token_context",
         at: "qual_Status",
         expect: { contextType: "default_value_qualifier" },
+      },
+    ],
+  },
+
+  // 14: Hover output smoke tests
+  {
+    name: "14 hover: output content",
+    fixtures: ["14_hover.ump"],
+    assertions: [
+      {
+        type: "hover_output",
+        at: "hover_class",
+        expectContains: ["class Animal", "isA Creature"],
+      },
+      {
+        type: "hover_output",
+        at: "hover_attr",
+        expectContains: ["Integer", "age"],
+      },
+      {
+        type: "hover_output",
+        at: "hover_method",
+        expectContains: ["void", "run"],
+      },
+      {
+        type: "hover_output",
+        at: "hover_state",
+        expectContains: ["Alive", "die -> Dead"],
       },
     ],
   },
@@ -748,6 +783,29 @@ function runAssertion(
         return {
           ok: false,
           message: `completion_kinds @${assertion.at}: expected [${expected.join(", ")}], got [${(actual as string[]).join(", ")}]`,
+        };
+      }
+    }
+    return { ok: true, message: "" };
+  }
+
+  if (assertion.type === "hover_output") {
+    const src = findMarker(assertion.at);
+    if (!src) return { ok: false, message: `marker @${assertion.at} not found` };
+
+    const markdown = helper.hoverAt(src.filePath, src.content, src.pos.line, src.pos.col, reachable);
+    if (!markdown) {
+      return {
+        ok: false,
+        message: `hover_output @${assertion.at}: hover returned null`,
+      };
+    }
+
+    for (const expected of assertion.expectContains) {
+      if (!markdown.includes(expected)) {
+        return {
+          ok: false,
+          message: `hover_output @${assertion.at}: expected "${expected}" in hover, got: ${markdown.substring(0, 200)}`,
         };
       }
     }

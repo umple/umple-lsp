@@ -1,0 +1,12 @@
+class /*@hover_class*/Animal {
+  isA Creature;
+  Integer /*@hover_attr*/age;
+  void /*@hover_method*/run(Integer speed) {}
+  status {
+    /*@hover_state*/Alive {
+      die -> Dead;
+    }
+    Dead {}
+  }
+}
+class Creature {}
