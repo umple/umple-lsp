@@ -26,6 +26,7 @@ import { resolveEnclosingScope, resolveStatePath, stripSmPrefix } from "./treeUt
 import { analyzeToken } from "./tokenAnalysis";
 import { analyzeCompletion } from "./completionAnalysis";
 import { searchReferences } from "./referenceSearch";
+import { ImportGraph } from "./importGraph";
 export type { CompletionInfo } from "./completionAnalysis";
 
 interface FileIndex {
@@ -47,10 +48,8 @@ export class SymbolIndex {
   private isAByFile: Map<string, Map<string, string[]>> = new Map();
   // Global isA graph: className → parent names (merged from all files)
   private isAGraph: Map<string, string[]> = new Map();
-  // Forward import graph: file → set of files it imports via `use`
-  private forwardImports: Map<string, Set<string>> = new Map();
-  // Reverse import graph: file → set of files that import it
-  private reverseImports: Map<string, Set<string>> = new Map();
+  // Import graph: forward/reverse edge management
+  private importGraph = new ImportGraph();
   private initialized = false;
 
   /**
@@ -857,7 +856,7 @@ export class SymbolIndex {
     //    This prevents stale forward-import edges from re-adding deleted files.
     const externalFiles = new Set<string>();
     for (const filePath of discoveredFiles) {
-      const imports = this.forwardImports.get(filePath);
+      const imports = this.importGraph.getForward(filePath);
       if (imports) {
         for (const imp of imports) {
           if (
@@ -880,7 +879,7 @@ export class SymbolIndex {
       } else {
         this.indexFile(filePath);
       }
-      const imports = this.forwardImports.get(filePath);
+      const imports = this.importGraph.getForward(filePath);
       if (imports) {
         for (const imp of imports) {
           if (
@@ -915,20 +914,7 @@ export class SymbolIndex {
    * Transitive reverse closure.
    */
   getReverseImporters(declarationFiles: Set<string>): Set<string> {
-    const result = new Set<string>();
-    const queue = [...declarationFiles];
-    while (queue.length > 0) {
-      const file = queue.pop()!;
-      const importers = this.reverseImports.get(file);
-      if (!importers) continue;
-      for (const importer of importers) {
-        if (!result.has(importer) && !declarationFiles.has(importer)) {
-          result.add(importer);
-          queue.push(importer);
-        }
-      }
-    }
-    return result;
+    return this.importGraph.getReverseImporters(declarationFiles);
   }
 
   /**
@@ -962,19 +948,7 @@ export class SymbolIndex {
    * Update forward/reverse import maps for a file.
    */
   private updateImportMaps(filePath: string, content: string): void {
-    // Remove old forward edges from reverse map
-    const oldImports = this.forwardImports.get(filePath);
-    if (oldImports) {
-      for (const imp of oldImports) {
-        const rev = this.reverseImports.get(imp);
-        if (rev) {
-          rev.delete(filePath);
-          if (rev.size === 0) this.reverseImports.delete(imp);
-        }
-      }
-    }
-
-    // Compute new forward imports
+    // Compute resolved imports from use statements
     const usePaths = this.extractUseStatements(filePath, content);
     const fileDir = path.dirname(filePath);
     const newImports = new Set<string>();
@@ -987,17 +961,8 @@ export class SymbolIndex {
         newImports.add(resolved);
       }
     }
-    this.forwardImports.set(filePath, newImports);
-
-    // Add new reverse edges
-    for (const imp of newImports) {
-      let rev = this.reverseImports.get(imp);
-      if (!rev) {
-        rev = new Set();
-        this.reverseImports.set(imp, rev);
-      }
-      rev.add(filePath);
-    }
+    // Delegate edge management to ImportGraph
+    this.importGraph.setEdges(filePath, newImports);
   }
 
   /**
@@ -1006,23 +971,7 @@ export class SymbolIndex {
   private removeFile(filePath: string): void {
     this.removeFileSymbols(filePath);
     this.files.delete(filePath);
-
-    // Clean import maps
-    const oldImports = this.forwardImports.get(filePath);
-    if (oldImports) {
-      for (const imp of oldImports) {
-        const rev = this.reverseImports.get(imp);
-        if (rev) {
-          rev.delete(filePath);
-          if (rev.size === 0) this.reverseImports.delete(imp);
-        }
-      }
-    }
-    this.forwardImports.delete(filePath);
-    // Also remove as a target in reverse map
-    this.reverseImports.delete(filePath);
-
-    // Clean isA
+    this.importGraph.removeEdges(filePath);
     this.isAByFile.delete(filePath);
     this.rebuildIsAGraph();
   }
