@@ -18,35 +18,15 @@ type Query = InstanceType<typeof TreeSitter.Query>;
 
 // Re-export shared types from neutral modules
 export type { SymbolKind, LookupContext, DottedStateRef, StateDefinitionRef, TokenResult } from "./tokenTypes";
+export type { SymbolEntry, UseStatementWithPosition, ReferenceLocation } from "./symbolTypes";
 import type { SymbolKind, TokenResult } from "./tokenTypes";
+import type { SymbolEntry, ReferenceLocation, UseStatementWithPosition } from "./symbolTypes";
 import { SYMBOL_KINDS_LONGEST_FIRST } from "./tokenTypes";
-import { resolveEnclosingScope, resolveStatePath } from "./treeUtils";
+import { resolveEnclosingScope, resolveStatePath, stripSmPrefix } from "./treeUtils";
 import { analyzeToken } from "./tokenAnalysis";
 import { analyzeCompletion } from "./completionAnalysis";
+import { searchReferences } from "./referenceSearch";
 export type { CompletionInfo } from "./completionAnalysis";
-
-export interface SymbolEntry {
-  name: string;
-  kind: SymbolKind;
-  file: string;
-  line: number; // 0-indexed, name identifier position
-  column: number; // 0-indexed
-  endLine: number;
-  endColumn: number;
-  container?: string; // Enclosing class (for attributes/methods) or root SM (for states)
-  // Definition node range (full body extent, e.g., class_definition start to closing })
-  defLine?: number;
-  defColumn?: number;
-  defEndLine?: number;
-  defEndColumn?: number;
-  // For states: nesting path from root SM, e.g., ["EEE", "Open", "Inner"]
-  statePath?: string[];
-}
-
-export interface UseStatementWithPosition {
-  path: string; // Original path from use statement (e.g., "Teacher" or "Teacher.ump")
-  line: number; // 0-indexed line number
-}
 
 interface FileIndex {
   symbols: SymbolEntry[];
@@ -531,7 +511,7 @@ export class SymbolIndex {
   ): string[] {
     if (parentPath.length === 0) return [];
 
-    const effectivePath = this.stripSmPrefix(parentPath, smContainer);
+    const effectivePath = stripSmPrefix(parentPath, smContainer);
     if (effectivePath.length === 0) return [];
 
     const allStates = this.getSymbols({
@@ -578,7 +558,7 @@ export class SymbolIndex {
   ): SymbolEntry | undefined {
     if (precedingPath.length === 0) return undefined;
 
-    const effectivePath = this.stripSmPrefix(precedingPath, smContainer);
+    const effectivePath = stripSmPrefix(precedingPath, smContainer);
     const targetPath = [...effectivePath, targetName];
 
     let candidates = this.getSymbols({
@@ -607,21 +587,6 @@ export class SymbolIndex {
   // =====================
   // Private methods
   // =====================
-
-  /**
-   * Strip a leading state-machine name from a dotted path if it matches
-   * the bare SM name of the container. E.g., path ["bulb","EEE"] with
-   * container "TrafficLight.bulb" → ["EEE"].
-   */
-  private stripSmPrefix(pathSegments: string[], smContainer: string): string[] {
-    const dotIdx = smContainer.lastIndexOf(".");
-    const bareSmName =
-      dotIdx >= 0 ? smContainer.substring(dotIdx + 1) : smContainer;
-    if (pathSegments[0] === bareSmName) {
-      return pathSegments.slice(1);
-    }
-    return pathSegments;
-  }
 
   private readFileSafe(filePath: string): string | null {
     try {
@@ -968,323 +933,29 @@ export class SymbolIndex {
 
   /**
    * Find all references to a symbol across the given files.
-   * Uses references.scm query to find candidate sites, then filters
-   * by name, kind, and container/path context.
+   * Delegates to the extracted searchReferences() function.
    */
   findReferences(
     declarations: SymbolEntry[],
     filesToSearch: Set<string>,
     includeDeclaration: boolean,
-  ): { file: string; line: number; column: number; endLine: number; endColumn: number }[] {
+  ): ReferenceLocation[] {
     if (!this.referencesQuery || declarations.length === 0) return [];
 
-    const sym = declarations[0];
-    const symName = sym.name;
-    const symKind = sym.kind;
-    const symContainer = sym.container;
-
-    // Collect definition positions for deduplication and includeDeclaration
-    const defPositions = new Set<string>();
-    for (const d of declarations) {
-      defPositions.add(`${d.file}:${d.line}:${d.column}:${d.endLine}:${d.endColumn}`);
+    // Build filePath→tree map for the files to search
+    const fileTreeMap = new Map<string, any>();
+    for (const fp of filesToSearch) {
+      const tree = this.files.get(fp)?.tree;
+      if (tree) fileTreeMap.set(fp, tree);
     }
 
-    // Container-scoped kinds need enclosing scope verification
-    const containerScopedKinds = new Set<SymbolKind>([
-      "attribute", "const", "method", "template", "state", "statemachine", "tracecase",
-    ]);
-    const isContainerScoped = containerScopedKinds.has(symKind);
-
-    const results: { file: string; line: number; column: number; endLine: number; endColumn: number }[] = [];
-    const seen = new Set<string>();
-
-    const addResult = (file: string, line: number, column: number, endLine: number, endColumn: number) => {
-      const key = `${file}:${line}:${column}:${endLine}:${endColumn}`;
-      if (seen.has(key)) return;
-      // Skip definition sites unless includeDeclaration
-      if (!includeDeclaration && defPositions.has(key)) return;
-      seen.add(key);
-      results.push({ file, line, column, endLine, endColumn });
-    };
-
-    // If includeDeclaration, add all definition sites first
-    if (includeDeclaration) {
-      for (const d of declarations) {
-        addResult(d.file, d.line, d.column, d.endLine, d.endColumn);
-      }
-    }
-
-    // Scan each file
-    for (const filePath of filesToSearch) {
-      const fileIndex = this.files.get(filePath);
-      if (!fileIndex?.tree) continue;
-
-      const captures = this.referencesQuery.captures(fileIndex.tree.rootNode);
-
-      for (const capture of captures) {
-        const node = capture.node;
-        if (node.text !== symName) continue;
-
-        // Parse capture name to get reference kinds
-        const refKinds = this.parseCaptureKinds(capture.name);
-        if (!refKinds || !refKinds.includes(symKind)) continue;
-
-        // For container-scoped kinds, verify enclosing scope matches
-        if (isContainerScoped && symContainer) {
-          const enclosing = this.resolveEnclosingScopeFromNode(node, symKind);
-          if (enclosing && enclosing !== symContainer) {
-            // Check inheritance: enclosing class may inherit from container's class
-            if (symKind === "state" || symKind === "statemachine") {
-              // SM container is "ClassName.smName" — no inheritance walk needed,
-              // must match exactly
-              continue;
-            }
-            // For attribute/method/etc: enclosing is class name, check isA chain
-            const containerClass = symContainer;
-            if (!this.isInheritanceChain(enclosing, containerClass)) {
-              continue;
-            }
-          }
-        }
-
-        // For trait_sm_binding value paths, filter by segment position and depth
-        const valSegIdx = this.getTraitSmBindingValueSegmentIndex(node);
-        if (valSegIdx !== undefined) {
-          // Kind filtering: segment 0 = statemachine only, segment 1+ = state only
-          if (valSegIdx === 0 && symKind !== "statemachine") continue;
-          if (valSegIdx > 0 && symKind !== "state") continue;
-
-          // Depth filtering: segment index must match statePath length
-          if (symKind === "state" && sym.statePath &&
-              valSegIdx !== sym.statePath.length) continue;
-        }
-
-        // For nested states, disambiguate by path context.
-        // Three cases:
-        //   1. Dotted path (inside qualified_name, index > 0): compare preceding segments
-        //   2. Definition site (node.parent is "state"): walk ancestor states, exact path match
-        //   3. Bare reference (everything else): no path synthesis, existing rules apply
-        if (symKind === "state" && sym.statePath && sym.statePath.length >= 1) {
-          const pathCtx = this.extractPathContextFromNode(node);
-          if (pathCtx) {
-            // Case 1: dotted path (transition target or trait_sm_binding value)
-            let preceding = pathCtx.preceding;
-            // Strip SM name prefix for trait_sm_binding value paths
-            // (first segment is the SM name, not a state ancestor)
-            if (
-              node.parent?.parent?.type === "trait_sm_binding" &&
-              node.parent?.parent?.childForFieldName("value")?.id ===
-                node.parent?.id
-            ) {
-              preceding = preceding.slice(1);
-            }
-            const targetPrecedingPath = sym.statePath.slice(0, sym.statePath.length - 1);
-            if (!this.pathMatches(preceding, targetPrecedingPath, true)) {
-              continue;
-            }
-          } else if (node.parent?.type === "state") {
-            // Case 2: state definition name (e.g., Open {})
-            const candidatePath = resolveStatePath(node);
-            if (!this.pathMatches(candidatePath, sym.statePath, false)) {
-              continue;
-            }
-          }
-          // Case 3: bare reference — fall through, no path filtering
-        }
-
-        addResult(
-          filePath,
-          node.startPosition.row,
-          node.startPosition.column,
-          node.endPosition.row,
-          node.endPosition.column,
-        );
-      }
-    }
-
-    return results;
-  }
-
-  /**
-   * Parse a references.scm capture name into symbol kinds.
-   * e.g., "reference.class_interface_trait" → ["class", "interface", "trait"]
-   */
-  private parseCaptureKinds(captureName: string): SymbolKind[] | null {
-    const prefix = "reference.";
-    if (!captureName.startsWith(prefix)) return null;
-    let rest = captureName.substring(prefix.length);
-    const kinds: SymbolKind[] = [];
-    while (rest.length > 0) {
-      const match = SYMBOL_KINDS_LONGEST_FIRST.find((k) => rest.startsWith(k));
-      if (!match) break;
-      kinds.push(match);
-      rest = rest.substring(match.length);
-      if (rest.startsWith("_")) rest = rest.substring(1);
-    }
-    return kinds.length > 0 ? kinds : null;
-  }
-
-  /**
-   * Resolve the enclosing container for a node, for scoped reference matching.
-   * Returns the container string (e.g., "ClassName" for attributes, "ClassName.smName" for states).
-   */
-  private resolveEnclosingScopeFromNode(
-    node: SyntaxNode,
-    targetKind: SymbolKind,
-  ): string | undefined {
-    let current: SyntaxNode | null = node.parent;
-    let enclosingClass: string | undefined;
-    let enclosingSM: string | undefined;
-
-    while (current) {
-      if (current.type === "state_machine" || current.type === "statemachine_definition") {
-        enclosingSM = current.childForFieldName("name")?.text ?? enclosingSM;
-      }
-      if (
-        !enclosingClass &&
-        ["class_definition", "trait_definition", "interface_definition", "association_class_definition"].includes(current.type)
-      ) {
-        enclosingClass = current.childForFieldName("name")?.text;
-      }
-      current = current.parent;
-    }
-
-    if (targetKind === "state" || targetKind === "statemachine") {
-      if (enclosingClass && enclosingSM) return `${enclosingClass}.${enclosingSM}`;
-      if (enclosingSM) return enclosingSM; // top-level statemachine
-      // Synthetic container for trait_sm_binding value paths (no enclosing SM ancestor)
-      if (enclosingClass) {
-        const smName = this.resolveTraitSmBindingValueSM(node);
-        if (smName) return `${enclosingClass}.${smName}`;
-        // Synthetic container for referenced_statemachine definition field
-        // "door as status" → container is "ClassName.status"
-        const refSmName = this.resolveReferencedSmDefinition(node);
-        if (refSmName) return `${enclosingClass}.${refSmName}`;
-      }
-      return undefined;
-    }
-
-    // Synthetic container for toplevel_code_injection operation
-    // "before { Counter } increment()" → container is "Counter"
-    if (!enclosingClass && targetKind === "method") {
-      const parent = node.parent;
-      if (
-        parent?.type === "toplevel_code_injection" &&
-        parent.childForFieldName("operation")?.id === node.id
-      ) {
-        const targetNode = parent.childForFieldName("target");
-        if (targetNode) return targetNode.text;
-      }
-    }
-
-    return enclosingClass;
-  }
-
-  /**
-   * If the node is inside a trait_sm_binding value qualified_name,
-   * return the first identifier segment (the statemachine name).
-   */
-  private resolveTraitSmBindingValueSM(node: SyntaxNode): string | undefined {
-    const parent = node.parent;
-    if (parent?.type !== "qualified_name") return undefined;
-    const grandparent = parent.parent;
-    if (grandparent?.type !== "trait_sm_binding") return undefined;
-    if (grandparent.childForFieldName("value")?.id !== parent.id) return undefined;
-    const firstId = parent.namedChild(0);
-    return firstId?.type === "identifier" ? firstId.text : undefined;
-  }
-
-  /**
-   * If the node is the definition field of a referenced_statemachine
-   * ("door as status"), return the SM name ("status").
-   */
-  private resolveReferencedSmDefinition(node: SyntaxNode): string | undefined {
-    const parent = node.parent;
-    if (parent?.type !== "referenced_statemachine") return undefined;
-    if (parent.childForFieldName("definition")?.id !== node.id) return undefined;
-    return node.text;
-  }
-
-  /**
-   * Return the 0-based segment index if this node is an identifier inside
-   * a trait_sm_binding value path, or undefined otherwise.
-   */
-  private getTraitSmBindingValueSegmentIndex(node: SyntaxNode): number | undefined {
-    const parent = node.parent;
-    if (parent?.type !== "qualified_name") return undefined;
-    const grandparent = parent.parent;
-    if (grandparent?.type !== "trait_sm_binding") return undefined;
-    if (grandparent.childForFieldName("value")?.id !== parent.id) return undefined;
-    let idx = 0;
-    for (let i = 0; i < parent.namedChildCount; i++) {
-      const child = parent.namedChild(i);
-      if (child?.type === "identifier") {
-        if (child.id === node.id) return idx;
-        idx++;
-      }
-    }
-    return undefined;
-  }
-
-  /**
-   * Check if childClass inherits from parentClass (directly or transitively).
-   */
-  private isInheritanceChain(childClass: string, parentClass: string): boolean {
-    const visited = new Set<string>();
-    const queue = [childClass];
-    while (queue.length > 0) {
-      const cls = queue.pop()!;
-      if (cls === parentClass) return true;
-      if (visited.has(cls)) continue;
-      visited.add(cls);
-      const parents = this.isAGraph.get(cls);
-      if (parents) queue.push(...parents);
-    }
-    return false;
-  }
-
-  /**
-   * Extract dotted path context for a state reference node inside a qualified_name.
-   * Returns the preceding path segments, or null if not in a qualified_name.
-   */
-  private extractPathContextFromNode(
-    node: SyntaxNode,
-  ): { preceding: string[] } | null {
-    const parent = node.parent;
-    if (!parent || parent.type !== "qualified_name") return null;
-
-    const segments: string[] = [];
-    let nodeIndex = -1;
-    for (let i = 0; i < parent.namedChildCount; i++) {
-      const child = parent.namedChild(i);
-      if (child?.type === "identifier") {
-        if (child.id === node.id) nodeIndex = segments.length;
-        segments.push(child.text);
-      }
-    }
-    if (nodeIndex <= 0) return null; // first segment or not found
-    return { preceding: segments.slice(0, nodeIndex) };
-  }
-
-  /**
-   * Check if an actual path matches the target path.
-   * When suffix is true, actual may be a relative path matching the tail of target.
-   * When suffix is false, requires exact full-path match.
-   */
-  private pathMatches(actual: string[], target: string[], suffix: boolean): boolean {
-    if (suffix) {
-      if (actual.length > target.length) return false;
-      const offset = target.length - actual.length;
-      for (let i = 0; i < actual.length; i++) {
-        if (actual[i] !== target[offset + i]) return false;
-      }
-      return true;
-    }
-    if (actual.length !== target.length) return false;
-    for (let i = 0; i < actual.length; i++) {
-      if (actual[i] !== target[i]) return false;
-    }
-    return true;
+    return searchReferences(
+      declarations,
+      includeDeclaration,
+      this.referencesQuery,
+      fileTreeMap,
+      this.isAGraph,
+    );
   }
 
   /**

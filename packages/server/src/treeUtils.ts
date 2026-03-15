@@ -83,3 +83,18 @@ export function resolveStatePath(nameNode: SyntaxNode): string[] {
   }
   return segments;
 }
+
+/**
+ * Strip a leading state-machine name from a dotted path if it matches
+ * the bare SM name of the container. E.g., path ["bulb","EEE"] with
+ * container "TrafficLight.bulb" → ["EEE"].
+ */
+export function stripSmPrefix(pathSegments: string[], smContainer: string): string[] {
+  const dotIdx = smContainer.lastIndexOf(".");
+  const bareSmName =
+    dotIdx >= 0 ? smContainer.substring(dotIdx + 1) : smContainer;
+  if (pathSegments[0] === bareSmName) {
+    return pathSegments.slice(1);
+  }
+  return pathSegments;
+}
