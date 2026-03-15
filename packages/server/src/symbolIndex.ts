@@ -16,43 +16,12 @@ type Tree = InstanceType<typeof TreeSitter.Tree>;
 type SyntaxNode = InstanceType<typeof TreeSitter.Node>;
 type Query = InstanceType<typeof TreeSitter.Query>;
 
-export type SymbolKind =
-  | "class"
-  | "interface"
-  | "trait"
-  | "enum"
-  | "enum_value"
-  | "const"
-  | "attribute"
-  | "state"
-  | "statemachine"
-  | "method"
-  | "association"
-  | "mixset"
-  | "requirement"
-  | "template"
-  | "tracecase";
-
-/** All SymbolKind values sorted longest-first for greedy capture name parsing. */
-const SYMBOL_KINDS_LONGEST_FIRST: SymbolKind[] = (
-  [
-    "class",
-    "interface",
-    "trait",
-    "enum",
-    "enum_value",
-    "const",
-    "attribute",
-    "state",
-    "statemachine",
-    "method",
-    "association",
-    "mixset",
-    "requirement",
-    "template",
-    "tracecase",
-  ] as SymbolKind[]
-).sort((a, b) => b.length - a.length);
+// Re-export shared types from neutral modules
+export type { SymbolKind, LookupContext, DottedStateRef, StateDefinitionRef, TokenResult } from "./tokenTypes";
+import type { SymbolKind, TokenResult } from "./tokenTypes";
+import { SYMBOL_KINDS_LONGEST_FIRST } from "./tokenTypes";
+import { resolveEnclosingScope, resolveStatePath } from "./treeUtils";
+import { analyzeToken } from "./tokenAnalysis";
 
 /**
  * Keywords after which the next token is always a new name (definition).
@@ -98,28 +67,6 @@ const STRUCTURAL_TOKENS = new Set([
 function isOperatorToken(name: string): boolean {
   // Matches association/transition arrows: --, ->, <-, <@>-, -<@>, >->, <-<
   return /^[<>-]/.test(name) && name.length > 1;
-}
-
-// ── Token context model (Step 2) ────────────────────────────────────────────
-
-/** Primary lookup strategy — exactly one per token. */
-export type LookupContext =
-  | { type: "normal" }
-  | { type: "trait_sm_param"; traitName: string }
-  | { type: "trait_sm_value"; pathSegments: string[]; segmentIndex: number }
-  | { type: "referenced_sm" }
-  | { type: "toplevel_injection"; targetClass: string }
-  | { type: "default_value_qualifier" };
-
-/** Post-lookup disambiguation for dotted state references in transitions. */
-export interface DottedStateRef {
-  qualifiedPath: string[];
-  pathIndex: number;
-}
-
-/** Post-lookup disambiguation for state definition sites. */
-export interface StateDefinitionRef {
-  definitionPath: string[];
 }
 
 /** Information needed by the completion handler. */
@@ -701,7 +648,7 @@ export class SymbolIndex {
 
     // --- Enclosing scope for scoped lookups ---
     const { enclosingClass, enclosingStateMachine } =
-      this.resolveEnclosingScope(tree, line, column);
+      resolveEnclosingScope(tree, line, column);
 
     // --- Dotted state prefix for path-scoped completions ---
     // Gate on enclosingStateMachine rather than symbolKinds from the scope
@@ -738,26 +685,17 @@ export class SymbolIndex {
 
   /**
    * Get the token (identifier) at a position using tree-sitter, along with
-   * an optional SymbolKind filter based on the surrounding context.
+   * context information for symbol resolution.
    *
-   * Uses the references.scm query to determine which symbol kinds are valid
-   * for the cursor's context. See queries/references.scm for supported patterns.
+   * Delegates to the pure analyzeToken() function after tree acquisition.
    */
   getTokenAtPosition(
     filePath: string,
     content: string,
     line: number,
     column: number,
-  ): {
-    word: string;
-    kinds: SymbolKind[] | null;
-    enclosingClass?: string;
-    enclosingStateMachine?: string;
-    context: LookupContext;
-    dottedStateRef?: DottedStateRef;
-    stateDefinitionRef?: StateDefinitionRef;
-  } | null {
-    if (!this.initialized || !this.parser) {
+  ): TokenResult | null {
+    if (!this.initialized || !this.parser || !this.referencesQuery) {
       return null;
     }
 
@@ -772,160 +710,7 @@ export class SymbolIndex {
       tree = this.parser.parse(content);
     }
 
-    const node = tree.rootNode.descendantForPosition({ row: line, column });
-    if (
-      !node ||
-      (node.type !== "identifier" &&
-        node.type !== "use_path" &&
-        node.type !== "filter_pattern")
-    ) {
-      return null;
-    }
-
-    // For filter_pattern: skip wildcards (contain * or ?) and exclusion patterns
-    // (start with ~) — neither has a meaningful go-to-def target.
-    let word = node.text;
-    if (node.type === "filter_pattern") {
-      if (/[*?]/.test(word) || word.startsWith("~")) {
-        return null;
-      }
-    }
-    let kinds = this.resolveDefinitionKinds(tree, node);
-    const { enclosingClass, enclosingStateMachine } =
-      this.resolveEnclosingScope(tree, line, column);
-
-    // ── Detect orthogonal metadata ──────────────────────────────────────────
-
-    // Dotted state path in transition targets
-    let dottedStateRef: DottedStateRef | undefined;
-    const parent = node.parent;
-    if (node.type === "identifier" && parent?.type === "qualified_name") {
-      const grandparent = parent.parent;
-      if (grandparent?.type === "transition") {
-        const targetNode = grandparent.childForFieldName("target");
-        if (targetNode?.id === parent.id) {
-          const ids: string[] = [];
-          let idx = -1;
-          for (let i = 0; i < parent.namedChildCount; i++) {
-            const child = parent.namedChild(i);
-            if (child?.type === "identifier") {
-              if (child.id === node.id) idx = ids.length;
-              ids.push(child.text);
-            }
-          }
-          if (ids.length > 1 && idx >= 0) {
-            dottedStateRef = { qualifiedPath: ids, pathIndex: idx };
-          }
-        }
-      }
-    }
-
-    // State definition names — identifier is the `name` field of a `state` node
-    let stateDefinitionRef: StateDefinitionRef | undefined;
-    if (
-      node.type === "identifier" &&
-      parent?.type === "state" &&
-      parent.childForFieldName("name")?.id === node.id
-    ) {
-      stateDefinitionRef = { definitionPath: this.resolveStatePath(node) };
-    }
-
-    // ── Detect primary lookup context ────────────────────────────────────────
-
-    let context: LookupContext = { type: "normal" };
-
-    // trait_sm_binding param: isA T1<sm1 as sm.s2> — sm1 references
-    // a statemachine in the trait, not in the current class.
-    if (
-      node.type === "identifier" &&
-      parent?.type === "trait_sm_binding" &&
-      parent.childForFieldName("param")?.id === node.id
-    ) {
-      const typeName = parent.parent;
-      if (typeName?.type === "type_name") {
-        const qn = typeName.childForFieldName("name") ?? typeName.namedChild(0);
-        if (qn?.type === "qualified_name") {
-          const lastId = qn.namedChild(qn.namedChildCount - 1);
-          if (lastId?.type === "identifier") {
-            context = { type: "trait_sm_param", traitName: lastId.text };
-          }
-        }
-      }
-    }
-
-    // trait_sm_binding value: isA T1<sm1 as sm.s2> — sm.s2 references
-    // class-side statemachine and state. First segment = SM, rest = states.
-    if (
-      node.type === "identifier" &&
-      parent?.type === "qualified_name" &&
-      parent.parent?.type === "trait_sm_binding" &&
-      parent.parent.childForFieldName("value")?.id === parent.id
-    ) {
-      const segments: string[] = [];
-      let idx = -1;
-      for (let i = 0; i < parent.namedChildCount; i++) {
-        const child = parent.namedChild(i);
-        if (child?.type === "identifier") {
-          if (child.id === node.id) idx = segments.length;
-          segments.push(child.text);
-        }
-      }
-      if (idx >= 0 && segments.length >= 1) {
-        context = { type: "trait_sm_value", pathSegments: segments, segmentIndex: idx };
-        kinds = idx === 0 ? ["statemachine"] : ["state"];
-      }
-    }
-
-    // referenced_statemachine: "door as status" — definition field
-    // references an SM in the enclosing class, not an enclosing SM ancestor.
-    if (
-      node.type === "identifier" &&
-      parent?.type === "referenced_statemachine" &&
-      parent.childForFieldName("definition")?.id === node.id &&
-      enclosingClass
-    ) {
-      context = { type: "referenced_sm" };
-    }
-
-    // toplevel_code_injection operation: "before { Counter } increment()"
-    // The operation name references a method in the target class.
-    if (
-      node.type === "identifier" &&
-      parent?.type === "toplevel_code_injection" &&
-      parent.childForFieldName("operation")?.id === node.id
-    ) {
-      const targetNode = parent.childForFieldName("target");
-      if (targetNode) {
-        context = { type: "toplevel_injection", targetClass: targetNode.text };
-      }
-    }
-
-    // Default-value qualifier in "Status.ACTIVE" — non-final segment
-    // is an enum name, not a value. Override kinds for qualifier position.
-    if (
-      node.type === "identifier" &&
-      parent?.type === "qualified_name" &&
-      parent.namedChildCount > 1
-    ) {
-      const gp = parent.parent;
-      if (gp?.type === "attribute_declaration" || gp?.type === "const_declaration") {
-        const isLastSegment = parent.namedChild(parent.namedChildCount - 1)?.id === node.id;
-        if (!isLastSegment) {
-          kinds = ["enum"];
-          context = { type: "default_value_qualifier" };
-        }
-      }
-    }
-
-    return {
-      word,
-      kinds,
-      enclosingClass,
-      enclosingStateMachine,
-      context,
-      dottedStateRef,
-      stateDefinitionRef,
-    };
+    return analyzeToken(tree, this.referencesQuery, line, column);
   }
 
   /**
@@ -984,62 +769,6 @@ export class SymbolIndex {
    * encoding the valid symbol kinds directly. This replaces the old parent-chain
    * walking approach with a declarative .scm file.
    */
-  private resolveDefinitionKinds(
-    tree: Tree,
-    node: SyntaxNode,
-  ): SymbolKind[] | null {
-    if (!this.referencesQuery) return null;
-
-    // Run query with position filtering to find captures at this node
-    const captures = this.referencesQuery.captures(tree.rootNode, {
-      startPosition: node.startPosition,
-      endPosition: node.endPosition,
-    });
-
-    // Find the capture whose node best matches our target.
-    // When multiple patterns capture the same node (e.g. isA type matched
-    // by both type_name and isa_declaration), pick the most specific:
-    //   1. Smallest node size (fewest bytes)
-    //   2. Fewest kinds in the capture name (fewer = more specific)
-    let bestCapture: { name: string; node: SyntaxNode } | null = null;
-    let bestSize = Infinity;
-    let bestKindCount = Infinity;
-    for (const capture of captures) {
-      if (
-        capture.node.startIndex <= node.startIndex &&
-        capture.node.endIndex >= node.endIndex
-      ) {
-        const size = capture.node.endIndex - capture.node.startIndex;
-        const kindCount = capture.name.split("_").length;
-        if (
-          size < bestSize ||
-          (size === bestSize && kindCount < bestKindCount)
-        ) {
-          bestSize = size;
-          bestKindCount = kindCount;
-          bestCapture = capture;
-        }
-      }
-    }
-
-    if (!bestCapture) return null;
-
-    // Parse capture name: "reference.class_interface_trait" → ["class", "interface", "trait"]
-    // Must match against known SymbolKind values to handle multi-word kinds like "enum_value"
-    const prefix = "reference.";
-    if (!bestCapture.name.startsWith(prefix)) return null;
-    let rest = bestCapture.name.substring(prefix.length);
-    const kinds: SymbolKind[] = [];
-    while (rest.length > 0) {
-      const match = SYMBOL_KINDS_LONGEST_FIRST.find((k) => rest.startsWith(k));
-      if (!match) break;
-      kinds.push(match);
-      rest = rest.substring(match.length);
-      if (rest.startsWith("_")) rest = rest.substring(1);
-    }
-    return kinds.length > 0 ? kinds : null;
-  }
-
   /**
    * Get the names of direct child states of a given state path within a state machine.
    * Uses pre-computed statePath on each SymbolEntry for O(n) lookup without AST walking.
@@ -1262,55 +991,6 @@ export class SymbolIndex {
       current = current.parent;
     }
     return false;
-  }
-
-  /**
-   * Resolve enclosing class and root state machine names at a position.
-   * For state machines, keeps walking to find the outermost (root) SM.
-   */
-  private resolveEnclosingScope(
-    tree: Tree,
-    line: number,
-    column: number,
-  ): { enclosingClass?: string; enclosingStateMachine?: string } {
-    let node: SyntaxNode | null = tree.rootNode.descendantForPosition({
-      row: line,
-      column,
-    });
-    let enclosingClass: string | undefined;
-    let enclosingStateMachine: string | undefined;
-
-    while (node) {
-      // For state machines: keep overwriting to find the ROOT (outermost) SM
-      if (node.type === "state_machine") {
-        enclosingStateMachine =
-          node.childForFieldName("name")?.text ?? enclosingStateMachine;
-      }
-      if (node.type === "statemachine_definition") {
-        enclosingStateMachine =
-          node.childForFieldName("name")?.text ?? enclosingStateMachine;
-      }
-      // For class: stop at first (innermost is what we want)
-      if (
-        !enclosingClass &&
-        [
-          "class_definition",
-          "trait_definition",
-          "interface_definition",
-          "association_class_definition",
-        ].includes(node.type)
-      ) {
-        enclosingClass = node.childForFieldName("name")?.text;
-      }
-      node = node.parent;
-    }
-
-    // Qualify SM name with class name for unique container identification
-    if (enclosingStateMachine && enclosingClass) {
-      enclosingStateMachine = `${enclosingClass}.${enclosingStateMachine}`;
-    }
-
-    return { enclosingClass, enclosingStateMachine };
   }
 
   /**
@@ -1674,27 +1354,6 @@ export class SymbolIndex {
    * Build the nesting path for a state by walking up parent state nodes.
    * E.g., for Inner inside Open inside EEE: ["EEE", "Open", "Inner"]
    */
-  private resolveStatePath(nameNode: SyntaxNode): string[] {
-    const segments: string[] = [nameNode.text];
-    let current = nameNode.parent; // The state node itself
-    if (current) current = current.parent; // Go above it
-
-    while (current) {
-      if (current.type === "state") {
-        const name = current.childForFieldName("name");
-        if (name) segments.unshift(name.text);
-      }
-      if (
-        current.type === "state_machine" ||
-        current.type === "statemachine_definition"
-      ) {
-        break;
-      }
-      current = current.parent;
-    }
-    return segments;
-  }
-
   /**
    * Extract symbol definitions from the AST using the definitions.scm query.
    * Falls back to an empty list if the query isn't loaded.
@@ -1749,7 +1408,7 @@ export class SymbolIndex {
         defEndColumn: defNode?.endPosition.column,
       };
       if (kind === "state") {
-        entry.statePath = this.resolveStatePath(node);
+        entry.statePath = resolveStatePath(node);
       }
       symbols.push(entry);
     }
@@ -1984,7 +1643,7 @@ export class SymbolIndex {
             }
           } else if (node.parent?.type === "state") {
             // Case 2: state definition name (e.g., Open {})
-            const candidatePath = this.resolveStatePath(node);
+            const candidatePath = resolveStatePath(node);
             if (!this.pathMatches(candidatePath, sym.statePath, false)) {
               continue;
             }
