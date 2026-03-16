@@ -454,6 +454,61 @@ const TEST_CASES: TestCase[] = [
     ],
   },
 
+  // 17: Comprehensive formatting — all indent-node families + re-entry
+  {
+    name: "17 format_comprehensive: all node types + nesting + multi-region re-entry",
+    fixtures: ["17_format_comprehensive.ump"],
+    assertions: [
+      {
+        type: "format_output",
+        fixture: "17_format_comprehensive.ump",
+        expectLines: [
+          // interface body
+          { line: 2, text: "  void print();" },
+          // trait body
+          { line: 6, text: "  Date createdAt;" },
+          // code_content skip (first method)
+          { line: 12, text: "int x = 0;" },
+          // re-entry after first code_content — structural comment indented
+          { line: 14, text: "  // Re-entry: structural line after first code_content" },
+          // code_content skip (second method — multi-region isolation)
+          { line: 16, text: "return;" },
+          // before_after inside class
+          { line: 18, text: "  before run { }" },
+          // deepest nesting: class + SM + state + nested state (4 levels)
+          { line: 22, text: "        sick -> Sick;" },
+          // association body
+          { line: 30, text: "  * Animal -- * Animal;" },
+          // mixset + nested class (2 levels)
+          { line: 34, text: "    name;" },
+          // top-level statemachine_definition + state (2 levels)
+          { line: 39, text: "    start -> Running;" },
+          // top-level code injection (0 level)
+          { line: 43, text: "before { Animal } run { }" },
+        ],
+      },
+    ],
+  },
+
+  // 16: Syntax-aware formatting
+  {
+    name: "16 format_syntax_aware: AST-based indent + code_content skip + template_body",
+    fixtures: ["16_format_syntax_aware.ump"],
+    assertions: [
+      {
+        type: "format_output",
+        fixture: "16_format_syntax_aware.ump",
+        expectLines: [
+          { line: 1, text: "  void foo() {" },                   // 1 level (inside class)
+          { line: 2, text: "int x = 0;" },                       // unchanged (inside code_content)
+          { line: 6, text: "  }" },                               // 1 level (closes method)
+          { line: 7, text: "  greeting <<!Hello #name#!>>" },     // 1 level, template content untouched
+          { line: 10, text: "      close -> Closed;" },           // 3 levels (class + SM + state)
+        ],
+      },
+    ],
+  },
+
   // 12A: Completion fallback — zero-identifier positions
   {
     name: "12A completion_fallback: zero-identifier scope detection",

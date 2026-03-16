@@ -12,7 +12,7 @@ import { resolveSymbolAtPosition } from "../src/resolver";
 import { buildSemanticCompletionItems } from "../src/completionBuilder";
 import { buildHoverMarkdown } from "../src/hoverBuilder";
 import { buildDocumentSymbolTree } from "../src/documentSymbolBuilder";
-import { getCodeContentRanges, computeIndentEdits } from "../src/formatter";
+import { computeIndentEdits } from "../src/formatter";
 import { CompletionItem } from "vscode-languageserver/node";
 
 // __dirname at runtime is .test-out/test/, so ../../ reaches the package root
@@ -272,8 +272,8 @@ export class SemanticTestHelper {
   formatFile(filePath: string, content: string): string[] {
     this.si.indexFile(filePath, content);
     const tree = this.si.getTree(filePath);
-    const skipRanges = tree ? getCodeContentRanges(tree) : [];
-    const edits = computeIndentEdits(content, { tabSize: 2, insertSpaces: true }, skipRanges);
+    if (!tree) return content.split("\n");
+    const edits = computeIndentEdits(content, { tabSize: 2, insertSpaces: true }, tree);
 
     // Apply edits to get formatted text
     const lines = content.split("\n");

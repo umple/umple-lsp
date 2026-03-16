@@ -1,0 +1,44 @@
+// Top-level comment
+interface Printable {
+void print();
+}
+enum Status { ACTIVE, INACTIVE }
+trait Timestamped {
+Date createdAt;
+}
+class Animal {
+isA Printable;
+Integer age;
+void run() {
+int x = 0;
+}
+// Re-entry: structural line after first code_content
+void stop() {
+return;
+}
+before run { }
+status {
+Alive {
+Healthy {
+sick -> Sick;
+}
+Sick {}
+}
+Dead {}
+}
+}
+association {
+* Animal -- * Animal;
+}
+mixset FeatureX {
+class Extra {
+name;
+}
+}
+statemachine GlobalSM {
+Init {
+start -> Running;
+}
+Running {}
+}
+before { Animal } run { }

@@ -32,7 +32,7 @@ import { resolveSymbolAtPosition as resolveSymbol } from "./resolver";
 import { buildSemanticCompletionItems, symbolKindToCompletionKind } from "./completionBuilder";
 import { buildHoverMarkdown } from "./hoverBuilder";
 import { buildDocumentSymbolTree } from "./documentSymbolBuilder";
-import { getCodeContentRanges, computeIndentEdits } from "./formatter";
+import { computeIndentEdits } from "./formatter";
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new Map<string, TextDocument>();
@@ -684,8 +684,7 @@ connection.onDocumentFormatting(async (params) => {
   const tree = symbolIndex.getTree(docPath);
   if (!tree) return [];
 
-  const skipRanges = getCodeContentRanges(tree);
-  return computeIndentEdits(document.getText(), params.options, skipRanges);
+  return computeIndentEdits(document.getText(), params.options, tree);
 });
 
 function scheduleValidation(document: TextDocument): void {
