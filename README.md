@@ -111,14 +111,15 @@ umple-lsp/
 │   │   │   ├── referenceSearch.ts     # Find-references semantic matching
 │   │   │   ├── hoverBuilder.ts        # Hover markdown content builders
 │   │   │   ├── documentSymbolBuilder.ts # Document outline (symbol hierarchy)
-│   │   │   ├── formatter.ts           # Document formatting (indent + skip ranges)
+│   │   │   ├── formatter.ts           # Document formatting (indent, spacing, expansion)
+│   │   │   ├── formatRules.ts         # Formatting node classification
 │   │   │   ├── importGraph.ts         # Forward/reverse import edge management
 │   │   │   ├── tokenTypes.ts          # Shared token/symbol type definitions
 │   │   │   ├── symbolTypes.ts         # Shared symbol entry types
 │   │   │   ├── treeUtils.ts           # Shared tree-walking utilities
 │   │   │   └── keywords.ts            # Built-in type names
 │   │   └── test/                      # Semantic regression tests
-│   │       ├── semantic.test.ts       # Test runner (58 assertions)
+│   │       ├── semantic.test.ts       # Test runner (72 assertions)
 │   │       ├── helpers.ts             # Test harness helpers
 │   │       └── fixtures/semantic/     # .ump fixture files
 │   └── tree-sitter-umple/             # Tree-sitter grammar & queries
@@ -172,7 +173,7 @@ Environment variables: `UMPLESYNC_JAR_PATH`, `UMPLESYNC_TIMEOUT_MS`, `UMPLE_TREE
 npm run compile        # Build server (also copies WASM)
 npm run build-grammar  # Full rebuild after grammar.js changes
 npm run watch          # Watch mode
-npm test               # Run semantic regression tests (58 assertions)
+npm test               # Run semantic regression tests (72 assertions)
 ```
 
 ### Testing
@@ -180,7 +181,7 @@ npm test               # Run semantic regression tests (58 assertions)
 The project includes a semantic regression test harness that exercises go-to-definition, find-references, completion, hover, document symbols, and formatting. Tests use real `.ump` fixture files with `/*@marker*/` annotations for position-independent assertions.
 
 ```bash
-npm test    # Compile + run all 58 assertions
+npm test    # Compile + run all 72 assertions
 ```
 
 ### Manual Testing
