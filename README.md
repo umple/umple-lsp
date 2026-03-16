@@ -100,22 +100,48 @@ Then install the plugin for your editor (see table above).
 ```
 umple-lsp/
 ├── packages/
-│   ├── server/              # Standalone LSP server (npm: umple-lsp-server)
-│   └── tree-sitter-umple/   # Tree-sitter grammar & queries
-├── editors/                 # Setup guides for Sublime, manual Neovim config
-└── test/                    # Sample .ump files
+│   ├── server/                        # Standalone LSP server (npm: umple-lsp-server)
+│   │   ├── src/
+│   │   │   ├── server.ts              # LSP wiring, handlers, diagnostics orchestration
+│   │   │   ├── symbolIndex.ts         # Symbol indexing, storage, queries
+│   │   │   ├── resolver.ts            # Go-to-def / hover / rename symbol resolution
+│   │   │   ├── completionAnalysis.ts  # Completion context detection (scope, keywords)
+│   │   │   ├── completionBuilder.ts   # Completion item assembly
+│   │   │   ├── tokenAnalysis.ts       # Token/context detection at cursor position
+│   │   │   ├── referenceSearch.ts     # Find-references semantic matching
+│   │   │   ├── hoverBuilder.ts        # Hover markdown content builders
+│   │   │   ├── documentSymbolBuilder.ts # Document outline (symbol hierarchy)
+│   │   │   ├── formatter.ts           # Document formatting (indent + skip ranges)
+│   │   │   ├── importGraph.ts         # Forward/reverse import edge management
+│   │   │   ├── tokenTypes.ts          # Shared token/symbol type definitions
+│   │   │   ├── symbolTypes.ts         # Shared symbol entry types
+│   │   │   ├── treeUtils.ts           # Shared tree-walking utilities
+│   │   │   └── keywords.ts            # Built-in type names
+│   │   └── test/                      # Semantic regression tests
+│   │       ├── semantic.test.ts       # Test runner (58 assertions)
+│   │       ├── helpers.ts             # Test harness helpers
+│   │       └── fixtures/semantic/     # .ump fixture files
+│   └── tree-sitter-umple/             # Tree-sitter grammar & queries
+├── editors/                           # Setup guides for Sublime, manual Neovim config
+└── test/                              # Sample .ump files
 ```
 
 ```
 Editor Plugin (separate repos)
-  |
-  +-- (stdio) --> server.js --> umplesync.jar (diagnostics)
-                    |
-                    +-- tree-sitter (go-to-definition, symbol indexing)
+  │
+  └── (stdio) ──► server.ts ──► umplesync.jar (diagnostics)
+                     │
+                     ├── resolver.ts ──► symbolIndex.ts (go-to-def, hover, rename)
+                     ├── completionAnalysis.ts + completionBuilder.ts (completion)
+                     ├── referenceSearch.ts (find-references)
+                     ├── hoverBuilder.ts (hover content)
+                     ├── documentSymbolBuilder.ts (outline)
+                     ├── formatter.ts (formatting)
+                     └── tokenAnalysis.ts + treeUtils.ts (shared analysis)
 ```
 
-- **Server** (`packages/server/`) - Editor-agnostic LSP server (npm-publishable as `umple-lsp-server`)
-- **Tree-sitter grammar** (`packages/tree-sitter-umple/`) - Parser and syntax highlighting queries
+- **Server** (`packages/server/`) — Editor-agnostic LSP server (npm-publishable as `umple-lsp-server`). Split into focused modules: `server.ts` handles LSP wiring and diagnostics orchestration; semantic logic lives in dedicated modules.
+- **Tree-sitter grammar** (`packages/tree-sitter-umple/`) — Parser and syntax highlighting queries
 
 The server uses lazy indexing: files are only parsed when opened, and only files reachable via `use` statements are indexed. This keeps startup fast regardless of workspace size.
 
@@ -146,9 +172,20 @@ Environment variables: `UMPLESYNC_JAR_PATH`, `UMPLESYNC_TIMEOUT_MS`, `UMPLE_TREE
 npm run compile        # Build server (also copies WASM)
 npm run build-grammar  # Full rebuild after grammar.js changes
 npm run watch          # Watch mode
+npm test               # Run semantic regression tests (58 assertions)
 ```
 
-Test by running the server directly:
+### Testing
+
+The project includes a semantic regression test harness that exercises go-to-definition, find-references, completion, hover, document symbols, and formatting. Tests use real `.ump` fixture files with `/*@marker*/` annotations for position-independent assertions.
+
+```bash
+npm test    # Compile + run all 58 assertions
+```
+
+### Manual Testing
+
+Run the server directly for JSON-RPC testing:
 
 ```bash
 node packages/server/out/server.js --stdio
