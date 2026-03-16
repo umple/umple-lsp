@@ -12,6 +12,7 @@ import { resolveSymbolAtPosition } from "../src/resolver";
 import { buildSemanticCompletionItems } from "../src/completionBuilder";
 import { buildHoverMarkdown } from "../src/hoverBuilder";
 import { buildDocumentSymbolTree } from "../src/documentSymbolBuilder";
+import { getCodeContentRanges, computeIndentEdits } from "../src/formatter";
 import { CompletionItem } from "vscode-languageserver/node";
 
 // __dirname at runtime is .test-out/test/, so ../../ reaches the package root
@@ -263,6 +264,32 @@ export class SemanticTestHelper {
   documentSymbols(filePath: string) {
     const symbols = this.si.getFileSymbols(filePath);
     return buildDocumentSymbolTree(symbols);
+  }
+
+  /**
+   * Format a file and return the resulting lines.
+   */
+  formatFile(filePath: string, content: string): string[] {
+    this.si.indexFile(filePath, content);
+    const tree = this.si.getTree(filePath);
+    const skipRanges = tree ? getCodeContentRanges(tree) : [];
+    const edits = computeIndentEdits(content, { tabSize: 2, insertSpaces: true }, skipRanges);
+
+    // Apply edits to get formatted text
+    const lines = content.split("\n");
+    // Apply edits in reverse order to preserve positions
+    const sorted = [...edits].sort((a, b) => {
+      if (a.range.start.line !== b.range.start.line) return b.range.start.line - a.range.start.line;
+      return b.range.start.character - a.range.start.character;
+    });
+    for (const edit of sorted) {
+      const line = lines[edit.range.start.line];
+      lines[edit.range.start.line] =
+        line.substring(0, edit.range.start.character) +
+        edit.newText +
+        line.substring(edit.range.end.character);
+    }
+    return lines;
   }
 
   /**

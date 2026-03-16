@@ -1,0 +1,12 @@
+class Foo {
+Integer x;
+void bar() {
+  int y = 0;
+}
+status {
+Open {
+e1 -> Closed;
+}
+Closed {}
+}
+}

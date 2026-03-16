@@ -32,6 +32,7 @@ import { resolveSymbolAtPosition as resolveSymbol } from "./resolver";
 import { buildSemanticCompletionItems, symbolKindToCompletionKind } from "./completionBuilder";
 import { buildHoverMarkdown } from "./hoverBuilder";
 import { buildDocumentSymbolTree } from "./documentSymbolBuilder";
+import { getCodeContentRanges, computeIndentEdits } from "./formatter";
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new Map<string, TextDocument>();
@@ -672,13 +673,10 @@ connection.onDocumentSymbol(async (params) => {
 
 // ── Formatting ──────────────────────────────────────────────────────────────
 
-/**
- * Collect line ranges of code_content and template_body nodes (embedded code
- * that the formatter should not re-indent).
- */
-function getCodeContentRanges(
-  document: TextDocument,
-): { startLine: number; endLine: number }[] {
+connection.onDocumentFormatting(async (params) => {
+  const document = getDocument(params.textDocument.uri);
+  if (!document) return [];
+
   const docPath = getDocumentFilePath(document);
   if (!docPath || !symbolIndexReady) return [];
 
@@ -686,115 +684,7 @@ function getCodeContentRanges(
   const tree = symbolIndex.getTree(docPath);
   if (!tree) return [];
 
-  const ranges: { startLine: number; endLine: number }[] = [];
-  const cursor = tree.rootNode.walk();
-
-  // Walk the tree and collect code_content / template_body nodes
-  let reachedEnd = false;
-  while (!reachedEnd) {
-    const node = cursor.currentNode;
-    if (node.type === "code_content" || node.type === "template_body") {
-      ranges.push({
-        startLine: node.startPosition.row,
-        endLine: node.endPosition.row,
-      });
-      // Don't descend into these nodes
-      if (!cursor.gotoNextSibling()) {
-        while (!cursor.gotoNextSibling()) {
-          if (!cursor.gotoParent()) {
-            reachedEnd = true;
-            break;
-          }
-        }
-      }
-    } else if (!cursor.gotoFirstChild()) {
-      if (!cursor.gotoNextSibling()) {
-        while (!cursor.gotoNextSibling()) {
-          if (!cursor.gotoParent()) {
-            reachedEnd = true;
-            break;
-          }
-        }
-      }
-    }
-  }
-
-  return ranges;
-}
-
-function isInSkipRange(
-  line: number,
-  ranges: { startLine: number; endLine: number }[],
-): boolean {
-  // Strictly between start and end — the boundary lines (method signature
-  // with `{` and closing `}`) still get formatted as Umple structure.
-  return ranges.some((r) => line > r.startLine && line < r.endLine);
-}
-
-function computeIndentEdits(
-  text: string,
-  options: { tabSize: number; insertSpaces: boolean },
-  skipRanges: { startLine: number; endLine: number }[],
-): TextEdit[] {
-  const lines = text.split("\n");
-  const edits: TextEdit[] = [];
-  const unit = options.insertSpaces ? " ".repeat(options.tabSize) : "\t";
-  let depth = 0;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const trimmed = line.trim();
-
-    // Skip empty lines and lines inside embedded code
-    if (!trimmed || isInSkipRange(i, skipRanges)) continue;
-
-    // Count leading } to decrease depth before indenting this line
-    let leadingCloses = 0;
-    for (const ch of trimmed) {
-      if (ch === "}") leadingCloses++;
-      else break;
-    }
-    depth = Math.max(0, depth - leadingCloses);
-
-    // Compute expected indent
-    const expected = unit.repeat(depth);
-    const currentIndent = line.substring(
-      0,
-      line.length - line.trimStart().length,
-    );
-
-    // Only emit edit if indent differs
-    if (currentIndent !== expected) {
-      edits.push(
-        TextEdit.replace(
-          Range.create(
-            Position.create(i, 0),
-            Position.create(i, currentIndent.length),
-          ),
-          expected,
-        ),
-      );
-    }
-
-    // Count all braces on this line for next line's depth
-    let opens = 0;
-    let closes = 0;
-    for (const ch of trimmed) {
-      if (ch === "{") opens++;
-      else if (ch === "}") closes++;
-    }
-    // Subtract only non-leading closes (leading ones were already applied above)
-    depth = Math.max(0, depth + opens - (closes - leadingCloses));
-  }
-
-  return edits;
-}
-
-connection.onDocumentFormatting(async (params) => {
-  const document = getDocument(params.textDocument.uri);
-  if (!document) return [];
-
-  const skipRanges = getCodeContentRanges(document);
+  const skipRanges = getCodeContentRanges(tree);
   return computeIndentEdits(document.getText(), params.options, skipRanges);
 });
 

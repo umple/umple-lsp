@@ -82,7 +82,14 @@ type Assertion =
   | CompletionExcludesAssertion
   | TokenContextAssertion
   | HoverOutputAssertion
-  | DocumentSymbolsAssertion;
+  | DocumentSymbolsAssertion
+  | FormatOutputAssertion;
+
+interface FormatOutputAssertion {
+  type: "format_output";
+  fixture: string;
+  expectLines: { line: number; text: string }[];
+}
 
 interface HoverOutputAssertion {
   type: "hover_output";
@@ -426,6 +433,23 @@ const TEST_CASES: TestCase[] = [
         fixture: "14_hover.ump",
         expectRoots: ["Animal", "Creature"],
         expectChild: { parent: "Animal", child: "status" },
+      },
+    ],
+  },
+
+  // 15: Formatting smoke test
+  {
+    name: "15 formatting: indent + skip range",
+    fixtures: ["15_formatting.ump"],
+    assertions: [
+      {
+        type: "format_output",
+        fixture: "15_formatting.ump",
+        expectLines: [
+          { line: 1, text: "  Integer x;" },
+          { line: 3, text: "  int y = 0;" },
+          { line: 7, text: "      e1 -> Closed;" },
+        ],
       },
     ],
   },
@@ -797,6 +821,24 @@ function runAssertion(
         return {
           ok: false,
           message: `completion_kinds @${assertion.at}: expected [${expected.join(", ")}], got [${(actual as string[]).join(", ")}]`,
+        };
+      }
+    }
+    return { ok: true, message: "" };
+  }
+
+  if (assertion.type === "format_output") {
+    const fileInfo = files.get(assertion.fixture);
+    if (!fileInfo) return { ok: false, message: `fixture ${assertion.fixture} not found` };
+
+    const formattedLines = helper.formatFile(fileInfo.path, fileInfo.content);
+
+    for (const exp of assertion.expectLines) {
+      const actual = formattedLines[exp.line];
+      if (actual !== exp.text) {
+        return {
+          ok: false,
+          message: `format_output line ${exp.line}: expected ${JSON.stringify(exp.text)}, got ${JSON.stringify(actual)}`,
         };
       }
     }
