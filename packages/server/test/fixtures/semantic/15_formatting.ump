@@ -1,12 +1,11 @@
 class Foo {
-Integer x;
-void bar() {
+  Integer x;
+  void bar() {
   int y = 0;
-}
-status {
-Open {
-e1 -> Closed;
-}
-Closed {}
-}
+  }
+  status {
+    Open {e1 -> Closed;
+    }
+    Closed {}
+  }
 }

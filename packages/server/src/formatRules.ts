@@ -28,6 +28,24 @@ export const INDENT_NODES = new Set([
   "method_declaration",
 ]);
 
+/** Top-level declaration node types that should be separated by blank lines. */
+export const TOP_LEVEL_DECL_NODES = new Set([
+  "class_definition",
+  "interface_definition",
+  "trait_definition",
+  "association_class_definition",
+  "enum_definition",
+  "association_definition",
+  "statemachine_definition",
+  "mixset_definition",
+  "toplevel_code_injection",
+  "namespace_declaration",
+  "use_statement",
+  "generate_statement",
+  "requirement_definition",
+  "external_definition",
+]);
+
 /** Node types whose content is verbatim (embedded code — do not reindent). */
 export const SKIP_NODES = new Set([
   "code_content",

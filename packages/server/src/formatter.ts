@@ -11,7 +11,7 @@ import {
   Range,
   Position,
 } from "vscode-languageserver/node";
-import { isVerbatimLine, computeStructuralDepth } from "./formatRules";
+import { isVerbatimLine, computeStructuralDepth, TOP_LEVEL_DECL_NODES } from "./formatRules";
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const TreeSitter = require("web-tree-sitter");
@@ -71,6 +71,153 @@ export function computeIndentEdits(
             Position.create(i, currentIndent.length),
           ),
           expected,
+        ),
+      );
+    }
+  }
+
+  return edits;
+}
+
+// ── Phase 2: Targeted fixups ────────────────────────────────────────────────
+
+/** Node types that contain a `->` arrow whose surrounding whitespace should be normalized. */
+const ARROW_NODES = new Set(["transition", "standalone_transition"]);
+
+/**
+ * Normalize whitespace around `->` in transition and standalone_transition nodes.
+ * Only handles single-line nodes. Leaves event, guard, action, and target text verbatim.
+ */
+export function fixTransitionSpacing(
+  text: string,
+  tree: Tree,
+): TextEdit[] {
+  const lines = text.split("\n");
+  const edits: TextEdit[] = [];
+
+  const visit = (node: any) => {
+    if (ARROW_NODES.has(node.type)) {
+      const startRow = node.startPosition.row;
+      const endRow = node.endPosition.row;
+      // Only single-line transitions
+      if (startRow !== endRow) return;
+
+      // Find the structural "->" token by walking children (not substring search,
+      // which would match "->" inside action_code like "foo->bar")
+      let arrowChild: any = null;
+      for (let c = 0; c < node.childCount; c++) {
+        const child = node.child(c);
+        if (child && child.type === "->") {
+          arrowChild = child;
+          break;
+        }
+      }
+      if (!arrowChild) return;
+
+      const arrowCol = arrowChild.startPosition.column;
+      const arrowEndCol = arrowChild.endPosition.column;
+      const line = lines[startRow];
+
+      // Find whitespace region around the structural arrow
+      let wsStart = arrowCol;
+      while (wsStart > 0 && line[wsStart - 1] === " ") {
+        wsStart--;
+      }
+      let wsEnd = arrowEndCol;
+      while (wsEnd < line.length && line[wsEnd] === " ") {
+        wsEnd++;
+      }
+
+      const currentRegion = line.substring(wsStart, wsEnd);
+      const expectedRegion = " -> ";
+      if (currentRegion === expectedRegion) return;
+
+      edits.push(
+        TextEdit.replace(
+          Range.create(
+            Position.create(startRow, wsStart),
+            Position.create(startRow, wsEnd),
+          ),
+          expectedRegion,
+        ),
+      );
+      return; // Don't descend into transition children
+    }
+
+    for (let i = 0; i < node.childCount; i++) {
+      visit(node.child(i));
+    }
+  };
+
+  visit(tree.rootNode);
+  return edits;
+}
+
+/**
+ * Normalize blank lines between top-level declarations in source_file.
+ * Ensures exactly 1 blank line between consecutive top-level named children.
+ * Does NOT touch interior body spacing.
+ */
+export function normalizeTopLevelBlankLines(
+  text: string,
+  tree: Tree,
+): TextEdit[] {
+  const lines = text.split("\n");
+  const edits: TextEdit[] = [];
+  const root = tree.rootNode;
+
+  // Collect top-level named declaration children (skip comments and anonymous nodes)
+  const topDecls: { startRow: number; endRow: number }[] = [];
+  for (let i = 0; i < root.namedChildCount; i++) {
+    const child = root.namedChild(i);
+    if (child && TOP_LEVEL_DECL_NODES.has(child.type)) {
+      topDecls.push({
+        startRow: child.startPosition.row,
+        endRow: child.endPosition.row,
+      });
+    }
+  }
+
+  // For each consecutive pair, ensure exactly 1 blank line between them
+  for (let i = 0; i < topDecls.length - 1; i++) {
+    const prevEnd = topDecls[i].endRow;
+    const nextStart = topDecls[i + 1].startRow;
+    const gap = nextStart - prevEnd - 1; // number of lines between them
+
+    if (gap === 1) continue; // Already correct: exactly 1 blank line
+
+    // Safety: if any non-blank line exists in the gap (e.g., comments),
+    // skip this gap entirely to avoid deleting user content
+    if (gap > 1) {
+      let hasNonBlank = false;
+      for (let row = prevEnd + 1; row < nextStart; row++) {
+        if (lines[row].trim().length > 0) {
+          hasNonBlank = true;
+          break;
+        }
+      }
+      if (hasNonBlank) continue;
+    }
+
+    if (gap < 1) {
+      // No blank line — insert at the END of the previous declaration's last line.
+      // This avoids conflicting with indent edits that target [nextStart, 0].
+      edits.push(
+        TextEdit.insert(
+          Position.create(prevEnd, lines[prevEnd].length),
+          "\n",
+        ),
+      );
+    } else {
+      // Too many blank lines (all blank) — remove extras (keep exactly 1)
+      const deleteStart = prevEnd + 2;
+      const deleteEnd = nextStart;
+      edits.push(
+        TextEdit.del(
+          Range.create(
+            Position.create(deleteStart, 0),
+            Position.create(deleteEnd, 0),
+          ),
         ),
       );
     }

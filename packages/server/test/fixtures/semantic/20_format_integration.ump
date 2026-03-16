@@ -1,0 +1,35 @@
+  class Animal {
+name;
+void run() {
+int x = 0;
+}
+greeting <<!Hello #name#!>>
+status {
+Open {
+e1->Closed;
+e2 / { foo->bar; }->Closed;
+}
+Closed {}
+}
+}
+  class Person {
+Integer age;
+}
+
+// Species comment — must be preserved
+
+class Species {
+name;
+}
+
+
+
+class Extra {
+Integer val;
+}
+statemachine GlobalSM {
+Init {
+start->Running;
+}
+Running {}
+}

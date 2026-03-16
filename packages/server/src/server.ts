@@ -32,7 +32,7 @@ import { resolveSymbolAtPosition as resolveSymbol } from "./resolver";
 import { buildSemanticCompletionItems, symbolKindToCompletionKind } from "./completionBuilder";
 import { buildHoverMarkdown } from "./hoverBuilder";
 import { buildDocumentSymbolTree } from "./documentSymbolBuilder";
-import { computeIndentEdits } from "./formatter";
+import { computeIndentEdits, fixTransitionSpacing, normalizeTopLevelBlankLines } from "./formatter";
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new Map<string, TextDocument>();
@@ -684,7 +684,17 @@ connection.onDocumentFormatting(async (params) => {
   const tree = symbolIndex.getTree(docPath);
   if (!tree) return [];
 
-  return computeIndentEdits(document.getText(), params.options, tree);
+  const text = document.getText();
+  // Return all edits — indent, blank-line, and spacing.
+  // Spacing edits target node-internal content (after leading whitespace),
+  // while indent edits target leading whitespace only. They don't overlap
+  // because fixTransitionSpacing replaces from node.startCol to node.endCol,
+  // and computeIndentEdits replaces from col 0 to current indent end.
+  // The LSP client applies all edits simultaneously on the original text.
+  const indentEdits = computeIndentEdits(text, params.options, tree);
+  const spacingEdits = fixTransitionSpacing(text, tree);
+  const blankLineEdits = normalizeTopLevelBlankLines(text, tree);
+  return [...indentEdits, ...spacingEdits, ...blankLineEdits];
 });
 
 function scheduleValidation(document: TextDocument): void {

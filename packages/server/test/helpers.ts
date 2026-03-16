@@ -12,7 +12,7 @@ import { resolveSymbolAtPosition } from "../src/resolver";
 import { buildSemanticCompletionItems } from "../src/completionBuilder";
 import { buildHoverMarkdown } from "../src/hoverBuilder";
 import { buildDocumentSymbolTree } from "../src/documentSymbolBuilder";
-import { computeIndentEdits } from "../src/formatter";
+import { computeIndentEdits, fixTransitionSpacing, normalizeTopLevelBlankLines } from "../src/formatter";
 import { CompletionItem } from "vscode-languageserver/node";
 
 // __dirname at runtime is .test-out/test/, so ../../ reaches the package root
@@ -273,23 +273,37 @@ export class SemanticTestHelper {
     this.si.indexFile(filePath, content);
     const tree = this.si.getTree(filePath);
     if (!tree) return content.split("\n");
-    const edits = computeIndentEdits(content, { tabSize: 2, insertSpaces: true }, tree);
+    const indentEdits = computeIndentEdits(content, { tabSize: 2, insertSpaces: true }, tree);
+    const spacingEdits = fixTransitionSpacing(content, tree);
+    const blankLineEdits = normalizeTopLevelBlankLines(content, tree);
+    const edits = [...indentEdits, ...spacingEdits, ...blankLineEdits];
 
-    // Apply edits to get formatted text
+    // Apply edits on raw text (supports inserts, deletes, and multi-line edits)
+    // Convert line/col positions to offsets, apply in reverse order
     const lines = content.split("\n");
-    // Apply edits in reverse order to preserve positions
-    const sorted = [...edits].sort((a, b) => {
-      if (a.range.start.line !== b.range.start.line) return b.range.start.line - a.range.start.line;
-      return b.range.start.character - a.range.start.character;
-    });
-    for (const edit of sorted) {
-      const line = lines[edit.range.start.line];
-      lines[edit.range.start.line] =
-        line.substring(0, edit.range.start.character) +
-        edit.newText +
-        line.substring(edit.range.end.character);
+    const lineOffsets: number[] = [];
+    let offset = 0;
+    for (const line of lines) {
+      lineOffsets.push(offset);
+      offset += line.length + 1; // +1 for \n
     }
-    return lines;
+
+    const toOffset = (line: number, col: number) =>
+      (lineOffsets[line] ?? content.length) + col;
+
+    const sorted = [...edits].sort((a, b) => {
+      const aOff = toOffset(a.range.start.line, a.range.start.character);
+      const bOff = toOffset(b.range.start.line, b.range.start.character);
+      return bOff - aOff; // reverse order
+    });
+
+    let result = content;
+    for (const edit of sorted) {
+      const start = toOffset(edit.range.start.line, edit.range.start.character);
+      const end = toOffset(edit.range.end.line, edit.range.end.character);
+      result = result.substring(0, start) + edit.newText + result.substring(end);
+    }
+    return result.split("\n");
   }
 
   /**

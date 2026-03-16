@@ -83,12 +83,18 @@ type Assertion =
   | TokenContextAssertion
   | HoverOutputAssertion
   | DocumentSymbolsAssertion
-  | FormatOutputAssertion;
+  | FormatOutputAssertion
+  | FormatIdempotentAssertion;
 
 interface FormatOutputAssertion {
   type: "format_output";
   fixture: string;
   expectLines: { line: number; text: string }[];
+}
+
+interface FormatIdempotentAssertion {
+  type: "format_idempotent";
+  fixture: string;
 }
 
 interface HoverOutputAssertion {
@@ -448,7 +454,7 @@ const TEST_CASES: TestCase[] = [
         expectLines: [
           { line: 1, text: "  Integer x;" },
           { line: 3, text: "  int y = 0;" },
-          { line: 7, text: "      e1 -> Closed;" },
+          { line: 6, text: "    Open {e1 -> Closed;" },
         ],
       },
     ],
@@ -465,27 +471,120 @@ const TEST_CASES: TestCase[] = [
         expectLines: [
           // interface body
           { line: 2, text: "  void print();" },
-          // trait body
-          { line: 6, text: "  Date createdAt;" },
+          // trait body (shifted by blank lines between top-level decls)
+          { line: 8, text: "  Date createdAt;" },
           // code_content skip (first method)
-          { line: 12, text: "int x = 0;" },
+          { line: 15, text: "int x = 0;" },
           // re-entry after first code_content — structural comment indented
-          { line: 14, text: "  // Re-entry: structural line after first code_content" },
+          { line: 17, text: "  // Re-entry: structural line after first code_content" },
           // code_content skip (second method — multi-region isolation)
-          { line: 16, text: "return;" },
+          { line: 19, text: "return;" },
           // before_after inside class
-          { line: 18, text: "  before run { }" },
+          { line: 21, text: "  before run { }" },
           // deepest nesting: class + SM + state + nested state (4 levels)
-          { line: 22, text: "        sick -> Sick;" },
+          { line: 25, text: "        sick -> Sick;" },
           // association body
-          { line: 30, text: "  * Animal -- * Animal;" },
+          { line: 34, text: "  * Animal -- * Animal;" },
           // mixset + nested class (2 levels)
-          { line: 34, text: "    name;" },
+          { line: 39, text: "    name;" },
           // top-level statemachine_definition + state (2 levels)
-          { line: 39, text: "    start -> Running;" },
+          { line: 45, text: "    start -> Running;" },
           // top-level code injection (0 level)
-          { line: 43, text: "before { Animal } run { }" },
+          { line: 50, text: "before { Animal } run { }" },
         ],
+      },
+    ],
+  },
+
+  // 18: Transition spacing normalization (Phase 2)
+  {
+    name: "18 format_transitions: arrow spacing normalization",
+    fixtures: ["18_format_transitions.ump"],
+    assertions: [
+      {
+        type: "format_output",
+        fixture: "18_format_transitions.ump",
+        expectLines: [
+          { line: 3, text: "      e1 -> Closed;" },             // compressed → normalized
+          { line: 4, text: "      e2 [canClose] -> Closed;" },  // guard, missing space after
+          { line: 5, text: "      e3 -> Closed;" },             // extra spaces → single
+          { line: 6, text: "      e4 -> Closed;" },             // already correct
+          { line: 7, text: "      e5 / { foo -> bar; } -> Closed;" },  // action code content preserved, structural -> fixed
+          { line: 8, text: "      e6 [g] / { x -> y; z->w; } -> Closed;" },  // action code preserved, structural -> fixed
+          { line: 9, text: "      e7 -> Closed;" },             // unindented + compressed: both indent and spacing applied
+          { line: 17, text: "    start -> Running;" },           // statemachine_definition (shifted by blank line)
+        ],
+      },
+      {
+        type: "format_idempotent",
+        fixture: "18_format_transitions.ump",
+      },
+    ],
+  },
+
+  // 19: Blank-line normalization between top-level declarations
+  {
+    name: "19 format_blank_lines: top-level declaration separation",
+    fixtures: ["19_format_blank_lines.ump"],
+    assertions: [
+      {
+        type: "format_output",
+        fixture: "19_format_blank_lines.ump",
+        expectLines: [
+          // Blank line inserted between A and B (was 0)
+          { line: 3, text: "" },
+          { line: 4, text: "class B {" },
+          // Blank line between B and C collapsed from 3 to 1
+          { line: 7, text: "" },
+          { line: 8, text: "class C {" },
+          // Interior double blank inside C preserved (not touched)
+          { line: 10, text: "" },
+          { line: 11, text: "" },
+          // Overlap regression: indented class D with no blank line before → fixed indent + blank line
+          { line: 15, text: "class D {" },
+        ],
+      },
+      {
+        type: "format_idempotent",
+        fixture: "19_format_blank_lines.ump",
+      },
+    ],
+  },
+
+  // 20: Integration — all formatter passes combined
+  {
+    name: "20 format_integration: all passes combined + comment preservation",
+    fixtures: ["20_format_integration.ump"],
+    assertions: [
+      {
+        type: "format_output",
+        fixture: "20_format_integration.ump",
+        expectLines: [
+          // Indented top-level declaration fixed
+          { line: 0, text: "class Animal {" },
+          // code_content preserved
+          { line: 3, text: "int x = 0;" },
+          // template_body preserved
+          { line: 5, text: "  greeting <<!Hello #name#!>>" },
+          // Unindented transition: both indent + spacing
+          { line: 8, text: "      e1 -> Closed;" },
+          // Action code preserved, structural arrow fixed
+          { line: 9, text: "      e2 / { foo->bar; } -> Closed;" },
+          // Blank line inserted between Animal and Person
+          { line: 14, text: "" },
+          { line: 15, text: "class Person {" },
+          // Comment preserved between Person and Species
+          { line: 19, text: "// Species comment \u2014 must be preserved" },
+          // Excessive blanks collapsed between Extra and GlobalSM
+          { line: 28, text: "" },
+          { line: 29, text: "statemachine GlobalSM {" },
+          // Standalone transition arrow fixed
+          { line: 31, text: "    start -> Running;" },
+        ],
+      },
+      {
+        type: "format_idempotent",
+        fixture: "20_format_integration.ump",
       },
     ],
   },
@@ -877,6 +976,32 @@ function runAssertion(
           ok: false,
           message: `completion_kinds @${assertion.at}: expected [${expected.join(", ")}], got [${(actual as string[]).join(", ")}]`,
         };
+      }
+    }
+    return { ok: true, message: "" };
+  }
+
+  if (assertion.type === "format_idempotent") {
+    const fileInfo = files.get(assertion.fixture);
+    if (!fileInfo) return { ok: false, message: `fixture ${assertion.fixture} not found` };
+
+    // First pass
+    const pass1 = helper.formatFile(fileInfo.path, fileInfo.content);
+    const pass1Text = pass1.join("\n");
+
+    // Second pass on the formatted output
+    const pass2 = helper.formatFile(fileInfo.path, pass1Text);
+    const pass2Text = pass2.join("\n");
+
+    if (pass1Text !== pass2Text) {
+      // Find first differing line
+      for (let i = 0; i < Math.max(pass1.length, pass2.length); i++) {
+        if (pass1[i] !== pass2[i]) {
+          return {
+            ok: false,
+            message: `format_idempotent ${assertion.fixture}: not idempotent at line ${i}. Pass1: ${JSON.stringify(pass1[i])}, Pass2: ${JSON.stringify(pass2[i])}`,
+          };
+        }
       }
     }
     return { ok: true, message: "" };

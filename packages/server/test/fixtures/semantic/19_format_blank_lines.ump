@@ -1,0 +1,18 @@
+class A {
+  Integer x;
+}
+class B {
+  name;
+}
+
+
+
+class C {
+  Integer y;
+
+
+  void foo() {}
+}
+  class D {
+  name;
+}

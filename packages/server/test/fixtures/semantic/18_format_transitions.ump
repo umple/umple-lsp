@@ -1,0 +1,21 @@
+class A {
+  status {
+    Open {
+      e1 -> Closed;
+      e2 [canClose] -> Closed;
+      e3 -> Closed;
+      e4 -> Closed;
+      e5 / { foo -> bar; }->Closed;
+      e6 [g] / { x -> y; z->w; }  ->  Closed;
+e7->Closed;
+    }
+    Closed {}
+  }
+}
+
+statemachine GlobalSM {
+  Init {
+    start -> Running;
+  }
+  Running {}
+}
