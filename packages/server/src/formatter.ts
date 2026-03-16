@@ -153,6 +153,77 @@ export function fixTransitionSpacing(
   return edits;
 }
 
+/** Node types that contain an `arrow` child whose surrounding whitespace should be normalized. */
+const ASSOC_NODES = new Set(["association_inline", "association_member"]);
+
+/**
+ * Normalize whitespace around the arrow in association_inline and association_member nodes.
+ * Only handles single-line nodes. Same child-walking approach as fixTransitionSpacing.
+ */
+export function fixAssociationSpacing(
+  text: string,
+  tree: Tree,
+): TextEdit[] {
+  const lines = text.split("\n");
+  const edits: TextEdit[] = [];
+
+  const visit = (node: any) => {
+    if (ASSOC_NODES.has(node.type)) {
+      const startRow = node.startPosition.row;
+      const endRow = node.endPosition.row;
+      if (startRow !== endRow) return;
+
+      // Find the "arrow" child node
+      let arrowChild: any = null;
+      for (let c = 0; c < node.childCount; c++) {
+        const child = node.child(c);
+        if (child && child.type === "arrow") {
+          arrowChild = child;
+          break;
+        }
+      }
+      if (!arrowChild) return;
+
+      const arrowCol = arrowChild.startPosition.column;
+      const arrowEndCol = arrowChild.endPosition.column;
+      const line = lines[startRow];
+
+      // Find whitespace region around the arrow
+      let wsStart = arrowCol;
+      while (wsStart > 0 && line[wsStart - 1] === " ") {
+        wsStart--;
+      }
+      let wsEnd = arrowEndCol;
+      while (wsEnd < line.length && line[wsEnd] === " ") {
+        wsEnd++;
+      }
+
+      const currentRegion = line.substring(wsStart, wsEnd);
+      const arrowText = arrowChild.text;
+      const expectedRegion = " " + arrowText + " ";
+      if (currentRegion === expectedRegion) return;
+
+      edits.push(
+        TextEdit.replace(
+          Range.create(
+            Position.create(startRow, wsStart),
+            Position.create(startRow, wsEnd),
+          ),
+          expectedRegion,
+        ),
+      );
+      return;
+    }
+
+    for (let i = 0; i < node.childCount; i++) {
+      visit(node.child(i));
+    }
+  };
+
+  visit(tree.rootNode);
+  return edits;
+}
+
 /**
  * Normalize blank lines between top-level declarations in source_file.
  * Ensures exactly 1 blank line between consecutive top-level named children.

@@ -551,6 +551,29 @@ const TEST_CASES: TestCase[] = [
     ],
   },
 
+  // 21: Association arrow spacing
+  {
+    name: "21 format_associations: arrow spacing normalization",
+    fixtures: ["21_format_associations.ump"],
+    assertions: [
+      {
+        type: "format_output",
+        fixture: "21_format_associations.ump",
+        expectLines: [
+          { line: 1, text: "  * -- *Item;" },           // compressed -- → spaced
+          { line: 2, text: "  1 -> 0..1 Description;" }, // extra spaces → single
+          { line: 3, text: "  0..* <@>- 1 Container;" }, // already correct
+          { line: 4, text: "  * -- * Tag;" },            // already correct
+          { line: 8, text: "  *  A -- * B;" },           // association_member arrow spaced
+        ],
+      },
+      {
+        type: "format_idempotent",
+        fixture: "21_format_associations.ump",
+      },
+    ],
+  },
+
   // 20: Integration — all formatter passes combined
   {
     name: "20 format_integration: all passes combined + comment preservation",

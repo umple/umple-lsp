@@ -12,7 +12,7 @@ import { resolveSymbolAtPosition } from "../src/resolver";
 import { buildSemanticCompletionItems } from "../src/completionBuilder";
 import { buildHoverMarkdown } from "../src/hoverBuilder";
 import { buildDocumentSymbolTree } from "../src/documentSymbolBuilder";
-import { computeIndentEdits, fixTransitionSpacing, normalizeTopLevelBlankLines } from "../src/formatter";
+import { computeIndentEdits, fixTransitionSpacing, fixAssociationSpacing, normalizeTopLevelBlankLines } from "../src/formatter";
 import { CompletionItem } from "vscode-languageserver/node";
 
 // __dirname at runtime is .test-out/test/, so ../../ reaches the package root
@@ -275,8 +275,9 @@ export class SemanticTestHelper {
     if (!tree) return content.split("\n");
     const indentEdits = computeIndentEdits(content, { tabSize: 2, insertSpaces: true }, tree);
     const spacingEdits = fixTransitionSpacing(content, tree);
+    const assocEdits = fixAssociationSpacing(content, tree);
     const blankLineEdits = normalizeTopLevelBlankLines(content, tree);
-    const edits = [...indentEdits, ...spacingEdits, ...blankLineEdits];
+    const edits = [...indentEdits, ...spacingEdits, ...assocEdits, ...blankLineEdits];
 
     // Apply edits on raw text (supports inserts, deletes, and multi-line edits)
     // Convert line/col positions to offsets, apply in reverse order

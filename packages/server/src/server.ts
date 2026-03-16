@@ -32,7 +32,7 @@ import { resolveSymbolAtPosition as resolveSymbol } from "./resolver";
 import { buildSemanticCompletionItems, symbolKindToCompletionKind } from "./completionBuilder";
 import { buildHoverMarkdown } from "./hoverBuilder";
 import { buildDocumentSymbolTree } from "./documentSymbolBuilder";
-import { computeIndentEdits, fixTransitionSpacing, normalizeTopLevelBlankLines } from "./formatter";
+import { computeIndentEdits, fixTransitionSpacing, fixAssociationSpacing, normalizeTopLevelBlankLines } from "./formatter";
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new Map<string, TextDocument>();
@@ -693,8 +693,9 @@ connection.onDocumentFormatting(async (params) => {
   // The LSP client applies all edits simultaneously on the original text.
   const indentEdits = computeIndentEdits(text, params.options, tree);
   const spacingEdits = fixTransitionSpacing(text, tree);
+  const assocEdits = fixAssociationSpacing(text, tree);
   const blankLineEdits = normalizeTopLevelBlankLines(text, tree);
-  return [...indentEdits, ...spacingEdits, ...blankLineEdits];
+  return [...indentEdits, ...spacingEdits, ...assocEdits, ...blankLineEdits];
 });
 
 function scheduleValidation(document: TextDocument): void {
