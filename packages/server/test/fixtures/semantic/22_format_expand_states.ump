@@ -1,0 +1,19 @@
+class A {
+  status {
+    Open {
+      e1 -> Closed;
+      e2 -> Dead;
+    }
+    Closed {}
+    Idle {
+      e1 [guard] -> Moving;
+    }
+  }
+}
+
+statemachine GlobalSM {
+  Init {
+    start -> Running;
+  }
+  Running {}
+}

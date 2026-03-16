@@ -17,6 +17,138 @@ import { isVerbatimLine, computeStructuralDepth, TOP_LEVEL_DECL_NODES } from "./
 const TreeSitter = require("web-tree-sitter");
 type Tree = InstanceType<typeof TreeSitter.Tree>;
 
+// ── Phase 0: Compact block expansion ────────────────────────────────────────
+
+/** Allowed child types inside a state body for expansion eligibility. */
+const EXPANSION_ALLOWED_CHILDREN = new Set([
+  "transition", "standalone_transition",
+  "{", "}", ";", "identifier",
+]);
+
+/** Node types that disqualify a state from expansion if found as descendants. */
+const EXPANSION_REJECT_DESCENDANTS = new Set([
+  "code_content", "template_body", "action_code", "more_code",
+  "line_comment", "block_comment",
+]);
+
+/**
+ * Check if a subtree contains any descendant of the given types.
+ */
+function hasDescendantOfType(node: any, types: Set<string>): boolean {
+  for (let i = 0; i < node.childCount; i++) {
+    const child = node.child(i);
+    if (types.has(child.type)) return true;
+    if (hasDescendantOfType(child, types)) return true;
+  }
+  return false;
+}
+
+/**
+ * Check if a single-line state node is eligible for compact block expansion.
+ */
+function isEligibleForExpansion(stateNode: any): boolean {
+  // Must be single-line
+  if (stateNode.startPosition.row !== stateNode.endPosition.row) return false;
+
+  // Walk ALL children (including anonymous tokens)
+  let hasTransition = false;
+  for (let i = 0; i < stateNode.childCount; i++) {
+    const child = stateNode.child(i);
+    const type = child.type;
+
+    if (EXPANSION_ALLOWED_CHILDREN.has(type)) {
+      if (type === "transition" || type === "standalone_transition") {
+        hasTransition = true;
+      }
+      continue;
+    }
+
+    // Any other child (||, entry_exit_action, state, method, etc.) → reject
+    return false;
+  }
+
+  if (!hasTransition) return false;
+
+  // Check for embedded-code or comment descendants anywhere in subtree
+  if (hasDescendantOfType(stateNode, EXPANSION_REJECT_DESCENDANTS)) {
+    return false;
+  }
+
+  // Check for ERROR nodes
+  if (stateNode.hasError) return false;
+
+  return true;
+}
+
+/**
+ * Expand eligible single-line compact state blocks into multi-line format.
+ * Returns the modified text (or the original if nothing changed).
+ */
+export function expandCompactStates(text: string, tree: Tree): string {
+  const lines = text.split("\n");
+
+  // Collect eligible state nodes (process in reverse to preserve positions)
+  const eligible: any[] = [];
+  const visit = (node: any) => {
+    if (node.type === "state" && isEligibleForExpansion(node)) {
+      eligible.push(node);
+      return; // Don't descend — this is single-line
+    }
+    for (let i = 0; i < node.childCount; i++) {
+      visit(node.child(i));
+    }
+  };
+  visit(tree.rootNode);
+
+  if (eligible.length === 0) return text;
+
+  // Sort in reverse document order (process from bottom to top)
+  eligible.sort((a, b) => b.startPosition.row - a.startPosition.row ||
+    b.startPosition.column - a.startPosition.column);
+
+  let result = text;
+  for (const stateNode of eligible) {
+    const row = stateNode.startPosition.row;
+    const startCol = stateNode.startPosition.column;
+    const endCol = stateNode.endPosition.column;
+    const line = result.split("\n")[row];
+    const nodeText = line.substring(startCol, endCol);
+
+    // Find the state name
+    const nameNode = stateNode.childForFieldName("name");
+    if (!nameNode) continue;
+    const stateName = nameNode.text;
+
+    // Collect transition child texts
+    const transitionTexts: string[] = [];
+    for (let i = 0; i < stateNode.childCount; i++) {
+      const child = stateNode.child(i);
+      if (child.type === "transition" || child.type === "standalone_transition") {
+        transitionTexts.push(child.text);
+      }
+    }
+
+    // Compute the indent of the state itself (leading whitespace before it)
+    const stateIndent = line.substring(0, startCol);
+    const childIndent = stateIndent + "  "; // +1 level
+
+    // Build expanded text
+    const expandedLines = [`${stateName} {`];
+    for (const t of transitionTexts) {
+      expandedLines.push(`${childIndent}${t}`);
+    }
+    expandedLines.push(`${stateIndent}}`);
+    const expanded = expandedLines.join("\n");
+
+    // Replace in the result
+    const allLines = result.split("\n");
+    allLines[row] = line.substring(0, startCol) + expanded + line.substring(endCol);
+    result = allLines.join("\n");
+  }
+
+  return result;
+}
+
 /**
  * Compute indent edits for an Umple document using syntax-aware indentation.
  *

@@ -12,7 +12,7 @@ import { resolveSymbolAtPosition } from "../src/resolver";
 import { buildSemanticCompletionItems } from "../src/completionBuilder";
 import { buildHoverMarkdown } from "../src/hoverBuilder";
 import { buildDocumentSymbolTree } from "../src/documentSymbolBuilder";
-import { computeIndentEdits, fixTransitionSpacing, fixAssociationSpacing, normalizeTopLevelBlankLines } from "../src/formatter";
+import { expandCompactStates, computeIndentEdits, fixTransitionSpacing, fixAssociationSpacing, normalizeTopLevelBlankLines } from "../src/formatter";
 import { CompletionItem } from "vscode-languageserver/node";
 
 // __dirname at runtime is .test-out/test/, so ../../ reaches the package root
@@ -271,26 +271,34 @@ export class SemanticTestHelper {
    */
   formatFile(filePath: string, content: string): string[] {
     this.si.indexFile(filePath, content);
-    const tree = this.si.getTree(filePath);
+    let tree = this.si.getTree(filePath);
     if (!tree) return content.split("\n");
-    const indentEdits = computeIndentEdits(content, { tabSize: 2, insertSpaces: true }, tree);
-    const spacingEdits = fixTransitionSpacing(content, tree);
-    const assocEdits = fixAssociationSpacing(content, tree);
-    const blankLineEdits = normalizeTopLevelBlankLines(content, tree);
+
+    // Phase 0: expand compact state blocks
+    let text = expandCompactStates(content, tree);
+    if (text !== content) {
+      this.si.indexFile(filePath, text);
+      tree = this.si.getTree(filePath)!;
+    }
+
+    // Phase 1-2: formatting passes
+    const indentEdits = computeIndentEdits(text, { tabSize: 2, insertSpaces: true }, tree);
+    const spacingEdits = fixTransitionSpacing(text, tree);
+    const assocEdits = fixAssociationSpacing(text, tree);
+    const blankLineEdits = normalizeTopLevelBlankLines(text, tree);
     const edits = [...indentEdits, ...spacingEdits, ...assocEdits, ...blankLineEdits];
 
-    // Apply edits on raw text (supports inserts, deletes, and multi-line edits)
-    // Convert line/col positions to offsets, apply in reverse order
-    const lines = content.split("\n");
+    // Apply edits on the (possibly expanded) text
+    const lines = text.split("\n");
     const lineOffsets: number[] = [];
     let offset = 0;
     for (const line of lines) {
       lineOffsets.push(offset);
-      offset += line.length + 1; // +1 for \n
+      offset += line.length + 1;
     }
 
     const toOffset = (line: number, col: number) =>
-      (lineOffsets[line] ?? content.length) + col;
+      (lineOffsets[line] ?? text.length) + col;
 
     const sorted = [...edits].sort((a, b) => {
       const aOff = toOffset(a.range.start.line, a.range.start.character);
@@ -298,7 +306,7 @@ export class SemanticTestHelper {
       return bOff - aOff; // reverse order
     });
 
-    let result = content;
+    let result = text;
     for (const edit of sorted) {
       const start = toOffset(edit.range.start.line, edit.range.start.character);
       const end = toOffset(edit.range.end.line, edit.range.end.character);

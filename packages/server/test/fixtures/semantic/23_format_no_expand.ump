@@ -1,0 +1,16 @@
+class B {
+  status {
+    Moving { entry / { code(); } e1 -> Open; }
+    Active {void helper() {}}
+  }
+}
+
+class C { Integer x; }
+
+class D {
+  status {
+    Open {e1 -> Closed; || e2 -> Dead;}
+    Active {e / { code(); } -> Closed;}
+    Idle {/* comment */ e1 -> Moving;}
+  }
+}

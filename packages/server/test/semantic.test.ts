@@ -551,6 +551,64 @@ const TEST_CASES: TestCase[] = [
     ],
   },
 
+  // 22: Compact state block expansion
+  {
+    name: "22 format_expand_states: single-line state expansion",
+    fixtures: ["22_format_expand_states.ump"],
+    assertions: [
+      {
+        type: "format_output",
+        fixture: "22_format_expand_states.ump",
+        expectLines: [
+          { line: 2, text: "    Open {" },                    // expanded: opening line
+          { line: 3, text: "      e1 -> Closed;" },           // transition indented + spaced
+          { line: 4, text: "      e2 -> Dead;" },             // second transition
+          { line: 5, text: "    }" },                          // closing brace
+          { line: 6, text: "    Closed {}" },                  // empty: NOT expanded
+          { line: 7, text: "    Idle {" },                     // single-transition expanded
+          { line: 8, text: "      e1 [guard] -> Moving;" },   // guarded transition
+          { line: 14, text: "  Init {" },                      // statemachine_definition state
+          { line: 15, text: "    start -> Running;" },         // arrow spaced
+          { line: 17, text: "  Running {}" },                  // empty: NOT expanded
+        ],
+      },
+      {
+        type: "format_idempotent",
+        fixture: "22_format_expand_states.ump",
+      },
+    ],
+  },
+
+  // 23: Non-expansion cases
+  {
+    name: "23 format_no_expand: blocks that must NOT expand",
+    fixtures: ["23_format_no_expand.ump"],
+    assertions: [
+      {
+        type: "format_output",
+        fixture: "23_format_no_expand.ump",
+        expectLines: [
+          // entry/exit action → unchanged
+          { line: 2, text: "    Moving { entry / { code(); } e1 -> Open; }" },
+          // method body → unchanged
+          { line: 3, text: "    Active {void helper() {}}" },
+          // class compact body → unchanged
+          { line: 7, text: "class C { Integer x; }" },
+          // || concurrent region → unchanged
+          { line: 11, text: "    Open {e1 -> Closed; || e2 -> Dead;}" },
+          // action code in transition → unchanged
+          { line: 12, text: "    Active {e / { code(); } -> Closed;}" },
+          // comment inside state → unchanged
+          { line: 13, text: "    Idle {/* comment */ e1 -> Moving;}" },
+        ],
+      },
+      {
+        type: "format_idempotent",
+        fixture: "23_format_no_expand.ump",
+      },
+    ],
+  },
+
   // 21: Association arrow spacing
   {
     name: "21 format_associations: arrow spacing normalization",

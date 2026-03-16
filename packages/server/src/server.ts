@@ -32,7 +32,7 @@ import { resolveSymbolAtPosition as resolveSymbol } from "./resolver";
 import { buildSemanticCompletionItems, symbolKindToCompletionKind } from "./completionBuilder";
 import { buildHoverMarkdown } from "./hoverBuilder";
 import { buildDocumentSymbolTree } from "./documentSymbolBuilder";
-import { computeIndentEdits, fixTransitionSpacing, fixAssociationSpacing, normalizeTopLevelBlankLines } from "./formatter";
+import { expandCompactStates, computeIndentEdits, fixTransitionSpacing, fixAssociationSpacing, normalizeTopLevelBlankLines } from "./formatter";
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new Map<string, TextDocument>();
@@ -684,18 +684,69 @@ connection.onDocumentFormatting(async (params) => {
   const tree = symbolIndex.getTree(docPath);
   if (!tree) return [];
 
-  const text = document.getText();
-  // Return all edits — indent, blank-line, and spacing.
-  // Spacing edits target node-internal content (after leading whitespace),
-  // while indent edits target leading whitespace only. They don't overlap
-  // because fixTransitionSpacing replaces from node.startCol to node.endCol,
-  // and computeIndentEdits replaces from col 0 to current indent end.
-  // The LSP client applies all edits simultaneously on the original text.
-  const indentEdits = computeIndentEdits(text, params.options, tree);
-  const spacingEdits = fixTransitionSpacing(text, tree);
-  const assocEdits = fixAssociationSpacing(text, tree);
-  const blankLineEdits = normalizeTopLevelBlankLines(text, tree);
-  return [...indentEdits, ...spacingEdits, ...assocEdits, ...blankLineEdits];
+  let text = document.getText();
+
+  const originalText = text;
+
+  // Phase 0: expand compact state blocks (may insert newlines)
+  const expandedText = expandCompactStates(text, tree);
+  let formatTree = tree;
+  if (expandedText !== text) {
+    // Temporarily index expanded text to get a parsed tree.
+    // We restore the original text at the end to avoid corrupting
+    // the live index (the editor document hasn't changed yet).
+    symbolIndex.updateFile(docPath, expandedText);
+    formatTree = symbolIndex.getTree(docPath)!;
+    text = expandedText;
+  }
+
+  // Phase 1-2: formatting passes on the (possibly expanded) text
+  const edits = [
+    ...computeIndentEdits(text, params.options, formatTree),
+    ...fixTransitionSpacing(text, formatTree),
+    ...fixAssociationSpacing(text, formatTree),
+    ...normalizeTopLevelBlankLines(text, formatTree),
+  ];
+
+  // Apply edits internally to produce final text
+  const lines = text.split("\n");
+  const lineOffsets: number[] = [];
+  let offset = 0;
+  for (const line of lines) {
+    lineOffsets.push(offset);
+    offset += line.length + 1;
+  }
+  const toOffset = (line: number, col: number) =>
+    (lineOffsets[line] ?? text.length) + col;
+
+  const sorted = [...edits].sort((a, b) =>
+    toOffset(b.range.start.line, b.range.start.character) -
+    toOffset(a.range.start.line, a.range.start.character),
+  );
+
+  let finalText = text;
+  for (const edit of sorted) {
+    const start = toOffset(edit.range.start.line, edit.range.start.character);
+    const end = toOffset(edit.range.end.line, edit.range.end.character);
+    finalText = finalText.substring(0, start) + edit.newText + finalText.substring(end);
+  }
+
+  // Restore the live index to the original document text if we mutated it
+  if (expandedText !== originalText) {
+    symbolIndex.updateFile(docPath, originalText);
+  }
+
+  // Return single whole-document replace
+  if (finalText === originalText) return [];
+
+  const lastLine = document.lineCount - 1;
+  const lastChar = (originalText.split("\n")[lastLine] ?? "").length;
+  return [
+    TextEdit.replace(
+      Range.create(Position.create(0, 0), Position.create(lastLine, lastChar)),
+      finalText,
+    ),
+  ];
 });
 
 function scheduleValidation(document: TextDocument): void {
