@@ -20,6 +20,8 @@ import {
   Position,
   Range,
   WorkspaceEdit,
+  FileChangeType,
+  DidChangeWatchedFilesNotification,
 } from "vscode-languageserver/node";
 import { TextDocument } from "vscode-languageserver-textdocument";
 import {
@@ -38,6 +40,101 @@ const connection = createConnection(ProposedFeatures.all);
 const documents = new Map<string, TextDocument>();
 const pendingValidations = new Map<string, NodeJS.Timeout>();
 let workspaceRoots: string[] = [];
+
+// ── Workspace use-graph: per-root readiness tracking ────────────────────────
+
+type RootScanState = "idle" | "scanning" | "ready";
+const rootScanStates = new Map<string, RootScanState>();
+
+/**
+ * Check if the workspace use-graph is ready for the root containing a file.
+ * Returns true if the root's scan is complete, false if scanning or idle.
+ * Files outside all workspace roots return true (local-only scope is acceptable).
+ */
+function isUseGraphReadyForFile(filePath: string): boolean {
+  const normalized = path.normalize(filePath);
+  for (const [root, state] of rootScanStates) {
+    if (normalized.startsWith(root)) return state === "ready";
+  }
+  // File outside all workspace roots — no graph needed, local scope is fine
+  return true;
+}
+
+/**
+ * Async cooperative directory scanner. Discovers .ump files without blocking
+ * the event loop. Uses fs.promises.readdir with yielding every 100 directories.
+ */
+async function discoverUmpFilesAsync(root: string): Promise<string[]> {
+  const results: string[] = [];
+  const queue: string[] = [root];
+  const skipDirs = new Set(["node_modules", ".git", "out", ".test-out", "build", "dist"]);
+  let processed = 0;
+
+  while (queue.length > 0) {
+    const dir = queue.pop()!;
+    let entries: fs.Dirent[];
+    try {
+      entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    } catch {
+      continue; // permission denied, etc.
+    }
+
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (!skipDirs.has(entry.name)) {
+          queue.push(full);
+        }
+      } else if (entry.name.endsWith(".ump")) {
+        results.push(path.normalize(full));
+      }
+    }
+
+    // Yield every 100 directories to keep the server responsive
+    if (++processed % 100 === 0) {
+      await new Promise<void>((r) => setTimeout(r, 0));
+    }
+  }
+  return results;
+}
+
+/**
+ * Async cooperative use-graph population for a workspace root.
+ * Discovers .ump files, extracts use statements (tree-sitter parse, no symbol extraction),
+ * and populates the import graph. Skips already-indexed files.
+ */
+async function scanWorkspaceRootAsync(
+  root: string,
+  getOpenDocContent: (filePath: string) => string | undefined,
+): Promise<void> {
+  rootScanStates.set(root, "scanning");
+  try {
+    const files = await discoverUmpFilesAsync(root);
+    for (let i = 0; i < files.length; i++) {
+      const filePath = files[i];
+      // Skip already-indexed files (edges are fresh from didOpen/didChange)
+      if (symbolIndex.isFileIndexed(filePath)) continue;
+
+      // Prefer open document content over disk
+      const content = getOpenDocContent(filePath) ?? readFileSafe(filePath);
+      if (!content) continue;
+
+      // Extract use statements and update import graph edges only
+      const uses = symbolIndex.extractUseStatements(filePath, content);
+      symbolIndex.updateUseGraphEdges(filePath, uses);
+
+      // Yield every 50 files
+      if (i % 50 === 0) {
+        await new Promise<void>((r) => setTimeout(r, 0));
+      }
+    }
+    rootScanStates.set(root, "ready");
+    connection.console.info(`Workspace use-graph ready for: ${root}`);
+  } catch (err) {
+    rootScanStates.set(root, "idle");
+    connection.console.warn(`Workspace use-graph scan failed for ${root}: ${err}`);
+  }
+}
 
 /**
  * Normalize a file URI to a consistent key for the documents map.
@@ -175,6 +272,22 @@ connection.onInitialized(async () => {
       symbolIndexReady = await symbolIndex.initialize(treeSitterWasmPath);
       if (symbolIndexReady) {
         connection.console.info("Symbol index initialized with tree-sitter.");
+
+        // Start async workspace use-graph scan (non-blocking, cooperative)
+        if (workspaceRoots.length > 0) {
+          for (const root of workspaceRoots) {
+            rootScanStates.set(root, "idle");
+            scanWorkspaceRootAsync(root, (filePath) => {
+              const uri = pathToFileURL(filePath).toString();
+              return getDocument(uri)?.getText();
+            });
+          }
+
+          // Register file watcher for .ump files to keep the use-graph fresh
+          connection.client.register(DidChangeWatchedFilesNotification.type, {
+            watchers: [{ globPattern: "**/*.ump" }],
+          });
+        }
       }
     } catch (err) {
       connection.console.warn(`Failed to initialize symbol index: ${err}`);
@@ -275,6 +388,36 @@ connection.onDidCloseTextDocument((params) => {
     inFlightValidations.delete(normalizedUri);
   }
   connection.sendDiagnostics({ uri: params.textDocument.uri, diagnostics: [] });
+});
+
+// ── File watcher: keep workspace use-graph fresh for unopened files ──────────
+
+connection.onDidChangeWatchedFiles((params) => {
+  if (!symbolIndexReady) return;
+
+  for (const change of params.changes) {
+    let filePath: string;
+    try {
+      filePath = path.normalize(fileURLToPath(change.uri));
+    } catch {
+      continue;
+    }
+
+    // Skip files that are open in the editor — their edges are managed by didOpen/didChange
+    if (getDocument(change.uri)) continue;
+
+    if (change.type === FileChangeType.Deleted) {
+      // File deleted — remove its import graph edges
+      symbolIndex.removeImportEdges(filePath);
+    } else {
+      // Created or Changed — update use-graph edges from disk content
+      const content = readFileSafe(filePath);
+      if (content) {
+        const uses = symbolIndex.extractUseStatements(filePath, content);
+        symbolIndex.updateUseGraphEdges(filePath, uses);
+      }
+    }
+  }
 });
 
 connection.onCompletion(async (params): Promise<CompletionItem[]> => {
@@ -451,19 +594,35 @@ connection.onReferences(async (params) => {
   );
   if (!resolved || resolved.symbols.length === 0) return [];
 
-  // 2. Index all workspace files (content-hash skips unchanged files)
-  symbolIndex.indexWorkspace(workspaceRoots, (filePath) => {
-    const uri = pathToFileURL(filePath).toString();
-    return getDocument(uri)?.getText();
-  });
+  // 2. Index forward-reachable files (fast, import-chain only — no workspace crawl).
+  //
+  // Scope model: references searches the current file, forward-reachable imports,
+  // and reverse importers known to the import graph. The import graph is populated
+  // by: (1) didOpen/didChange for open files, (2) async background workspace scan
+  // on init, (3) file watcher events for disk changes. This avoids synchronous
+  // workspace-wide crawling on the request path. References is best-effort — it
+  // uses whatever graph state is available without blocking.
+  const reachableFiles = ensureImportsIndexed(docPath, document.getText());
 
-  // 3. Compute search scope: declaration files + reverse importers
+  // 3. Compute search scope: declaration files + forward-reachable + known reverse importers
   const declFiles = new Set(
     resolved.symbols.map((s) => path.normalize(s.file)),
   );
-  const filesToSearch = symbolIndex.getReverseImporters(declFiles);
-  // Include declaration files themselves
-  for (const f of declFiles) filesToSearch.add(f);
+  const reverseImporters = symbolIndex.getReverseImporters(declFiles);
+  const filesToSearch = new Set([...declFiles, ...reachableFiles, ...reverseImporters]);
+
+  // Ensure reverse importers are fully indexed
+  for (const file of reverseImporters) {
+    if (!symbolIndex.isFileIndexed(file)) {
+      const uri = pathToFileURL(file).toString();
+      const openDoc = getDocument(uri);
+      if (openDoc) {
+        symbolIndex.updateFile(file, openDoc.getText());
+      } else if (fs.existsSync(file)) {
+        symbolIndex.indexFile(file);
+      }
+    }
+  }
 
   // 4. Find references
   const refs = symbolIndex.findReferences(
@@ -592,18 +751,43 @@ connection.onRenameRequest(async (params) => {
   if (!RENAMEABLE_KINDS.has(resolved.symbols[0].kind)) return null;
   if (!isUnambiguousRename(resolved.symbols)) return null;
 
-  // 2. Index workspace
-  symbolIndex.indexWorkspace(workspaceRoots, (filePath) => {
-    const uri = pathToFileURL(filePath).toString();
-    return getDocument(uri)?.getText();
-  });
+  // Check workspace use-graph readiness for the DECLARATION files' roots.
+  // Rename must not return partial WorkspaceEdits — if any declaration's
+  // root is still scanning, fail explicitly rather than silently miss importers.
+  // (Checked after resolution so we know which roots actually matter.)
+  for (const sym of resolved.symbols) {
+    if (!isUseGraphReadyForFile(sym.file)) {
+      connection.window.showWarningMessage(
+        "Workspace scan in progress. Please try rename again in a moment.",
+      );
+      return null;
+    }
+  }
 
-  // 3. Compute search scope
+  // 2. Index forward-reachable files (fast, import-chain only — no workspace crawl).
+  // Same scope model as references: current file + forward imports + known reverse
+  // importers. See onReferences comment for full rationale.
+  const reachableFiles = ensureImportsIndexed(docPath, document.getText());
+
+  // 3. Compute search scope: declaration files + forward-reachable + known reverse importers
   const declFiles = new Set(
     resolved.symbols.map((s) => path.normalize(s.file)),
   );
-  const filesToSearch = symbolIndex.getReverseImporters(declFiles);
-  for (const f of declFiles) filesToSearch.add(f);
+  const reverseImporters = symbolIndex.getReverseImporters(declFiles);
+  const filesToSearch = new Set([...declFiles, ...reachableFiles, ...reverseImporters]);
+
+  // Ensure reverse importers are fully indexed
+  for (const file of reverseImporters) {
+    if (!symbolIndex.isFileIndexed(file)) {
+      const uri = pathToFileURL(file).toString();
+      const openDoc = getDocument(uri);
+      if (openDoc) {
+        symbolIndex.updateFile(file, openDoc.getText());
+      } else if (fs.existsSync(file)) {
+        symbolIndex.indexFile(file);
+      }
+    }
+  }
 
   // 4. Find ALL references including declarations
   const refs = symbolIndex.findReferences(

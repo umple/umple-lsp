@@ -84,7 +84,22 @@ type Assertion =
   | HoverOutputAssertion
   | DocumentSymbolsAssertion
   | FormatOutputAssertion
-  | FormatIdempotentAssertion;
+  | FormatIdempotentAssertion
+  | UseGraphRefsAssertion;
+
+/** Tests the use-graph discovery pipeline: inject importer edges without full indexing,
+ *  then verify refs include the importer after lazy on-demand indexing. */
+interface UseGraphRefsAssertion {
+  type: "use_graph_refs";
+  /** Fixture to index normally (the declaration file) */
+  targetFixture: string;
+  /** Fixture to inject use-graph edges only (simulates background scan discovery) */
+  importerFixture: string;
+  /** Declaration spec to search refs for */
+  decl: DeclSpec;
+  /** Markers that MUST appear in the ref results (including from the lazily-indexed importer) */
+  expectAt: string[];
+}
 
 interface FormatOutputAssertion {
   type: "format_output";
@@ -689,6 +704,72 @@ const TEST_CASES: TestCase[] = [
     ],
   },
 
+  // 24: Rename/reference scope model — known-graph-only guarantees
+  {
+    name: "24 rename_scope: local single-file refs without workspace crawl",
+    fixtures: ["24_rename_scope.ump"],
+    assertions: [
+      // Local attribute refs: definition + constraint usage, single file
+      {
+        type: "goto_def",
+        at: "local_ref",
+        expect: [{ at: "local_attr" }],
+      },
+      {
+        type: "refs",
+        decl: { name: "count", kind: "attribute", container: "LocalOnly" },
+        expectAt: ["local_attr", "local_ref"],
+      },
+      // Class ref: single-file, no imports needed
+      {
+        type: "refs",
+        decl: { name: "LocalOnly", kind: "class", container: "LocalOnly" },
+        expectAt: ["local_class"],
+      },
+    ],
+  },
+
+  // 25: Use-graph discovery — unopened importer found via use-graph edges
+  //
+  // This test exercises the ACTUAL rename guarantee:
+  // 1. Target file is fully indexed normally
+  // 2. Importer file is NOT fully indexed — only use-graph edges injected
+  //    (simulates background workspace scan discovering it)
+  // 3. Refs pipeline discovers importer via getReverseImporters,
+  //    lazily indexes it on demand, and includes its references
+  {
+    name: "25 use_graph: unopened importer discovered via use-graph edges and lazily indexed",
+    fixtures: ["25_use_graph_target.ump"],
+    assertions: [
+      {
+        type: "use_graph_refs",
+        targetFixture: "25_use_graph_target.ump",
+        importerFixture: "25_use_graph_importer.ump",
+        decl: { name: "Target", kind: "class", container: "Target" },
+        expectAt: ["target_def", "importer_ref"],
+      },
+    ],
+  },
+
+  // 24b: Forward-import reference scope
+  {
+    name: "24b rename_scope: forward-import refs work across files",
+    fixtures: ["11_cross_file_a.ump", "11_cross_file_b.ump"],
+    assertions: [
+      // Forward import: refs for Shared from file A finds definition in file B
+      {
+        type: "goto_def",
+        at: "use_shared",
+        expect: [{ at: "def_shared_b" }],
+      },
+      {
+        type: "refs",
+        decl: { name: "Shared", kind: "class", container: "Shared" },
+        expectAt: ["def_shared_b", "use_shared"],
+      },
+    ],
+  },
+
   // 12A: Completion fallback — zero-identifier positions
   {
     name: "12A completion_fallback: zero-identifier scope detection",
@@ -1056,6 +1137,52 @@ function runAssertion(
         return {
           ok: false,
           message: `completion_kinds @${assertion.at}: expected [${expected.join(", ")}], got [${(actual as string[]).join(", ")}]`,
+        };
+      }
+    }
+    return { ok: true, message: "" };
+  }
+
+  if (assertion.type === "use_graph_refs") {
+    // Target file should already be indexed via fixtures
+    const targetInfo = files.get(assertion.targetFixture);
+    if (!targetInfo) return { ok: false, message: `target fixture ${assertion.targetFixture} not found` };
+
+    // Load importer WITHOUT full indexing (simulates unopened file)
+    const importerFiles = helper.loadWithoutIndexing(assertion.importerFixture);
+    const importerInfo = importerFiles.get(assertion.importerFixture);
+    if (!importerInfo) return { ok: false, message: `importer fixture ${assertion.importerFixture} not found` };
+
+    // Add importer markers to the files map for marker lookup
+    files.set(assertion.importerFixture, importerInfo);
+
+    // Inject use-graph edges only (simulates background workspace scan)
+    helper.injectUseGraphEdges(importerInfo.path, importerInfo.content);
+
+    // Run the full rename/reference pipeline with reverse-importer discovery
+    const fileContents = new Map<string, string>();
+    for (const [, f] of files) {
+      fileContents.set(f.path, f.content);
+    }
+
+    const refs = helper.findRefsWithReverseImporters(assertion.decl, reachable, fileContents);
+
+    // Check expected markers are present
+    for (const markerName of assertion.expectAt) {
+      let target: { filePath: string; pos: MarkerPosition } | null = null;
+      for (const f of files.values()) {
+        const pos = f.markers.get(markerName);
+        if (pos) { target = { filePath: f.path, pos }; break; }
+      }
+      if (!target) return { ok: false, message: `marker @${markerName} not found` };
+
+      const found = refs.some(
+        (r) => r.line === target!.pos.line && r.file === target!.filePath,
+      );
+      if (!found) {
+        return {
+          ok: false,
+          message: `use_graph_refs: expected @${markerName} (line ${target.pos.line}) in refs, got lines [${refs.map((r) => `${r.file}:${r.line}`).join(", ")}]`,
         };
       }
     }

@@ -1,0 +1,4 @@
+class /*@local_class*/LocalOnly {
+  Integer /*@local_attr*/count;
+  [/*@local_ref*/count > 0]
+}

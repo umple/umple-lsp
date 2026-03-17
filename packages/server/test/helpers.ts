@@ -158,6 +158,92 @@ export class SemanticTestHelper {
   }
 
   /**
+   * Load fixture file content and extract markers WITHOUT indexing.
+   * Used to simulate files discovered by background scan but not yet opened.
+   */
+  loadWithoutIndexing(
+    ...names: string[]
+  ): Map<string, { path: string; content: string; markers: Map<string, MarkerPosition> }> {
+    const files = new Map<
+      string,
+      { path: string; content: string; markers: Map<string, MarkerPosition> }
+    >();
+    for (const name of names) {
+      const filePath = path.resolve(FIXTURE_DIR, name);
+      const raw = fs.readFileSync(filePath, "utf8");
+      const { clean, markers } = extractMarkers(raw);
+      const normalizedPath = path.normalize(filePath);
+      // Do NOT call indexFile — just store content and markers
+      files.set(name, { path: normalizedPath, content: clean, markers });
+    }
+    return files;
+  }
+
+  /**
+   * Inject use-graph edges for a file WITHOUT fully indexing it.
+   * Simulates the background workspace scanner discovering a file's use statements.
+   */
+  injectUseGraphEdges(filePath: string, content: string): void {
+    const uses = this.si.extractUseStatements(filePath, content);
+    this.si.updateUseGraphEdges(filePath, uses);
+  }
+
+  /**
+   * Find refs using the rename/reference pipeline:
+   * 1. Use provided reachable set for forward-reachable files
+   * 2. Compute reverse importers from the import graph
+   * 3. Lazily index any reverse importers not yet fully indexed
+   * 4. Search the combined scope
+   */
+  findRefsWithReverseImporters(
+    decl: DeclSpec,
+    reachable: Set<string>,
+    fileContents: Map<string, string>,
+  ): RefLocation[] {
+    // Compute reverse importers from the import graph
+    const declFiles = new Set<string>();
+    const declarations = this.si.getSymbols({
+      name: decl.name,
+      kind: decl.kind,
+      container: decl.container,
+    });
+    for (const d of declarations) {
+      if (reachable.has(path.normalize(d.file))) {
+        declFiles.add(path.normalize(d.file));
+      }
+    }
+
+    const reverseImporters = this.si.getReverseImporters(declFiles);
+
+    // Lazily index reverse importers that aren't fully indexed yet
+    for (const file of reverseImporters) {
+      if (!this.si.isFileIndexed(file)) {
+        const content = fileContents.get(file);
+        if (content) {
+          this.si.indexFile(file, content);
+        }
+      }
+    }
+
+    // Build full search scope
+    const filesToSearch = new Set([...reachable, ...reverseImporters]);
+
+    // Filter declarations to full scope (including newly-indexed reverse importers)
+    let allDecls = this.si.getSymbols({
+      name: decl.name,
+      kind: decl.kind,
+      container: decl.container,
+    });
+    allDecls = allDecls.filter((d) => filesToSearch.has(path.normalize(d.file)));
+
+    return this.si.findReferences(allDecls, filesToSearch, true).map((r) => ({
+      file: r.file,
+      line: r.line,
+      column: r.column,
+    }));
+  }
+
+  /**
    * Get raw token info at a position. Used for context-model assertions.
    */
   tokenAt(

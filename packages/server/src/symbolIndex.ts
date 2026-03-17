@@ -107,6 +107,43 @@ export class SymbolIndex {
   }
 
   /**
+   * Check if a file has been fully indexed (has symbols + tree).
+   */
+  isFileIndexed(filePath: string): boolean {
+    return this.files.has(filePath);
+  }
+
+  /**
+   * Remove import graph edges for a file (e.g., when it's deleted from disk).
+   */
+  removeImportEdges(filePath: string): void {
+    this.importGraph.removeEdges(filePath);
+  }
+
+  /**
+   * Update import graph edges for a file from its use statements,
+   * WITHOUT full symbol indexing. Used by the async workspace use-graph scanner.
+   * Skips files that are already fully indexed (their edges are fresh from didOpen/didChange).
+   */
+  updateUseGraphEdges(filePath: string, useStatements: string[]): void {
+    // Don't overwrite edges for already-indexed files
+    if (this.files.has(filePath)) return;
+
+    const fileDir = path.dirname(filePath);
+    const resolvedImports = new Set<string>();
+    for (const usePath of useStatements) {
+      if (!usePath.endsWith(".ump")) continue;
+      const resolved = path.isAbsolute(usePath)
+        ? path.normalize(usePath)
+        : path.normalize(path.resolve(fileDir, usePath));
+      if (fs.existsSync(resolved)) {
+        resolvedImports.add(resolved);
+      }
+    }
+    this.importGraph.setEdges(filePath, resolvedImports);
+  }
+
+  /**
    * Index a file or update its index if content changed.
    * @param filePath Absolute path to the file
    * @param content File content (optional, will be read from disk if not provided)

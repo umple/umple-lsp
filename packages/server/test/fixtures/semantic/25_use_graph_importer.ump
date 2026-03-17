@@ -1,0 +1,4 @@
+use 25_use_graph_target.ump;
+class Importer {
+  /*@importer_ref*/Target t;
+}
