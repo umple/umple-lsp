@@ -644,7 +644,29 @@ module.exports = grammar({
       ),
 
     event_spec: ($) =>
-      seq($.identifier, optional(seq("(", optional($.param_list), ")"))),
+      choice(
+        $.timed_event,
+        seq($.identifier, optional(seq("(", optional($.param_list), ")"))),
+      ),
+
+    // Timed events: after(N), afterEvery(N), after(expr), afterEvery(getDelay())
+    timed_event: ($) =>
+      seq(
+        field("keyword", alias(choice("after", "afterEvery"), $.identifier)),
+        "(",
+        field("time", $.timer_arg),
+        ")",
+      ),
+
+    timer_arg: ($) =>
+      repeat1(
+        choice(
+          $.identifier,
+          /\d+(\.\d+)?/,
+          /[+\-*\/]/,
+          seq("(", optional($.timer_arg), ")"),
+        ),
+      ),
 
     guard: ($) => seq("[", repeat1($._constraint_expr), "]"),
 

@@ -31,10 +31,19 @@ import {
   SymbolEntry,
 } from "./symbolIndex";
 import { resolveSymbolAtPosition as resolveSymbol } from "./resolver";
-import { buildSemanticCompletionItems, symbolKindToCompletionKind } from "./completionBuilder";
+import {
+  buildSemanticCompletionItems,
+  symbolKindToCompletionKind,
+} from "./completionBuilder";
 import { buildHoverMarkdown } from "./hoverBuilder";
 import { buildDocumentSymbolTree } from "./documentSymbolBuilder";
-import { expandCompactStates, computeIndentEdits, fixTransitionSpacing, fixAssociationSpacing, normalizeTopLevelBlankLines } from "./formatter";
+import {
+  expandCompactStates,
+  computeIndentEdits,
+  fixTransitionSpacing,
+  fixAssociationSpacing,
+  normalizeTopLevelBlankLines,
+} from "./formatter";
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new Map<string, TextDocument>();
@@ -67,7 +76,14 @@ function isUseGraphReadyForFile(filePath: string): boolean {
 async function discoverUmpFilesAsync(root: string): Promise<string[]> {
   const results: string[] = [];
   const queue: string[] = [root];
-  const skipDirs = new Set(["node_modules", ".git", "out", ".test-out", "build", "dist"]);
+  const skipDirs = new Set([
+    "node_modules",
+    ".git",
+    "out",
+    ".test-out",
+    "build",
+    "dist",
+  ]);
   let processed = 0;
 
   while (queue.length > 0) {
@@ -132,7 +148,9 @@ async function scanWorkspaceRootAsync(
     connection.console.info(`Workspace use-graph ready for: ${root}`);
   } catch (err) {
     rootScanStates.set(root, "idle");
-    connection.console.warn(`Workspace use-graph scan failed for ${root}: ${err}`);
+    connection.console.warn(
+      `Workspace use-graph scan failed for ${root}: ${err}`,
+    );
   }
 }
 
@@ -283,10 +301,17 @@ connection.onInitialized(async () => {
             });
           }
 
-          // Register file watcher for .ump files to keep the use-graph fresh
-          connection.client.register(DidChangeWatchedFilesNotification.type, {
-            watchers: [{ globPattern: "**/*.ump" }],
-          });
+          // Register file watcher for .ump files to keep the use-graph fresh.
+          // Wrapped in .catch() because some clients (e.g., CodeMirror lsp-client)
+          // don't support client/registerCapability — an unhandled rejection would
+          // crash the server process.
+          connection.client
+            .register(DidChangeWatchedFilesNotification.type, {
+              watchers: [{ globPattern: "**/*.ump" }],
+            })
+            .catch(() => {
+              connection.console.info("Client does not support file watching.");
+            });
         }
       }
     } catch (err) {
@@ -524,7 +549,14 @@ function resolveSymbolAtPosition(
   symbols: SymbolEntry[];
 } | null {
   const reachableFiles = ensureImportsIndexed(docPath, content);
-  return resolveSymbol(symbolIndex, docPath, content, line, col, reachableFiles);
+  return resolveSymbol(
+    symbolIndex,
+    docPath,
+    content,
+    line,
+    col,
+    reachableFiles,
+  );
 }
 
 connection.onDefinition(async (params) => {
@@ -609,7 +641,11 @@ connection.onReferences(async (params) => {
     resolved.symbols.map((s) => path.normalize(s.file)),
   );
   const reverseImporters = symbolIndex.getReverseImporters(declFiles);
-  const filesToSearch = new Set([...declFiles, ...reachableFiles, ...reverseImporters]);
+  const filesToSearch = new Set([
+    ...declFiles,
+    ...reachableFiles,
+    ...reverseImporters,
+  ]);
 
   // Ensure reverse importers are fully indexed
   for (const file of reverseImporters) {
@@ -774,7 +810,11 @@ connection.onRenameRequest(async (params) => {
     resolved.symbols.map((s) => path.normalize(s.file)),
   );
   const reverseImporters = symbolIndex.getReverseImporters(declFiles);
-  const filesToSearch = new Set([...declFiles, ...reachableFiles, ...reverseImporters]);
+  const filesToSearch = new Set([
+    ...declFiles,
+    ...reachableFiles,
+    ...reverseImporters,
+  ]);
 
   // Ensure reverse importers are fully indexed
   for (const file of reverseImporters) {
@@ -903,16 +943,18 @@ connection.onDocumentFormatting(async (params) => {
   const toOffset = (line: number, col: number) =>
     (lineOffsets[line] ?? text.length) + col;
 
-  const sorted = [...edits].sort((a, b) =>
-    toOffset(b.range.start.line, b.range.start.character) -
-    toOffset(a.range.start.line, a.range.start.character),
+  const sorted = [...edits].sort(
+    (a, b) =>
+      toOffset(b.range.start.line, b.range.start.character) -
+      toOffset(a.range.start.line, a.range.start.character),
   );
 
   let finalText = text;
   for (const edit of sorted) {
     const start = toOffset(edit.range.start.line, edit.range.start.character);
     const end = toOffset(edit.range.end.line, edit.range.end.character);
-    finalText = finalText.substring(0, start) + edit.newText + finalText.substring(end);
+    finalText =
+      finalText.substring(0, start) + edit.newText + finalText.substring(end);
   }
 
   // Restore the live index to the original document text if we mutated it
@@ -1636,7 +1678,6 @@ function getDocumentFilePath(document: TextDocument): string | null {
     return null;
   }
 }
-
 
 function getUseFileCompletions(
   document: TextDocument,
