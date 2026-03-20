@@ -5,11 +5,17 @@ A Language Server Protocol implementation for the [Umple](https://www.umple.org)
 ## Features
 
 - **Diagnostics** - Real-time error and warning detection via the Umple compiler
-- **Go-to-definition** - Jump to classes, interfaces, traits, enums, attributes, methods, state machines, states, associations, mixsets, and requirements. Container-scoped resolution prevents false cross-class jumps.
+- **Go-to-definition** - Jump to classes, interfaces, traits, enums, attributes, methods, state machines, states, associations, mixsets, and requirements. Container-scoped resolution prevents false cross-class jumps. Includes reused standalone statemachine fallback.
+- **Find references** - Semantic reference search with state-path disambiguation, inheritance chain walking, and shared-state equivalence for reused standalone statemachines
+- **Rename** - Safe rename across all references (same pipeline as find-references)
+- **Hover** - Contextual information for symbols with markdown formatting
 - **Code completion** - Context-aware keyword and symbol suggestions
+- **Document symbols** - Hierarchical outline of classes, state machines, states, attributes, methods
+- **Formatting** - AST-driven indent correction, arrow spacing, blank-line normalization, compact state expansion
 - **Syntax highlighting** - Tree-sitter grammar for accurate highlighting
 - **Cross-file support** - Transitive `use` statement resolution and cross-file diagnostics
 - **Import error reporting** - Errors in imported files shown on the `use` statement line
+- **Diagram navigation** - Custom LSP requests (`umple/resolveStateLocation`, `umple/resolveTransitionLocation`) for click-to-select in UML diagrams
 
 ## Umple Grammar Coverage
 
@@ -48,9 +54,10 @@ The table below shows the LSP's support for Umple language features, based on th
 | **State machine** | | | |
 | inlineStateMachine | ** | ✅ | With queued/pooled |
 | state | ** | ✅ | Nested states, concurrent regions (`\|\|`) |
-| transitions (event/guard/action) | ** | ✅ | All forms: event, guard, pre-arrow action, post-arrow action; guard-before-event ordering |
+| transitions (event/guard/action) | ** | ✅ | All forms: event, guard, pre-arrow action, post-arrow action; guard-before-event ordering; timed events `after(N)`/`afterEvery(N)` |
 | guard semantics | ** | ✅ | Structured constraint expressions; go-to-def and completion on attributes/constants inside guards (own + inherited); event params and method calls deferred |
 | entry / exit / do | ** | ✅ | Optional guard and language-tagged code blocks |
+| referencedStateMachine | ** | ✅ | `sm as baseSM { ... }` reuse; shared-state equivalence for refs/rename; diagram click navigation with alias-local-first / base-fallback |
 | changeType markers (+/-/\*) | ** | ✅ | |
 | standaloneTransition | ** | ✅ | In SM body and state body |
 | final states | ** | ✅ | `Final` auto-terminal; `final stateName {}` explicit final |
@@ -65,9 +72,10 @@ The table below shows the LSP's support for Umple language features, based on th
 | associationClassDefinition | ** | ✅ | |
 | stateMachineDefinition | ** | ✅ | |
 | topLevelCodeInjection | * | ✅ | `before/after/around { Class } op { code }` |
+| codeInjection (wildcard) | * | ✅ | `before/after` with wildcard event patterns: `e*`, `ev*eee`, etc. |
 | templateDefinition (top-level) | * | ✅ | Excluded for project scope: official grammar defines it, but non-empty top-level templates crash the current compiler and no manual examples exist |
 
-**Summary**: ✅ 43 supported, ❌ 0 not supported, ⚠️ 1 partial
+**Summary**: ✅ 45 supported, ❌ 0 not supported, ⚠️ 1 partial
 
 ## Editor Plugins
 
@@ -113,13 +121,15 @@ umple-lsp/
 │   │   │   ├── documentSymbolBuilder.ts # Document outline (symbol hierarchy)
 │   │   │   ├── formatter.ts           # Document formatting (indent, spacing, expansion)
 │   │   │   ├── formatRules.ts         # Formatting node classification
+│   │   │   ├── diagramNavigation.ts   # Diagram click-to-select resolution
+│   │   │   ├── diagramRequests.ts     # Custom LSP request handlers for diagrams
 │   │   │   ├── importGraph.ts         # Forward/reverse import edge management
 │   │   │   ├── tokenTypes.ts          # Shared token/symbol type definitions
 │   │   │   ├── symbolTypes.ts         # Shared symbol entry types
 │   │   │   ├── treeUtils.ts           # Shared tree-walking utilities
 │   │   │   └── keywords.ts            # Built-in type names
 │   │   └── test/                      # Semantic regression tests
-│   │       ├── semantic.test.ts       # Test runner (72 assertions)
+│   │       ├── semantic.test.ts       # Test runner (85 assertions)
 │   │       ├── helpers.ts             # Test harness helpers
 │   │       └── fixtures/semantic/     # .ump fixture files
 │   └── tree-sitter-umple/             # Tree-sitter grammar & queries
@@ -138,6 +148,7 @@ Editor Plugin (separate repos)
                      ├── hoverBuilder.ts (hover content)
                      ├── documentSymbolBuilder.ts (outline)
                      ├── formatter.ts (formatting)
+                     ├── diagramNavigation.ts + diagramRequests.ts (diagram clicks)
                      └── tokenAnalysis.ts + treeUtils.ts (shared analysis)
 ```
 
@@ -173,7 +184,7 @@ Environment variables: `UMPLESYNC_JAR_PATH`, `UMPLESYNC_TIMEOUT_MS`, `UMPLE_TREE
 npm run compile        # Build server (also copies WASM)
 npm run build-grammar  # Full rebuild after grammar.js changes
 npm run watch          # Watch mode
-npm test               # Run semantic regression tests (72 assertions)
+npm test               # Run semantic regression tests (85 assertions)
 ```
 
 ### Testing
@@ -181,7 +192,7 @@ npm test               # Run semantic regression tests (72 assertions)
 The project includes a semantic regression test harness that exercises go-to-definition, find-references, completion, hover, document symbols, and formatting. Tests use real `.ump` fixture files with `/*@marker*/` annotations for position-independent assertions.
 
 ```bash
-npm test    # Compile + run all 72 assertions
+npm test    # Compile + run all 85 assertions
 ```
 
 ### Manual Testing
