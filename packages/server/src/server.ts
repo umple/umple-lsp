@@ -1763,4 +1763,83 @@ function extractJson(text: string): string | null {
   return text.slice(start, end + 1);
 }
 
+// Custom request: resolve a state location from a diagram click payload
+connection.onRequest(
+  "umple/resolveStateLocation",
+  async (params: {
+    uri: string;
+    className?: string;
+    stateMachine: string;
+    statePath: string[];
+  }): Promise<{ uri: string; range: Range } | null> => {
+    if (!symbolIndexReady || !params.statePath.length) return null;
+
+    const filePath = getDocumentFilePath({
+      uri: params.uri,
+    } as TextDocument);
+    if (!filePath) return null;
+
+    // Ensure the file is indexed
+    const doc = getDocument(params.uri);
+    if (doc) {
+      symbolIndex.indexFile(filePath, doc.getText());
+    }
+
+    const smContainer = params.className
+      ? `${params.className}.${params.stateMachine}`
+      : params.stateMachine;
+    const targetName = params.statePath[params.statePath.length - 1];
+    const preceding = params.statePath.slice(0, -1);
+
+    // Scope resolution to the clicked file only
+    const reachableFiles = new Set([path.normalize(filePath)]);
+
+    let symbol;
+    if (preceding.length > 0) {
+      symbol = symbolIndex.resolveStateInPath(
+        preceding,
+        targetName,
+        smContainer,
+        reachableFiles,
+      );
+    }
+    // Fallback: direct lookup scoped to the clicked file
+    if (!symbol) {
+      const candidates = symbolIndex
+        .getSymbols({
+          name: targetName,
+          kind: "state",
+          container: smContainer,
+        })
+        .filter((s) => reachableFiles.has(path.normalize(s.file)));
+      if (preceding.length === 0) {
+        symbol = candidates[0];
+      } else {
+        // Match by statePath suffix
+        const targetPath = [...preceding, targetName];
+        symbol = candidates.find(
+          (s) =>
+            s.statePath &&
+            s.statePath.length >= targetPath.length &&
+            targetPath.every(
+              (seg, i) =>
+                s.statePath![s.statePath!.length - targetPath.length + i] ===
+                seg,
+            ),
+        );
+      }
+    }
+
+    if (!symbol) return null;
+
+    return {
+      uri: pathToFileURL(symbol.file).toString(),
+      range: {
+        start: { line: symbol.line, character: symbol.column },
+        end: { line: symbol.endLine, character: symbol.endColumn },
+      },
+    };
+  },
+);
+
 connection.listen();
