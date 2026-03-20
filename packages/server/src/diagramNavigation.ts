@@ -33,40 +33,45 @@ export function resolveStateLocation(
   const preceding = statePath.slice(0, -1);
   const reachableFiles = new Set([path.normalize(filePath)]);
 
-  let symbol: SymbolEntry | undefined;
-  if (preceding.length > 0) {
-    symbol = si.resolveStateInPath(
-      preceding,
-      targetName,
-      smContainer,
-      reachableFiles,
-    );
-  }
-  // Fallback: direct lookup scoped to the clicked file
-  if (!symbol) {
-    const candidates = si
-      .getSymbols({
-        name: targetName,
-        kind: "state",
-        container: smContainer,
-      })
-      .filter((s) => reachableFiles.has(path.normalize(s.file)));
-    if (preceding.length === 0) {
-      symbol = candidates[0];
-    } else {
-      const targetPath = [...preceding, targetName];
-      symbol = candidates.find(
-        (s) =>
-          s.statePath &&
-          s.statePath.length >= targetPath.length &&
-          targetPath.every(
-            (seg, i) =>
-              s.statePath![s.statePath!.length - targetPath.length + i] === seg,
-          ),
+  // Try each candidate container in order (alias-local first, then base fallback)
+  const containers = si.getSmContainerCandidates(smContainer);
+
+  for (const container of containers) {
+    let symbol: SymbolEntry | undefined;
+    if (preceding.length > 0) {
+      symbol = si.resolveStateInPath(
+        preceding,
+        targetName,
+        container,
+        reachableFiles,
       );
     }
+    if (!symbol) {
+      const candidates = si
+        .getSymbols({
+          name: targetName,
+          kind: "state",
+          container,
+        })
+        .filter((s) => reachableFiles.has(path.normalize(s.file)));
+      if (preceding.length === 0) {
+        symbol = candidates[0];
+      } else {
+        const targetPath = [...preceding, targetName];
+        symbol = candidates.find(
+          (s) =>
+            s.statePath &&
+            s.statePath.length >= targetPath.length &&
+            targetPath.every(
+              (seg, i) =>
+                s.statePath![s.statePath!.length - targetPath.length + i] === seg,
+            ),
+        );
+      }
+    }
+    if (symbol) return symbol;
   }
-  return symbol;
+  return undefined;
 }
 
 // ── Transition AST walking ───────────────────────────────────────────────────
@@ -85,13 +90,16 @@ function findNamedChild(parent: any, types: string[], name: string): any {
   }
   for (let i = 0; i < parent.childCount; i++) {
     const child = parent.child(i);
-    if (child.type === "class_definition" || child.type === "source_file") {
+    if (child.type === "class_definition" || child.type === "source_file" || child.type === "statemachine_definition") {
       const found = findNamedChild(child, types, name);
       if (found) return found;
     }
   }
   return null;
 }
+
+/** SM node types: inline, reused, and standalone definitions. */
+const SM_NODE_TYPES = ["state_machine", "referenced_statemachine", "statemachine_definition"];
 
 /**
  * Resolve a transition location from a diagram click payload.
@@ -115,26 +123,83 @@ export function resolveTransitionLocation(
   const targetName = targetPath.join(".");
 
   // Step 1: Find the class node (if className provided)
-  let scope = tree.rootNode;
+  let classScope = tree.rootNode;
   if (className) {
-    const classNode = findNamedChild(scope, ["class_definition"], className);
+    const classNode = findNamedChild(classScope, ["class_definition"], className);
     if (!classNode) return undefined;
-    scope = classNode;
+    classScope = classNode;
   }
 
-  // Step 2: Find the state machine node
-  const smNode = findNamedChild(scope, ["state_machine"], stateMachine);
+  // Step 2: Find the state machine node (state_machine or referenced_statemachine)
+  const smNode = findNamedChild(classScope, SM_NODE_TYPES, stateMachine);
   if (!smNode) return undefined;
-  scope = smNode;
 
-  // Step 3: Walk down the source state path
+  // Try to find the transition in the alias SM first, then fall back to base
+  const result = findTransitionInSm(smNode, sourcePath, event, targetName, guard);
+  if (result) return result;
+
+  // Fallback: if this is a referenced_statemachine, try the base standalone SM
+  if (smNode.type === "referenced_statemachine") {
+    const baseName = smNode.childForFieldName("definition")?.text;
+    if (baseName) {
+      // Search at file root for standalone statemachine_definition
+      const baseSmNode = findNamedChild(
+        tree.rootNode,
+        ["statemachine_definition"],
+        baseName,
+      );
+      if (baseSmNode) {
+        return findTransitionInSm(baseSmNode, sourcePath, event, targetName, guard);
+      }
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Walk the source state path within an SM node and find a matching transition.
+ */
+function findTransitionInSm(
+  smNode: any,
+  sourcePath: string[],
+  event: string,
+  targetName: string,
+  guard?: string,
+): LocationRange | undefined {
+  // First: check standalone_transition children at SM scope.
+  // These live directly under the SM node (not inside a state body) and encode
+  // source state as from_state field: "event fromState -> toState;"
+  const fromState = sourcePath.length > 0 ? sourcePath[sourcePath.length - 1] : undefined;
+  for (let i = 0; i < smNode.childCount; i++) {
+    const child = smNode.child(i);
+    if (child.type === "standalone_transition") {
+      const eventNode = child.childForFieldName("event");
+      const fromNode = child.childForFieldName("from_state");
+      const toNode = child.childForFieldName("to_state");
+      const eventMatch = eventNode ? eventNode.text === event : !event;
+      const fromMatch = fromNode ? fromNode.text === fromState : !fromState;
+      const targetMatch = toNode ? toNode.text === targetName : !targetName;
+      if (eventMatch && fromMatch && targetMatch) {
+        return {
+          line: child.startPosition.row,
+          column: child.startPosition.column,
+          endLine: child.endPosition.row,
+          endColumn: child.endPosition.column,
+        };
+      }
+    }
+  }
+
+  // Then: walk down the source state path for regular nested transitions
+  let scope = smNode;
   for (const seg of sourcePath) {
     const stateNode = findNamedChild(scope, ["state"], seg);
     if (!stateNode) return undefined;
     scope = stateNode;
   }
 
-  // Step 4: Find the matching transition in the resolved source state
+  // Find the matching transition (regular or standalone within state)
   for (let i = 0; i < scope.childCount; i++) {
     const child = scope.child(i);
     if (child.type === "transition") {
@@ -148,6 +213,21 @@ export function resolveTransitionLocation(
         guardMatch = guardNode ? guardNode.text.includes(guard) : false;
       }
       if (eventMatch && targetMatch && guardMatch) {
+        return {
+          line: child.startPosition.row,
+          column: child.startPosition.column,
+          endLine: child.endPosition.row,
+          endColumn: child.endPosition.column,
+        };
+      }
+    }
+    // standalone_transition: "event fromState -> toState;"
+    if (child.type === "standalone_transition") {
+      const eventNode = child.childForFieldName("event");
+      const toNode = child.childForFieldName("to_state");
+      const eventMatch = eventNode ? eventNode.text === event : !event;
+      const targetMatch = toNode ? toNode.text === targetName : !targetName;
+      if (eventMatch && targetMatch) {
         return {
           line: child.startPosition.row,
           column: child.startPosition.column,
