@@ -221,6 +221,12 @@ const TEST_CASES: TestCase[] = [
         decl: { name: "pong", kind: "method", container: "A" },
         expectAt: ["def_pong", "hook_pong"],
       },
+      // Wildcard hook: identifier "p" does not match "ping" refs
+      {
+        type: "refs_exclude",
+        decl: { name: "ping", kind: "method", container: "A" },
+        excludeAt: ["hook_wildcard"],
+      },
     ],
   },
 
