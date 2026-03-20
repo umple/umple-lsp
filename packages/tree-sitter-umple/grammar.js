@@ -25,6 +25,7 @@ module.exports = grammar({
     [$.state_machine, $.state],
     [$.event_spec, $.method_declaration],
     [$.constraint, $.guard],
+    [$.trace_statement, $.event_spec],
   ],
 
   rules: {
@@ -646,7 +647,15 @@ module.exports = grammar({
     event_spec: ($) =>
       choice(
         $.timed_event,
-        seq($.identifier, optional(seq("(", optional($.param_list), ")"))),
+        seq(
+          choice(
+            $.identifier,
+            // activate/deactivate are valid event names but also trace keywords
+            alias("activate", $.identifier),
+            alias("deactivate", $.identifier),
+          ),
+          optional(seq("(", optional($.param_list), ")")),
+        ),
       ),
 
     // Timed events: after(N), afterEvery(N), after(expr), afterEvery(getDelay())

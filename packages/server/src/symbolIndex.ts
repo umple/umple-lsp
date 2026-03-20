@@ -620,6 +620,93 @@ export class SymbolIndex {
     });
   }
 
+  /**
+   * Find a transition in a file by class, state machine, source state path, event, and target.
+   * Path-aware: navigates class → SM → state path before searching transitions.
+   * Returns the transition node's range, or undefined if not found.
+   */
+  findTransition(
+    filePath: string,
+    content: string,
+    className: string | undefined,
+    stateMachine: string,
+    sourcePath: string[],
+    eventText: string,
+    targetText: string,
+    guardText?: string,
+  ): { line: number; column: number; endLine: number; endColumn: number } | undefined {
+    if (!this.parser) return undefined;
+    const tree = this.parser.parse(content);
+    if (!tree) return undefined;
+
+    // Helper: find a named child node of a specific type
+    function findNamedChild(parent: any, types: string[], name: string): any {
+      for (let i = 0; i < parent.childCount; i++) {
+        const child = parent.child(i);
+        if (types.includes(child.type)) {
+          const nameNode = child.childForFieldName("name");
+          if (nameNode && nameNode.text === name) return child;
+        }
+      }
+      // Recurse (for class definitions that may be nested)
+      for (let i = 0; i < parent.childCount; i++) {
+        const child = parent.child(i);
+        if (child.type === "class_definition" || child.type === "source_file") {
+          const found = findNamedChild(child, types, name);
+          if (found) return found;
+        }
+      }
+      return null;
+    }
+
+    // Step 1: Find the class node (if className provided)
+    let scope = tree.rootNode;
+    if (className) {
+      const classNode = findNamedChild(scope, ["class_definition"], className);
+      if (!classNode) return undefined;
+      scope = classNode;
+    }
+
+    // Step 2: Find the state machine node
+    const smNode = findNamedChild(scope, ["state_machine"], stateMachine);
+    if (!smNode) return undefined;
+    scope = smNode;
+
+    // Step 3: Walk down the source state path
+    for (const seg of sourcePath) {
+      const stateNode = findNamedChild(scope, ["state"], seg);
+      if (!stateNode) return undefined;
+      scope = stateNode;
+    }
+
+    // Step 4: Find the matching transition in the resolved source state
+    for (let i = 0; i < scope.childCount; i++) {
+      const child = scope.child(i);
+      if (child.type === "transition") {
+        const eventNode = child.childForFieldName("event");
+        const targetNode = child.childForFieldName("target");
+        const eventMatch = eventNode ? eventNode.text === eventText : !eventText;
+        const targetMatch = targetNode ? targetNode.text === targetText : !targetText;
+        // Guard matching: if guard text provided, check the guard node
+        let guardMatch = true;
+        if (guardText) {
+          const guardNode = child.children.find((c: any) => c.type === "guard");
+          guardMatch = guardNode ? guardNode.text.includes(guardText) : false;
+        }
+        if (eventMatch && targetMatch && guardMatch) {
+          return {
+            line: child.startPosition.row,
+            column: child.startPosition.column,
+            endLine: child.endPosition.row,
+            endColumn: child.endPosition.column,
+          };
+        }
+      }
+    }
+
+    return undefined;
+  }
+
   // =====================
   // Private methods
   // =====================

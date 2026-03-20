@@ -1842,4 +1842,52 @@ connection.onRequest(
   },
 );
 
+// Custom request: resolve a transition location from a diagram click payload
+connection.onRequest(
+  "umple/resolveTransitionLocation",
+  async (params: {
+    uri: string;
+    className?: string;
+    stateMachine: string;
+    event: string;
+    sourcePath: string[];
+    targetPath: string[];
+    guard?: string;
+  }): Promise<{ uri: string; range: Range } | null> => {
+    if (!symbolIndexReady || !params.event) return null;
+
+    const filePath = getDocumentFilePath({
+      uri: params.uri,
+    } as TextDocument);
+    if (!filePath) return null;
+
+    const doc = getDocument(params.uri);
+    const content = doc ? doc.getText() : fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf8") : null;
+    if (!content) return null;
+
+    const targetName = params.targetPath.join(".");
+
+    const result = symbolIndex.findTransition(
+      filePath,
+      content,
+      params.className,
+      params.stateMachine,
+      params.sourcePath,
+      params.event,
+      targetName,
+      params.guard,
+    );
+
+    if (!result) return null;
+
+    return {
+      uri: pathToFileURL(filePath).toString(),
+      range: {
+        start: { line: result.line, character: result.column },
+        end: { line: result.endLine, character: result.endColumn },
+      },
+    };
+  },
+);
+
 connection.listen();
