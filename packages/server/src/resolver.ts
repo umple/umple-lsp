@@ -123,8 +123,8 @@ export function resolveSymbolAtPosition(
     }
 
     case "referenced_sm": {
-      // referenced_statemachine: "door as status" — SM lives in the enclosing class.
-      // Container is "ClassName.smName" (self-qualified SM container format).
+      // referenced_statemachine: "door as status" — try class-local SM first,
+      // then fall back to top-level standalone statemachine.
       const className = token.enclosingClass!;
       const smContainer = `${className}.${token.word}`;
       symbols = si
@@ -134,6 +134,16 @@ export function resolveSymbolAtPosition(
           container: smContainer,
         })
         .filter((s) => reachableFiles.has(path.normalize(s.file)));
+      // Fallback: top-level standalone statemachine (container = smName itself)
+      if (symbols.length === 0) {
+        symbols = si
+          .getSymbols({
+            name: token.word,
+            kind: ["statemachine"],
+            container: token.word,
+          })
+          .filter((s) => reachableFiles.has(path.normalize(s.file)));
+      }
       break;
     }
 

@@ -86,13 +86,20 @@ export function searchReferences(
       if (isContainerScoped && symContainer) {
         const enclosing = resolveEnclosingScopeFromNode(node, symKind);
         if (enclosing && enclosing !== symContainer) {
-          if (symKind === "state" || symKind === "statemachine") {
-            continue;
+          // Case 1: standalone statemachine referenced from a class
+          // e.g., enclosing="MotorController.deviceStatus" matches standalone container="deviceStatus"
+          const isStandaloneSm = symKind === "statemachine" && enclosing.endsWith(`.${symContainer}`);
+          if (!isStandaloneSm) {
+            // Case 2: state/statemachine container mismatch — reject
+            if (symKind === "state" || symKind === "statemachine") {
+              continue;
+            }
+            // Case 3: other kinds — check inheritance chain
+            if (!isInheritanceChain(enclosing, symContainer, isAGraph)) {
+              continue;
+            }
           }
-          const containerClass = symContainer;
-          if (!isInheritanceChain(enclosing, containerClass, isAGraph)) {
-            continue;
-          }
+          // isStandaloneSm === true → accept without further checks
         }
       }
 
