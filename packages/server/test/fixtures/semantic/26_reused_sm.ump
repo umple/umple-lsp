@@ -1,0 +1,29 @@
+// Reused standalone statemachine semantic tests
+// Tests: shared-state symmetry, isolation, multi-reuser, inherited base-only
+
+class MotorController {
+  motorStatus as deviceStatus {
+    cancel booting -> /*@motor_inactive_ref*/inactive;
+    /*@motor_inactive_def*/inactive {}
+  }
+}
+
+class SensorUnit {
+  sensorStatus as deviceStatus {
+    /*@sensor_inactive_def*/inactive { selfTest -> /*@sensor_booting_ref*/booting; }
+  }
+}
+
+statemachine deviceStatus {
+  /*@base_inactive_def*/inactive {}
+  /*@base_booting_def*/booting { completedStartupChecks -> /*@base_active_ref*/active; }
+  /*@base_active_def*/active { deactivate -> /*@base_shutting_ref*/shuttingDown; }
+  shuttingDown { shutdownComplete -> /*@base_shutdown_inactive_ref*/inactive; }
+}
+
+// Isolation: unrelated SM with same-named state
+class Unrelated {
+  otherSm {
+    /*@unrelated_inactive_def*/inactive {}
+  }
+}

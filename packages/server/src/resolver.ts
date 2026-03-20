@@ -170,6 +170,7 @@ export function resolveSymbolAtPosition(
       const unscopedKinds = token.kinds.filter((k) => !containerKinds.has(k));
 
       if (scopedKinds.length > 0 && container) {
+        // Try local container first (includes inherited via isA)
         symbols = si
           .getSymbols({
             name: token.word,
@@ -178,6 +179,20 @@ export function resolveSymbolAtPosition(
             inherited: true,
           })
           .filter((s) => reachableFiles.has(path.normalize(s.file)));
+
+        // Fallback: for reused SMs, try the base standalone SM container
+        if (symbols.length === 0) {
+          const candidates = si.getSmContainerCandidates(container);
+          for (let ci = 1; ci < candidates.length && symbols.length === 0; ci++) {
+            symbols = si
+              .getSymbols({
+                name: token.word,
+                kind: scopedKinds,
+                container: candidates[ci],
+              })
+              .filter((s) => reachableFiles.has(path.normalize(s.file)));
+          }
+        }
       }
 
       if (symbols.length === 0 && unscopedKinds.length > 0) {

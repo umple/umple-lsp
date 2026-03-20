@@ -296,6 +296,34 @@ export class SemanticTestHelper {
   }
 
   /**
+   * Find references with shared-state expansion (mirrors production pipeline).
+   * Calls getSharedStateDeclarations before findReferences.
+   */
+  findSharedRefs(decl: DeclSpec, reachable: Set<string>): RefLocation[] {
+    let declarations = this.si.getSymbols({
+      name: decl.name,
+      kind: decl.kind,
+      container: decl.container,
+    });
+    if (decl.statePath) {
+      declarations = declarations.filter(
+        (d) =>
+          d.statePath &&
+          d.statePath.length === decl.statePath!.length &&
+          d.statePath.every((seg, i) => seg === decl.statePath![i]),
+      );
+    }
+    declarations = declarations.filter((d) => reachable.has(path.normalize(d.file)));
+    // Expand to shared-state equivalence class
+    declarations = this.si.getSharedStateDeclarations(declarations, reachable);
+    return this.si.findReferences(declarations, reachable, true).map((r) => ({
+      file: r.file,
+      line: r.line,
+      column: r.column,
+    }));
+  }
+
+  /**
    * Get completion info at a position. Calls the real getCompletionInfo().
    */
   completionInfo(

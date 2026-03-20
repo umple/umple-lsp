@@ -50,6 +50,10 @@ export class SymbolIndex {
   private isAGraph: Map<string, string[]> = new Map();
   // Import graph: forward/reverse edge management
   private importGraph = new ImportGraph();
+  // SM reuse bindings: aliasContainer → baseContainer
+  // e.g., "MotorController.motorStatus" → "deviceStatus"
+  private smReuseBindings: Map<string, string> = new Map();
+  private smReuseByFile: Map<string, Map<string, string>> = new Map();
   private initialized = false;
 
   /**
@@ -206,6 +210,11 @@ export class SymbolIndex {
     const isAMap = this.extractIsARelationships(tree.rootNode);
     this.isAByFile.set(filePath, isAMap);
     this.rebuildIsAGraph();
+
+    // Extract SM reuse bindings from referenced_statemachine nodes
+    const reuseMap = this.extractSmReuseBindings(tree.rootNode);
+    this.smReuseByFile.set(filePath, reuseMap);
+    this.rebuildSmReuseBindings();
 
     // Store the file index
     this.files.set(filePath, {
@@ -738,6 +747,125 @@ export class SymbolIndex {
     }
   }
 
+  /**
+   * Extract SM reuse bindings from referenced_statemachine nodes.
+   * E.g., "motorStatus as deviceStatus { ... }" inside class MotorController
+   * produces: "MotorController.motorStatus" → "deviceStatus"
+   */
+  private extractSmReuseBindings(
+    rootNode: SyntaxNode,
+  ): Map<string, string> {
+    const bindings = new Map<string, string>();
+    function walk(node: SyntaxNode, className?: string) {
+      if (
+        ["class_definition", "trait_definition", "interface_definition",
+         "association_class_definition"].includes(node.type)
+      ) {
+        className = node.childForFieldName("name")?.text ?? className;
+      }
+      if (node.type === "referenced_statemachine") {
+        const aliasName = node.childForFieldName("name")?.text;
+        const baseName = node.childForFieldName("definition")?.text;
+        if (aliasName && baseName && className) {
+          bindings.set(`${className}.${aliasName}`, baseName);
+        }
+      }
+      for (let i = 0; i < node.childCount; i++) {
+        walk(node.child(i)!, className);
+      }
+    }
+    walk(rootNode);
+    return bindings;
+  }
+
+  private rebuildSmReuseBindings(): void {
+    this.smReuseBindings.clear();
+    for (const fileBindings of this.smReuseByFile.values()) {
+      for (const [alias, base] of fileBindings) {
+        this.smReuseBindings.set(alias, base);
+      }
+    }
+  }
+
+  /**
+   * Get the ordered candidate containers for a state machine container.
+   * For a reused SM: returns [aliasContainer, baseContainer].
+   * For a normal SM: returns [container].
+   */
+  getSmContainerCandidates(smContainer: string): string[] {
+    const candidates = [smContainer];
+    const base = this.smReuseBindings.get(smContainer);
+    if (base) candidates.push(base);
+    return candidates;
+  }
+
+  /**
+   * Get the shared declaration set for a state that may exist in both
+   * an alias container and its base standalone SM.
+   * Returns declarations from both containers when the same statePath exists in both.
+   * For unique local states, returns only the local declaration.
+   */
+  getSharedStateDeclarations(
+    declarations: SymbolEntry[],
+    reachableFiles?: Set<string>,
+  ): SymbolEntry[] {
+    if (declarations.length === 0) return declarations;
+    const sym = declarations[0];
+    if (sym.kind !== "state") return declarations;
+
+    const container = sym.container;
+    if (!container) return declarations;
+
+    // Build the full equivalence class of containers:
+    // 1. If container is an alias → include its base
+    // 2. If container is a base → include ALL aliases that reuse it
+    // 3. If container is an alias → also include sibling aliases of the same base
+    const equivalentContainers = new Set<string>([container]);
+
+    // Find the base for this container (if it's an alias)
+    const base = this.smReuseBindings.get(container);
+    const baseContainer = base || container;
+
+    // If this is an alias, add the base
+    if (base) equivalentContainers.add(base);
+
+    // Find ALL aliases that map to the same base
+    for (const [alias, baseName] of this.smReuseBindings) {
+      if (baseName === baseContainer) {
+        equivalentContainers.add(alias);
+      }
+    }
+
+    // If no equivalence found beyond the original, return as-is
+    if (equivalentContainers.size <= 1) return declarations;
+
+    // Gather declarations from all equivalent containers with matching name/path
+    const combined: SymbolEntry[] = [...declarations];
+    for (const eqContainer of equivalentContainers) {
+      if (eqContainer === container) continue; // already in declarations
+      const candidates = this.getSymbols({
+        name: sym.name,
+        kind: "state",
+        container: eqContainer,
+      }).filter(
+        (s) =>
+          (!reachableFiles || reachableFiles.has(path.normalize(s.file))) &&
+          (!sym.statePath || !s.statePath ||
+           sym.statePath.join(".") === s.statePath.join(".")),
+      );
+      combined.push(...candidates);
+    }
+
+    // Deduplicate
+    const seen = new Set<string>();
+    return combined.filter((s) => {
+      const key = `${s.file}:${s.line}:${s.column}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
   /** For attributes/methods: walk up to find the enclosing class name. */
   private resolveClassContainer(node: SyntaxNode): string | undefined {
     let current = node.parent;
@@ -766,7 +894,7 @@ export class SymbolIndex {
     let className: string | undefined;
     let current = node.parent;
     while (current) {
-      if (current.type === "state_machine") {
+      if (current.type === "state_machine" || current.type === "referenced_statemachine") {
         rootSmName = current.childForFieldName("name")?.text ?? rootSmName;
       }
       if (current.type === "statemachine_definition") {
@@ -987,6 +1115,7 @@ export class SymbolIndex {
       this.referencesQuery,
       fileTreeMap,
       this.isAGraph,
+      this.smReuseBindings,
     );
   }
 
@@ -1020,6 +1149,8 @@ export class SymbolIndex {
     this.importGraph.removeEdges(filePath);
     this.isAByFile.delete(filePath);
     this.rebuildIsAGraph();
+    this.smReuseByFile.delete(filePath);
+    this.rebuildSmReuseBindings();
   }
 
   /**

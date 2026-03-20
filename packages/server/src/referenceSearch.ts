@@ -32,6 +32,7 @@ export function searchReferences(
   referencesQuery: Query,
   fileTreeMap: Map<string, Tree>,
   isAGraph: Map<string, string[]>,
+  smReuseBindings?: Map<string, string>,
 ): ReferenceLocation[] {
   if (declarations.length === 0) return [];
 
@@ -39,6 +40,8 @@ export function searchReferences(
   const symName = sym.name;
   const symKind = sym.kind;
   const symContainer = sym.container;
+  // For shared state declarations, build the set of all valid containers
+  const validContainers = new Set(declarations.map((d) => d.container).filter(Boolean) as string[]);
 
   // Collect definition positions for deduplication and includeDeclaration
   const defPositions = new Set<string>();
@@ -82,24 +85,24 @@ export function searchReferences(
       const refKinds = parseCaptureKinds(capture.name);
       if (!refKinds || !refKinds.includes(symKind)) continue;
 
-      // For container-scoped kinds, verify enclosing scope matches
+      // For container-scoped kinds, verify enclosing scope matches any valid container
       if (isContainerScoped && symContainer) {
         const enclosing = resolveEnclosingScopeFromNode(node, symKind);
-        if (enclosing && enclosing !== symContainer) {
-          // Case 1: standalone statemachine referenced from a class
-          // e.g., enclosing="MotorController.deviceStatus" matches standalone container="deviceStatus"
-          const isStandaloneSm = symKind === "statemachine" && enclosing.endsWith(`.${symContainer}`);
-          if (!isStandaloneSm) {
-            // Case 2: state/statemachine container mismatch — reject
+        if (enclosing && !validContainers.has(enclosing)) {
+          // Check expanded matches: standalone SM, reuse bindings, inheritance
+          const isStandaloneSm = symKind === "statemachine" &&
+            Array.from(validContainers).some((c) => enclosing.endsWith(`.${c}`));
+          const isReusedSm = (symKind === "state" || symKind === "statemachine") &&
+            smReuseBindings &&
+            Array.from(validContainers).some((c) => smReuseBindings.get(enclosing) === c);
+          if (!isStandaloneSm && !isReusedSm) {
             if (symKind === "state" || symKind === "statemachine") {
               continue;
             }
-            // Case 3: other kinds — check inheritance chain
             if (!isInheritanceChain(enclosing, symContainer, isAGraph)) {
               continue;
             }
           }
-          // isStandaloneSm === true → accept without further checks
         }
       }
 
@@ -177,6 +180,23 @@ function resolveEnclosingScopeFromNode(
   while (current) {
     if (current.type === "state_machine" || current.type === "statemachine_definition") {
       enclosingSM = current.childForFieldName("name")?.text ?? enclosingSM;
+    }
+    // referenced_statemachine is an SM scope only for nodes inside its body
+    // (states, transitions), not for its name/definition fields.
+    // Check: is the original node inside a state/transition descendant of this node?
+    if (current.type === "referenced_statemachine") {
+      let isInBody = false;
+      let walk: SyntaxNode | null = node;
+      while (walk && walk.id !== current.id) {
+        if (walk.type === "state" || walk.type === "transition" || walk.type === "standalone_transition") {
+          isInBody = true;
+          break;
+        }
+        walk = walk.parent;
+      }
+      if (isInBody) {
+        enclosingSM = current.childForFieldName("name")?.text ?? enclosingSM;
+      }
     }
     if (
       !enclosingClass &&

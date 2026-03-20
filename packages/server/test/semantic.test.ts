@@ -32,6 +32,18 @@ interface RefsExcludeAssertion {
   excludeAt: string[]; // marker names that must NOT appear
 }
 
+interface SharedRefsAssertion {
+  type: "shared_refs";
+  decl: DeclSpec;
+  expectAt: string[]; // marker names expected (uses shared-state expansion)
+}
+
+interface SharedRefsExcludeAssertion {
+  type: "shared_refs_exclude";
+  decl: DeclSpec;
+  excludeAt: string[]; // marker names that must NOT appear (uses shared-state expansion)
+}
+
 interface ChildStatesAssertion {
   type: "child_states";
   parentPath: string[];
@@ -76,6 +88,8 @@ type Assertion =
   | GotoDefEmptyAssertion
   | RefsAssertion
   | RefsExcludeAssertion
+  | SharedRefsAssertion
+  | SharedRefsExcludeAssertion
   | ChildStatesAssertion
   | CompletionKindsAssertion
   | CompletionIncludesAssertion
@@ -864,6 +878,66 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 26: Reused standalone SM — shared state semantry, isolation, inheritance
+  {
+    name: "26 reused_sm: shared state refs from alias include base + sibling aliases",
+    fixtures: ["26_reused_sm.ump"],
+    assertions: [
+      // Shared state: alias-side "inactive" includes base + sibling alias
+      {
+        type: "shared_refs",
+        decl: { name: "inactive", kind: "state", container: "MotorController.motorStatus" },
+        expectAt: [
+          "motor_inactive_def", "motor_inactive_ref",
+          "base_inactive_def", "base_shutdown_inactive_ref",
+          "sensor_inactive_def",
+        ],
+      },
+      // Shared state: base-side "inactive" includes all alias sites
+      {
+        type: "shared_refs",
+        decl: { name: "inactive", kind: "state", container: "deviceStatus" },
+        expectAt: [
+          "base_inactive_def", "base_shutdown_inactive_ref",
+          "motor_inactive_def", "motor_inactive_ref",
+          "sensor_inactive_def",
+        ],
+      },
+      // Shared state: sibling alias "inactive" includes motor + base
+      {
+        type: "shared_refs",
+        decl: { name: "inactive", kind: "state", container: "SensorUnit.sensorStatus" },
+        expectAt: [
+          "sensor_inactive_def",
+          "base_inactive_def", "base_shutdown_inactive_ref",
+          "motor_inactive_def", "motor_inactive_ref",
+        ],
+      },
+      // Inherited base-only: "booting" found from alias body references
+      {
+        type: "shared_refs",
+        decl: { name: "booting", kind: "state", container: "deviceStatus" },
+        expectAt: ["base_booting_def", "sensor_booting_ref"],
+      },
+      // Isolation: unrelated SM "inactive" must NOT include reused SM sites
+      {
+        type: "shared_refs_exclude",
+        decl: { name: "inactive", kind: "state", container: "Unrelated.otherSm" },
+        excludeAt: [
+          "motor_inactive_def", "motor_inactive_ref",
+          "base_inactive_def", "base_shutdown_inactive_ref",
+          "sensor_inactive_def",
+        ],
+      },
+      // Isolation: reused SM "inactive" must NOT include unrelated SM
+      {
+        type: "shared_refs_exclude",
+        decl: { name: "inactive", kind: "state", container: "MotorController.motorStatus" },
+        excludeAt: ["unrelated_inactive_def"],
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────
@@ -1079,6 +1153,44 @@ function runAssertion(
         return {
           ok: false,
           message: `refs_exclude ${assertion.decl.container}.${assertion.decl.name}: @${markerName} (line ${target.pos.line}) should NOT be in refs but was found`,
+        };
+      }
+    }
+    return { ok: true, message: "" };
+  }
+
+  if (assertion.type === "shared_refs") {
+    const refs = helper.findSharedRefs(assertion.decl, reachable);
+    for (const markerName of assertion.expectAt) {
+      const target = findMarker(markerName);
+      if (!target) return { ok: false, message: `marker @${markerName} not found` };
+
+      const found = refs.some(
+        (r) => r.line === target.pos.line && r.file === target.filePath,
+      );
+      if (!found) {
+        return {
+          ok: false,
+          message: `shared_refs ${assertion.decl.container}.${assertion.decl.name}: expected @${markerName} (line ${target.pos.line}), got lines [${refs.map((r) => r.line).join(", ")}]`,
+        };
+      }
+    }
+    return { ok: true, message: "" };
+  }
+
+  if (assertion.type === "shared_refs_exclude") {
+    const refs = helper.findSharedRefs(assertion.decl, reachable);
+    for (const markerName of assertion.excludeAt) {
+      const target = findMarker(markerName);
+      if (!target) return { ok: false, message: `marker @${markerName} not found` };
+
+      const found = refs.some(
+        (r) => r.line === target.pos.line && r.file === target.filePath,
+      );
+      if (found) {
+        return {
+          ok: false,
+          message: `shared_refs_exclude ${assertion.decl.container}.${assertion.decl.name}: @${markerName} (line ${target.pos.line}) should NOT be in refs but was found`,
         };
       }
     }

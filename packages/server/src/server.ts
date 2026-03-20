@@ -660,9 +660,15 @@ connection.onReferences(async (params) => {
     }
   }
 
-  // 4. Find references
-  const refs = symbolIndex.findReferences(
+  // 4. Expand shared state declarations (reused SM alias/base equivalence)
+  const sharedDecls = symbolIndex.getSharedStateDeclarations(
     resolved.symbols,
+    filesToSearch,
+  );
+
+  // 5. Find references
+  const refs = symbolIndex.findReferences(
+    sharedDecls,
     filesToSearch,
     params.context.includeDeclaration,
   );
@@ -829,9 +835,15 @@ connection.onRenameRequest(async (params) => {
     }
   }
 
-  // 4. Find ALL references including declarations
-  const refs = symbolIndex.findReferences(
+  // 4. Expand shared state declarations (reused SM alias/base equivalence)
+  const sharedDecls = symbolIndex.getSharedStateDeclarations(
     resolved.symbols,
+    filesToSearch,
+  );
+
+  // 5. Find ALL references including declarations
+  const refs = symbolIndex.findReferences(
+    sharedDecls,
     filesToSearch,
     true,
   );

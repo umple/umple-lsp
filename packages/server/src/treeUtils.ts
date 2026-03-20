@@ -30,7 +30,7 @@ export function resolveEnclosingScope(
   let enclosingStateMachine: string | undefined;
 
   while (node) {
-    if (node.type === "state_machine") {
+    if (node.type === "state_machine" || node.type === "referenced_statemachine") {
       enclosingStateMachine =
         node.childForFieldName("name")?.text ?? enclosingStateMachine;
     }
@@ -75,7 +75,8 @@ export function resolveStatePath(nameNode: SyntaxNode): string[] {
     }
     if (
       current.type === "state_machine" ||
-      current.type === "statemachine_definition"
+      current.type === "statemachine_definition" ||
+      current.type === "referenced_statemachine"
     ) {
       break;
     }
