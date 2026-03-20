@@ -770,7 +770,10 @@ module.exports = grammar({
     before_after: ($) =>
       seq(
         choice("before", "after"),
-        seq($.identifier, optional("*")),
+        seq(
+          $.identifier,
+          repeat(seq(token.immediate("*"), optional(token.immediate(/[a-zA-Z0-9_]+/)))),
+        ),
         optional(seq("(", optional($.param_list), ")")),
         "{",
         optional($.code_content),
