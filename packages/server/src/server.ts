@@ -236,6 +236,15 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
     | undefined;
   umpleSyncJarPath =
     initOptions?.umpleSyncJarPath || process.env.UMPLESYNC_JAR_PATH;
+
+  // Fallback: look next to the server module (covers npm install -g + BBEdit/editors
+  // that launch the server without passing init options)
+  if (!umpleSyncJarPath || !fs.existsSync(umpleSyncJarPath)) {
+    const candidate = path.resolve(__dirname, "..", "umplesync.jar");
+    if (fs.existsSync(candidate)) {
+      umpleSyncJarPath = candidate;
+    }
+  }
   if (typeof initOptions?.umpleSyncTimeoutMs === "number") {
     umpleSyncTimeoutMs = initOptions.umpleSyncTimeoutMs;
   } else if (process.env.UMPLESYNC_TIMEOUT_MS) {

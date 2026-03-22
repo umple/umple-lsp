@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>BBEditDocumentType</key>
+	<string>CodelessLanguageModule</string>
+	<key>BBLMLanguageDisplayName</key>
+	<string>Umple</string>
+	<key>BBLMLanguageCode</key>
+	<string>Umpl</string>
+	<key>BBLMSuffixMap</key>
+	<array>
+		<dict>
+			<key>BBLMLanguageSuffix</key>
+			<string>.ump</string>
+		</dict>
+	</array>
+	<key>BBLMColorsSyntax</key>
+	<true/>
+	<key>BBLMIsCaseSensitive</key>
+	<true/>
+	<key>BBLMCommentLineDefault</key>
+	<string>//</string>
+	<key>BBLMCommentBlockOpen</key>
+	<string>/*</string>
+	<key>BBLMCommentBlockClose</key>
+	<string>*/</string>
+	<key>BBLMStringCharacter</key>
+	<string>"</string>
+	<key>Language Features</key>
+	<dict>
+		<key>Identifier and Keyword Character Class</key>
+		<string>A-Za-z0-9_</string>
+		<key>Open Block Comments</key>
+		<string>/*</string>
+		<key>Close Block Comments</key>
+		<string>*/</string>
+		<key>Open Line Comments</key>
+		<string>//</string>
+		<key>Open Strings 1</key>
+		<string>"</string>
+		<key>Close Strings 1</key>
+		<string>"</string>
+		<key>Escape Char in Strings 1</key>
+		<string>\</string>
+		<key>End-of-line Ends Strings 1</key>
+		<true/>
+		<key>Open Statement Blocks</key>
+		<string>{</string>
+		<key>Close Statement Blocks</key>
+		<string>}</string>
+	</dict>
+	<key>BBLMKeywordList</key>
+	<array>
+		<!-- Entity declarations -->
+		<string>class</string>
+		<string>interface</string>
+		<string>trait</string>
+		<string>enum</string>
+		<string>association</string>
+		<string>associationClass</string>
+		<string>namespace</string>
+		<string>statemachine</string>
+		<!-- Class body keywords -->
+		<string>isA</string>
+		<string>singleton</string>
+		<string>immutable</string>
+		<string>abstract</string>
+		<string>lazy</string>
+		<string>const</string>
+		<string>autounique</string>
+		<string>defaulted</string>
+		<string>depend</string>
+		<string>use</string>
+		<string>key</string>
+		<!-- Visibility -->
+		<string>public</string>
+		<string>private</string>
+		<string>protected</string>
+		<string>internal</string>
+		<!-- Types -->
+		<string>Integer</string>
+		<string>String</string>
+		<string>Boolean</string>
+		<string>Double</string>
+		<string>Float</string>
+		<string>Date</string>
+		<string>Time</string>
+		<string>void</string>
+		<!-- State machine keywords -->
+		<string>queued</string>
+		<string>pooled</string>
+		<string>entry</string>
+		<string>exit</string>
+		<string>do</string>
+		<string>final</string>
+		<string>unspecified</string>
+		<string>as</string>
+		<!-- Code injection -->
+		<string>before</string>
+		<string>after</string>
+		<string>around</string>
+		<!-- Directives -->
+		<string>generate</string>
+		<string>mixset</string>
+		<string>require</string>
+		<string>trace</string>
+		<string>tracecase</string>
+		<!-- Timed events -->
+		<string>afterEvery</string>
+	</array>
+	<!-- LSP server auto-discovery: BBEdit launches this automatically for .ump files -->
+	<key>BBLMLanguageServerInfo</key>
+	<dict>
+		<key>ServerCommand</key>
+		<string>umple-lsp-server</string>
+		<key>ServerArguments</key>
+		<array>
+			<string>--stdio</string>
+		</array>
+		<key>ServerLanguageID</key>
+		<string>umple</string>
+	</dict>
+</dict>
+</plist>

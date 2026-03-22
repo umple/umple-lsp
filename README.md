@@ -84,6 +84,7 @@ The table below shows the LSP's support for Umple language features, based on th
 | VS Code | [umple.vscode](https://github.com/umple/umple.vscode) | Yes |
 | Zed | [umple.zed](https://github.com/umple/umple.zed) | Yes |
 | Neovim | [umple.nvim](https://github.com/umple/umple.nvim) | Yes |
+| BBEdit | [Setup guide](editors/bbedit/) (plist + npm) | No (`npm install -g`) |
 | Sublime Text | [Setup guide](editors/sublime/) (config only) | No (manual build) |
 
 The LSP server is also available as an npm package: [`umple-lsp-server`](https://www.npmjs.com/package/umple-lsp-server)
