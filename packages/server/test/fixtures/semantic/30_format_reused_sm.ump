@@ -1,0 +1,7 @@
+class MotorController {
+motorStatus as deviceStatus {
+// comment inside reused SM
+inactive {}
+cancel booting -> inactive;
+};
+}

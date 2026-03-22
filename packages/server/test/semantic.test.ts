@@ -944,6 +944,131 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 27: Timed events — after(N)/afterEvery(N) parse correctly, states resolve via transitions
+  {
+    name: "27 timed_events: state refs through timed transitions",
+    fixtures: ["27_timed_events.ump"],
+    assertions: [
+      // Go-to-def: timed transition target Yellow resolves to Yellow state def
+      {
+        type: "goto_def",
+        at: "green_to_yellow",
+        expect: [{ at: "def_yellow" }],
+      },
+      // Go-to-def: afterEvery target Green resolves to Green state def
+      {
+        type: "goto_def",
+        at: "red_to_green",
+        expect: [{ at: "def_green" }],
+      },
+      // Refs: Green has def + afterEvery target ref
+      {
+        type: "refs",
+        decl: { name: "Green", kind: "state", container: "TrafficLight.light" },
+        expectAt: ["def_green", "red_to_green"],
+      },
+      // Refs: Yellow has def + after(30) target ref
+      {
+        type: "refs",
+        decl: { name: "Yellow", kind: "state", container: "TrafficLight.light" },
+        expectAt: ["def_yellow", "green_to_yellow"],
+      },
+      // Refs: Red has def + after(5) target ref
+      {
+        type: "refs",
+        decl: { name: "Red", kind: "state", container: "TrafficLight.light" },
+        expectAt: ["def_red", "yellow_to_red"],
+      },
+    ],
+  },
+
+  // 28: Multi-level inheritance — before/after hooks resolve through isA chain
+  {
+    name: "28 multi_inherit: hooks resolve through two-level isA chain",
+    fixtures: ["28_multi_inherit.ump"],
+    assertions: [
+      // Leaf's before hook on greet resolves to Base.greet (inherited through Middle)
+      {
+        type: "goto_def",
+        at: "hook_greet",
+        expect: [{ at: "def_greet" }],
+      },
+      // Leaf's after hook on check resolves to Middle.check
+      {
+        type: "goto_def",
+        at: "hook_check",
+        expect: [{ at: "def_check" }],
+      },
+      // Refs for greet: Base def + Leaf hook
+      {
+        type: "refs",
+        decl: { name: "greet", kind: "method", container: "Base" },
+        expectAt: ["def_greet", "hook_greet"],
+      },
+      // Refs for check: Middle def + Leaf hook
+      {
+        type: "refs",
+        decl: { name: "check", kind: "method", container: "Middle" },
+        expectAt: ["def_check", "hook_check"],
+      },
+    ],
+  },
+
+  // 29: Association go-to-def — standalone and inline association type refs
+  {
+    name: "29 assoc_gotodef: class refs in standalone and inline associations",
+    fixtures: ["29_assoc_gotdef.ump"],
+    assertions: [
+      // Standalone association Company → class Company
+      {
+        type: "goto_def",
+        at: "assoc_company",
+        expect: [{ at: "def_company" }],
+      },
+      // Standalone association Employee → class Employee
+      {
+        type: "goto_def",
+        at: "assoc_employee",
+        expect: [{ at: "def_employee" }],
+      },
+      // Inline association Company → class Company
+      {
+        type: "goto_def",
+        at: "inline_company",
+        expect: [{ at: "def_company" }],
+      },
+      // Company refs include: class def + standalone assoc + inline assoc
+      {
+        type: "refs",
+        decl: { name: "Company", kind: "class", container: "Company" },
+        expectAt: ["def_company", "assoc_company", "inline_company"],
+      },
+    ],
+  },
+
+  // 30: Formatter — referenced_statemachine body indentation
+  {
+    name: "30 format_reused_sm: referenced_statemachine body gets +1 indent",
+    fixtures: ["30_format_reused_sm.ump"],
+    assertions: [
+      {
+        type: "format_output",
+        fixture: "30_format_reused_sm.ump",
+        expectLines: [
+          { line: 1, text: "  motorStatus as deviceStatus {" },
+          { line: 2, text: "    // comment inside reused SM" },
+          { line: 3, text: "    inactive {}" },
+          { line: 4, text: "    cancel booting -> inactive;" },
+          { line: 5, text: "  };" },
+        ],
+      },
+      {
+        type: "format_idempotent",
+        fixture: "30_format_reused_sm.ump",
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

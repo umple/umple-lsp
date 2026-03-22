@@ -21,6 +21,7 @@ export const INDENT_NODES = new Set([
   "mixset_definition",
   "state_machine",
   "statemachine_definition",
+  "referenced_statemachine",
   "state",
   "before_after",
   "toplevel_code_injection",
