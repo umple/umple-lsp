@@ -8,7 +8,7 @@
 	<key>BBLMLanguageDisplayName</key>
 	<string>Umple</string>
 	<key>BBLMLanguageCode</key>
-	<string>Umpl</string>
+	<string>UMPL</string>
 	<key>BBLMSuffixMap</key>
 	<array>
 		<dict>
@@ -120,7 +120,7 @@
 			<string>--stdio</string>
 		</array>
 		<key>ServerLanguageID</key>
-		<string>umple</string>
+		<string>Umple</string>
 	</dict>
 </dict>
 </plist>
