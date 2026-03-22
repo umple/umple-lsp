@@ -43,6 +43,7 @@ import {
   fixTransitionSpacing,
   fixAssociationSpacing,
   normalizeTopLevelBlankLines,
+  reindentEmbeddedCode,
 } from "./formatter";
 
 const connection = createConnection(ProposedFeatures.all);
@@ -936,12 +937,13 @@ connection.onDocumentFormatting(async (params) => {
     text = expandedText;
   }
 
-  // Phase 1-2: formatting passes on the (possibly expanded) text
+  // Phase 1-3: formatting passes on the (possibly expanded) text
   const edits = [
     ...computeIndentEdits(text, params.options, formatTree),
     ...fixTransitionSpacing(text, formatTree),
     ...fixAssociationSpacing(text, formatTree),
     ...normalizeTopLevelBlankLines(text, formatTree),
+    ...reindentEmbeddedCode(text, params.options, formatTree),
   ];
 
   // Apply edits internally to produce final text

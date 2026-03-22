@@ -12,7 +12,7 @@ import { resolveSymbolAtPosition } from "../src/resolver";
 import { buildSemanticCompletionItems } from "../src/completionBuilder";
 import { buildHoverMarkdown } from "../src/hoverBuilder";
 import { buildDocumentSymbolTree } from "../src/documentSymbolBuilder";
-import { expandCompactStates, computeIndentEdits, fixTransitionSpacing, fixAssociationSpacing, normalizeTopLevelBlankLines } from "../src/formatter";
+import { expandCompactStates, computeIndentEdits, fixTransitionSpacing, fixAssociationSpacing, normalizeTopLevelBlankLines, reindentEmbeddedCode } from "../src/formatter";
 import { CompletionItem } from "vscode-languageserver/node";
 
 // __dirname at runtime is .test-out/test/, so ../../ reaches the package root
@@ -395,12 +395,13 @@ export class SemanticTestHelper {
       tree = this.si.getTree(filePath)!;
     }
 
-    // Phase 1-2: formatting passes
+    // Phase 1-3: formatting passes
     const indentEdits = computeIndentEdits(text, { tabSize: 2, insertSpaces: true }, tree);
     const spacingEdits = fixTransitionSpacing(text, tree);
     const assocEdits = fixAssociationSpacing(text, tree);
     const blankLineEdits = normalizeTopLevelBlankLines(text, tree);
-    const edits = [...indentEdits, ...spacingEdits, ...assocEdits, ...blankLineEdits];
+    const codeEdits = reindentEmbeddedCode(text, { tabSize: 2, insertSpaces: true }, tree);
+    const edits = [...indentEdits, ...spacingEdits, ...assocEdits, ...blankLineEdits, ...codeEdits];
 
     // Apply edits on the (possibly expanded) text
     const lines = text.split("\n");

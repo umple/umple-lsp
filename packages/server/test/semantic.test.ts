@@ -488,7 +488,7 @@ const TEST_CASES: TestCase[] = [
         fixture: "15_formatting.ump",
         expectLines: [
           { line: 1, text: "  Integer x;" },
-          { line: 3, text: "  int y = 0;" },
+          { line: 3, text: "    int y = 0;" },
           { line: 6, text: "    Open {e1 -> Closed;" },
         ],
       },
@@ -508,12 +508,12 @@ const TEST_CASES: TestCase[] = [
           { line: 2, text: "  void print();" },
           // trait body (shifted by blank lines between top-level decls)
           { line: 8, text: "  Date createdAt;" },
-          // code_content skip (first method)
-          { line: 15, text: "int x = 0;" },
+          // code_content reindented to structural depth
+          { line: 15, text: "    int x = 0;" },
           // re-entry after first code_content — structural comment indented
           { line: 17, text: "  // Re-entry: structural line after first code_content" },
-          // code_content skip (second method — multi-region isolation)
-          { line: 19, text: "return;" },
+          // code_content reindented (second method — multi-region isolation)
+          { line: 19, text: "    return;" },
           // before_after inside class
           { line: 21, text: "  before run { }" },
           // deepest nesting: class + SM + state + nested state (4 levels)
@@ -678,8 +678,8 @@ const TEST_CASES: TestCase[] = [
         expectLines: [
           // Indented top-level declaration fixed
           { line: 0, text: "class Animal {" },
-          // code_content preserved
-          { line: 3, text: "int x = 0;" },
+          // code_content reindented to structural depth
+          { line: 3, text: "    int x = 0;" },
           // template_body preserved
           { line: 5, text: "  greeting <<!Hello #name#!>>" },
           // Unindented transition: both indent + spacing
@@ -715,7 +715,7 @@ const TEST_CASES: TestCase[] = [
         fixture: "16_format_syntax_aware.ump",
         expectLines: [
           { line: 1, text: "  void foo() {" },                   // 1 level (inside class)
-          { line: 2, text: "int x = 0;" },                       // unchanged (inside code_content)
+          { line: 2, text: "    int x = 0;" },                   // reindented to structural depth (class + method)
           { line: 6, text: "  }" },                               // 1 level (closes method)
           { line: 7, text: "  greeting <<!Hello #name#!>>" },     // 1 level, template content untouched
           { line: 10, text: "      close -> Closed;" },           // 3 levels (class + SM + state)
@@ -1066,6 +1066,49 @@ const TEST_CASES: TestCase[] = [
       {
         type: "format_idempotent",
         fixture: "30_format_reused_sm.ump",
+      },
+    ],
+  },
+
+  // 31: Formatter — requirement_definition body indentation
+  {
+    name: "31 format_requirement: requirement body gets +1 indent",
+    fixtures: ["31_format_requirement.ump"],
+    assertions: [
+      {
+        type: "format_output",
+        fixture: "31_format_requirement.ump",
+        expectLines: [
+          { line: 1, text: "  line1" },
+          { line: 2, text: "  line2" },
+          { line: 3, text: "}" },
+        ],
+      },
+      {
+        type: "format_idempotent",
+        fixture: "31_format_requirement.ump",
+      },
+    ],
+  },
+
+  // 32: Formatter — tracecase body indentation
+  {
+    name: "32 format_tracecase: tracecase body gets +1 indent",
+    fixtures: ["32_format_tracecase.ump"],
+    assertions: [
+      {
+        type: "format_output",
+        fixture: "32_format_tracecase.ump",
+        expectLines: [
+          { line: 1, text: "  tracecase T {" },
+          { line: 2, text: "    trace x;" },
+          { line: 3, text: "    trace y;" },
+          { line: 4, text: "  }" },
+        ],
+      },
+      {
+        type: "format_idempotent",
+        fixture: "32_format_tracecase.ump",
       },
     ],
   },

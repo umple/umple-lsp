@@ -429,6 +429,128 @@ export function normalizeTopLevelBlankLines(
   return edits;
 }
 
+// ── Phase 3: Embedded code reindentation ────────────────────────────────────
+
+/**
+ * Reindent embedded code_content blocks to match their structural context.
+ *
+ * Preserves internal relative indentation but shifts the whole block so that
+ * the least-indented line aligns with the expected base indent (parent depth + 1).
+ * Only handles code_content (not template_body, which is truly opaque).
+ */
+export function reindentEmbeddedCode(
+  text: string,
+  options: { tabSize: number; insertSpaces: boolean },
+  tree: Tree,
+): TextEdit[] {
+  const lines = text.split("\n");
+  const edits: TextEdit[] = [];
+  const unit = options.insertSpaces ? " ".repeat(options.tabSize) : "\t";
+
+  // Collect all code_content nodes
+  const codeNodes: any[] = [];
+  function walk(node: any) {
+    if (node.type === "code_content") {
+      codeNodes.push(node);
+      return; // don't recurse into code_content children
+    }
+    for (let i = 0; i < node.childCount; i++) {
+      walk(node.child(i));
+    }
+  }
+  walk(tree.rootNode);
+
+  for (const codeNode of codeNodes) {
+    const startRow = codeNode.startPosition.row;
+    const endRow = codeNode.endPosition.row;
+
+    // Only process lines strictly inside the code_content (not boundary lines)
+    // Boundary lines (with `{` and `}`) are handled by computeIndentEdits
+    const firstInterior = startRow + 1;
+    const lastInterior = endRow - 1;
+    if (firstInterior > lastInterior) continue; // single-line code_content
+
+    // Compute expected base indent: the structural depth at the opening `{` line + 1
+    const parentNode = codeNode.parent;
+    if (!parentNode) continue;
+    const parentRow = parentNode.startPosition.row;
+    const baseDepth = computeStructuralDepth(tree, parentRow, 0);
+    // code_content is inside the block, so it gets baseDepth (which already includes the parent)
+    // But computeStructuralDepth at parentRow doesn't count the parent itself, so add 1
+    // Actually: the parent IS in INDENT_NODES, and computeStructuralDepth counts ancestors whose
+    // startRow < line. At parentRow, the parent's own node is NOT counted (startRow === line).
+    // So we need: depth at a line strictly inside the parent = baseDepth + 1 for the parent block.
+    // But we're computing depth at parentRow, so we get the depth ABOVE the parent.
+    // The expected indent for code inside the block = depth_above_parent + 1.
+    const expectedDepth = baseDepth + 1;
+    const expectedIndentCols = expectedDepth * options.tabSize;
+
+    // Find minimum indent of non-empty lines in the interior
+    let minIndent = Infinity;
+    const interiorLines: { row: number; indentCols: number; indentChars: number; empty: boolean }[] = [];
+    for (let row = firstInterior; row <= lastInterior; row++) {
+      const line = lines[row];
+      if (!line || !line.trim()) {
+        interiorLines.push({ row, indentCols: 0, indentChars: 0, empty: true });
+        continue;
+      }
+      const indentChars = line.length - line.trimStart().length;
+      const indentText = line.substring(0, indentChars);
+      const indentCols = measureIndentColumns(indentText, options.tabSize);
+      interiorLines.push({ row, indentCols, indentChars, empty: false });
+      if (indentCols < minIndent) minIndent = indentCols;
+    }
+
+    if (minIndent === Infinity) continue; // all empty
+
+    // Compute shift needed
+    if (minIndent === expectedIndentCols) continue; // already correct
+
+    // Apply shift to each non-empty line
+    for (const entry of interiorLines) {
+      if (entry.empty) continue;
+      const line = lines[entry.row];
+      const relativeIndentCols = entry.indentCols - minIndent;
+      const newIndent = buildIndent(expectedIndentCols + relativeIndentCols, options);
+      const oldIndent = line.substring(0, entry.indentChars);
+
+      if (oldIndent !== newIndent) {
+        edits.push(
+          TextEdit.replace(
+            Range.create(
+              Position.create(entry.row, 0),
+              Position.create(entry.row, entry.indentChars),
+            ),
+            newIndent,
+          ),
+        );
+      }
+    }
+  }
+
+  return edits;
+}
+
+function measureIndentColumns(indent: string, tabSize: number): number {
+  let cols = 0;
+  for (const ch of indent) {
+    cols += ch === "\t" ? tabSize : 1;
+  }
+  return cols;
+}
+
+function buildIndent(
+  columns: number,
+  options: { tabSize: number; insertSpaces: boolean },
+): string {
+  if (columns <= 0) return "";
+  if (options.insertSpaces) return " ".repeat(columns);
+
+  const tabs = Math.floor(columns / options.tabSize);
+  const spaces = columns % options.tabSize;
+  return "\t".repeat(tabs) + " ".repeat(spaces);
+}
+
 /**
  * Collect line ranges of code_content and template_body nodes.
  * Kept for backward compatibility with existing callers; the new
