@@ -53,6 +53,9 @@ mkdir -p ~/Library/Application\ Support/BBEdit/Language\ Modules
 cp editors/bbedit/Umple.plist ~/Library/Application\ Support/BBEdit/Language\ Modules/
 ```
 
+You may bneed to set the initialization options as specified n Section 5.
+
+
 ### 3. Restart BBEdit
 
 Quit BBEdit completely and relaunch. Language modules are only loaded at startup.
@@ -63,31 +66,38 @@ Quit BBEdit completely and relaunch. Language modules are only loaded at startup
 2. Check the language selector at the bottom of the editor — it should show **Umple**
 3. Check **BBEdit > Settings > Languages > Umple > Server** — the status dot should be **green** (server found)
 4. If the dot is red, see [Troubleshooting](#troubleshooting) below
+5. Create an Umple file (.ump suffix) and type `statemachine sm {}` and save the file. Verify that the keyword statemachine is coloured. If not see [Troubleshooting](#troubleshooting)
+6. In the same Umple file, type an error (such as a single line with junk) and save the file. Verify that a pink colour appears on the line number and also in a little triangle at the top; click either of these to see the diagnostic information; then click Show All to see the diagnostics panel. If this does not work follow the directions in the next section to set initialization options.
 
-### 5. Set initialization options (optional)
+### 5. Set initialization options (optional but likely needed)
 
-If diagnostics don't work, the server may need help finding `umplesync.jar`. Create a configuration file:
+If diagnostics don't work, the server may need help finding `umplesync.jar`.
+
+Find the jar path:
+
+```bash
+echo "$(npm root -g)/umple-lsp-server/umplesync.jar"
+```
+
+Create a configuration directory:
 
 ```bash
 mkdir -p ~/Library/Application\ Support/BBEdit/Language\ Servers/Configuration
 ```
 
-Save the following as `~/Library/Application Support/BBEdit/Language Servers/Configuration/Umple.json`:
+Save the following om Umple.json configuration file in the Configuration directory you just created (i.e. as `~/Library/Application Support/BBEdit/Language Servers/Configuration/Umple.json`): (If you have saved umplesync.jar somewhere different from `/usr/local/lib/node_modules/umple-lsp-server/` then change the path in the following):
 
 ```json
 {
   // Path to umplesync.jar for diagnostics
   "initializationOptions": {
-    "umpleSyncJarPath": "/path/to/umple-lsp-server/umplesync.jar"
+    "umpleSyncJarPath": "/usr/local/lib/node_modules/umple-lsp-server/umplesync.jar"
   }
 }
 ```
 
-To find the jar path:
+Tell BBEdit to use the above configuration file by going to Settings / Languages/ Custom Settings / double-click Umple, then select Server, then in the Configuration field select Umple
 
-```bash
-echo "$(npm root -g)/umple-lsp-server/umplesync.jar"
-```
 
 BBEdit supports C-style comments (`//`, `/* */`) in these JSON config files.
 
@@ -103,7 +113,7 @@ BBEdit supports C-style comments (`//`, `/* */`) in these JSON config files.
 
 | Feature | How to Use |
 |---|---|
-| **Diagnostics** | Errors/warnings appear as colored dots in the line number gutter. Click to see details. |
+| **Diagnostics** | Errors/warnings appear as colored dots in the line number gutter. Click to see details. When showing details, select Show All to open a window enabling you to navigate all diagnostics  |
 | **Code completion** | Type and BBEdit shows completion suggestions from the server |
 | **Go to Definition** | `Cmd`-double-click a symbol, or right-click > **Go to Definition** |
 | **Go to Declaration** | Right-click > **Go to Declaration** |
