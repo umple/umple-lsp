@@ -1,0 +1,6 @@
+class A {
+tracecase T {
+trace x;
+trace y;
+}
+}

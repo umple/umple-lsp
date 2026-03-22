@@ -12,6 +12,7 @@ type SyntaxNode = InstanceType<typeof TreeSitter.Node>;
 
 /** Node types whose body content gets +1 indent level. */
 export const INDENT_NODES = new Set([
+  "requirement_definition",
   "class_definition",
   "interface_definition",
   "trait_definition",
@@ -24,6 +25,7 @@ export const INDENT_NODES = new Set([
   "referenced_statemachine",
   "state",
   "before_after",
+  "trace_statement",
   "toplevel_code_injection",
   "filter_definition",
   "method_declaration",
