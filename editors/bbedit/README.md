@@ -39,7 +39,7 @@ curl -fSL -o "$(npm root -g)/umple-lsp-server/umplesync.jar" \
 
 ### 2. Install the Codeless Language Module
 
-The `Umple.plist` file in this directory is a complete Codeless Language Module that provides both syntax coloring and LSP server auto-discovery. Copy it to BBEdit's Language Modules folder:
+The [`Umple.plist` file in this directory](https://github.com/umple/umple-lsp/blob/master/editors/bbedit/Umple.plist) is a complete Codeless Language Module that provides both syntax coloring and LSP server auto-discovery. Copy it to BBEdit's Language Modules folder:
 
 ```bash
 mkdir -p ~/Library/Application\ Support/BBEdit/Language\ Modules
