@@ -116,7 +116,7 @@
 
 ; Transition targets reference states
 (transition
-  target: (identifier) @local.reference)
+  target: (qualified_name) @local.reference)
 
 ; Inline association references classes
 (association_inline
