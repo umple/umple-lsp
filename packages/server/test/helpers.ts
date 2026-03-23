@@ -431,6 +431,54 @@ export class SemanticTestHelper {
   }
 
   /**
+   * Format a file with custom options (e.g., tab mode). Returns full text.
+   */
+  formatFileWithOptions(
+    filePath: string,
+    content: string,
+    options: { tabSize: number; insertSpaces: boolean },
+  ): string {
+    this.si.indexFile(filePath, content);
+    let tree = this.si.getTree(filePath);
+    if (!tree) return content;
+
+    let text = expandCompactStates(content, tree);
+    if (text !== content) {
+      this.si.indexFile(filePath, text);
+      tree = this.si.getTree(filePath)!;
+    }
+
+    const indentEdits = computeIndentEdits(text, options, tree);
+    const spacingEdits = fixTransitionSpacing(text, tree);
+    const assocEdits = fixAssociationSpacing(text, tree);
+    const blankLineEdits = normalizeTopLevelBlankLines(text, tree);
+    const codeEdits = reindentEmbeddedCode(text, options, tree);
+    const edits = [...indentEdits, ...spacingEdits, ...assocEdits, ...blankLineEdits, ...codeEdits];
+
+    const lines = text.split("\n");
+    const lineOffsets: number[] = [];
+    let offset = 0;
+    for (const line of lines) {
+      lineOffsets.push(offset);
+      offset += line.length + 1;
+    }
+    const toOffset = (line: number, col: number) =>
+      (lineOffsets[line] ?? text.length) + col;
+    const sorted = [...edits].sort((a, b) => {
+      const aOff = toOffset(a.range.start.line, a.range.start.character);
+      const bOff = toOffset(b.range.start.line, b.range.start.character);
+      return bOff - aOff;
+    });
+    let result = text;
+    for (const edit of sorted) {
+      const start = toOffset(edit.range.start.line, edit.range.start.character);
+      const end = toOffset(edit.range.end.line, edit.range.end.character);
+      result = result.substring(0, start) + edit.newText + result.substring(end);
+    }
+    return result;
+  }
+
+  /**
    * Get child state names for dotted completion testing.
    */
   childStates(

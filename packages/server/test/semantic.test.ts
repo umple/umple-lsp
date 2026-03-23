@@ -98,6 +98,7 @@ type Assertion =
   | HoverOutputAssertion
   | DocumentSymbolsAssertion
   | FormatOutputAssertion
+  | FormatOutputWithOptionsAssertion
   | FormatIdempotentAssertion
   | UseGraphRefsAssertion;
 
@@ -113,6 +114,13 @@ interface UseGraphRefsAssertion {
   decl: DeclSpec;
   /** Markers that MUST appear in the ref results (including from the lazily-indexed importer) */
   expectAt: string[];
+}
+
+interface FormatOutputWithOptionsAssertion {
+  type: "format_output_with_options";
+  fixture: string;
+  options: { tabSize: number; insertSpaces: boolean };
+  expectText: string;
 }
 
 interface FormatOutputAssertion {
@@ -1112,6 +1120,20 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 33: Formatter — tab-mode embedded code reindentation regression
+  {
+    name: "33 format_tabs: embedded code uses tabs when insertSpaces is false",
+    fixtures: ["33_format_tabs.ump"],
+    assertions: [
+      {
+        type: "format_output_with_options",
+        fixture: "33_format_tabs.ump",
+        options: { tabSize: 2, insertSpaces: false },
+        expectText: "class A {\n\tvoid foo() {\n\t\tint x = 0;\n\t}\n}\n",
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────
@@ -1515,6 +1537,20 @@ function runAssertion(
           message: `format_output line ${exp.line}: expected ${JSON.stringify(exp.text)}, got ${JSON.stringify(actual)}`,
         };
       }
+    }
+    return { ok: true, message: "" };
+  }
+
+  if (assertion.type === "format_output_with_options") {
+    const fileInfo = files.get(assertion.fixture);
+    if (!fileInfo) return { ok: false, message: `fixture ${assertion.fixture} not found` };
+
+    const actual = helper.formatFileWithOptions(fileInfo.path, fileInfo.content, assertion.options);
+    if (actual !== assertion.expectText) {
+      return {
+        ok: false,
+        message: `format_output_with_options ${assertion.fixture}: expected ${JSON.stringify(assertion.expectText)}, got ${JSON.stringify(actual)}`,
+      };
     }
     return { ok: true, message: "" };
   }
