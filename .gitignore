@@ -4,6 +4,7 @@ node_modules
 out/
 .vscode/
 .zed/
+.collab/
 umple/
 CLAUDE.md
 UMPLE_FEATURE_COVERAGE.md
