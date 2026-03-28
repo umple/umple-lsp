@@ -1,0 +1,14 @@
+class Base {
+  /*@def_name*/name;
+  void /*@def_greet*/greet() {}
+}
+class Middle {
+  isA Base;
+  Integer /*@def_level*/level;
+  void /*@def_check*/check() {}
+}
+class Leaf {
+  isA Middle;
+  before /*@hook_greet*/greet { }
+  after /*@hook_check*/check { }
+}

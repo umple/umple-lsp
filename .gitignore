@@ -4,6 +4,7 @@ node_modules
 out/
 .vscode/
 .zed/
+.idea/
 .collab/
 umple/
 CLAUDE.md

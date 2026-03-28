@@ -221,6 +221,7 @@ let umpleSyncTimeoutMs = 30000;
 let jarWarningShown = false;
 let treeSitterWasmPath: string | undefined;
 let symbolIndexReady = false;
+let supportsFileWatcherDynamicRegistration = false;
 
 const DEFAULT_UMPLESYNC_TIMEOUT_MS = 30000;
 
@@ -257,6 +258,10 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
   }
 
   workspaceRoots = resolveWorkspaceRoots(params);
+
+  // Check if client supports dynamic file watcher registration (LSP spec §3.17)
+  supportsFileWatcherDynamicRegistration =
+    params.capabilities?.workspace?.didChangeWatchedFiles?.dynamicRegistration === true;
 
   return {
     capabilities: {
@@ -312,16 +317,19 @@ connection.onInitialized(async () => {
           }
 
           // Register file watcher for .ump files to keep the use-graph fresh.
-          // Wrapped in .catch() because some clients (e.g., CodeMirror lsp-client)
-          // don't support client/registerCapability — an unhandled rejection would
-          // crash the server process.
-          connection.client
-            .register(DidChangeWatchedFilesNotification.type, {
-              watchers: [{ globPattern: "**/*.ump" }],
-            })
-            .catch(() => {
+          // Only attempt if the client advertises dynamic registration support
+          // (LSP spec). Clients like CodeMirror lsp-client don't implement
+          // client/registerCapability and the rejection crashes the server.
+          if (supportsFileWatcherDynamicRegistration) {
+            try {
+              await connection.client.register(
+                DidChangeWatchedFilesNotification.type,
+                { watchers: [{ globPattern: "**/*.ump" }] },
+              );
+            } catch {
               connection.console.info("Client does not support file watching.");
-            });
+            }
+          }
         }
       }
     } catch (err) {
@@ -809,7 +817,10 @@ connection.onRenameRequest(async (params) => {
   // (Checked after resolution so we know which roots actually matter.)
   for (const sym of resolved.symbols) {
     if (!isUseGraphReadyForFile(sym.file)) {
-      connection.window.showWarningMessage(
+      // Use console.warn (window/logMessage notification) instead of
+      // showWarningMessage (window/showMessageRequest) — some clients like
+      // CodeMirror don't implement the request and the rejection crashes the server.
+      connection.console.warn(
         "Workspace scan in progress. Please try rename again in a moment.",
       );
       return null;
@@ -1136,7 +1147,10 @@ async function validateTextDocument(document: TextDocument): Promise<void> {
 function resolveJarPath(): string | undefined {
   if (!umpleSyncJarPath || !fs.existsSync(umpleSyncJarPath)) {
     if (!jarWarningShown) {
-      connection.window.showWarningMessage(
+      // Use console.warn (window/logMessage notification) instead of
+      // showWarningMessage (window/showMessageRequest) — some clients like
+      // CodeMirror don't implement the request and the rejection crashes the server.
+      connection.console.warn(
         "Umple diagnostics are disabled: umplesync.jar was not found. " +
           "Completion and go-to-definition still work. " +
           "Reload the window to retry.",
@@ -1594,11 +1608,16 @@ function parseUmpleJsonDiagnostics(
           ? DiagnosticSeverity.Warning
           : DiagnosticSeverity.Error;
 
+      // Normalize filename to basename — newer umplesync versions output full paths
+      const errorFilename = result.filename
+        ? path.basename(result.filename)
+        : undefined;
+
       // Check if error is from an imported file
-      if (result.filename && result.filename !== tempFilename) {
+      if (errorFilename && errorFilename !== tempFilename) {
         // Find the use statement line for this imported file error
         const useLine = findUseLineForError(
-          result.filename,
+          errorFilename,
           directImports,
           transitiveMap,
         );
@@ -1609,8 +1628,8 @@ function parseUmpleJsonDiagnostics(
               result.errorCode
             : "";
           const message = errorCode
-            ? `In imported file (${result.filename}:${result.line}): ${errorCode}: ${result.message}`
-            : `In imported file (${result.filename}:${result.line}): ${result.message}`;
+            ? `In imported file (${errorFilename}:${result.line}): ${errorCode}: ${result.message}`
+            : `In imported file (${errorFilename}:${result.line}): ${result.message}`;
 
           diagnostics.push({
             severity,

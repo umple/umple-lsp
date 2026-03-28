@@ -1,0 +1,13 @@
+class TrafficLight {
+  /*@def_light*/light {
+    /*@def_green*/Green {
+      after(30) -> /*@green_to_yellow*/Yellow;
+    }
+    /*@def_yellow*/Yellow {
+      after(5) -> /*@yellow_to_red*/Red;
+    }
+    /*@def_red*/Red {
+      afterEvery(60) -> /*@red_to_green*/Green;
+    }
+  }
+}

@@ -1,0 +1,12 @@
+class /*@def_company*/Company {
+  name;
+}
+class /*@def_employee*/Employee {
+  name;
+}
+association {
+  1 /*@assoc_company*/Company employer -- * /*@assoc_employee*/Employee workers;
+}
+class Project {
+  * -- 1 /*@inline_company*/Company sponsor;
+}
