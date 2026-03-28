@@ -22,6 +22,8 @@ import {
   WorkspaceEdit,
   FileChangeType,
   DidChangeWatchedFilesNotification,
+  MessageType,
+  ShowMessageNotification,
 } from "vscode-languageserver/node";
 import { TextDocument } from "vscode-languageserver-textdocument";
 import {
@@ -817,12 +819,13 @@ connection.onRenameRequest(async (params) => {
   // (Checked after resolution so we know which roots actually matter.)
   for (const sym of resolved.symbols) {
     if (!isUseGraphReadyForFile(sym.file)) {
-      // Use console.warn (window/logMessage notification) instead of
-      // showWarningMessage (window/showMessageRequest) — some clients like
-      // CodeMirror don't implement the request and the rejection crashes the server.
-      connection.console.warn(
-        "Workspace scan in progress. Please try rename again in a moment.",
-      );
+      // Use window/showMessage notification instead of showWarningMessage
+      // (window/showMessageRequest) — some clients like CodeMirror don't
+      // implement the request and the rejection crashes the server.
+      connection.sendNotification(ShowMessageNotification.type, {
+        type: MessageType.Warning,
+        message: "Workspace scan in progress. Please try rename again in a moment.",
+      });
       return null;
     }
   }
@@ -1147,14 +1150,15 @@ async function validateTextDocument(document: TextDocument): Promise<void> {
 function resolveJarPath(): string | undefined {
   if (!umpleSyncJarPath || !fs.existsSync(umpleSyncJarPath)) {
     if (!jarWarningShown) {
-      // Use console.warn (window/logMessage notification) instead of
-      // showWarningMessage (window/showMessageRequest) — some clients like
-      // CodeMirror don't implement the request and the rejection crashes the server.
-      connection.console.warn(
-        "Umple diagnostics are disabled: umplesync.jar was not found. " +
+      // Use window/showMessage notification instead of showWarningMessage
+      // (window/showMessageRequest) — some clients like CodeMirror don't
+      // implement the request and the rejection crashes the server.
+      connection.sendNotification(ShowMessageNotification.type, {
+        type: MessageType.Warning,
+        message: "Umple diagnostics are disabled: umplesync.jar was not found. " +
           "Completion and go-to-definition still work. " +
           "Reload the window to retry.",
-      );
+      });
       jarWarningShown = true;
     }
     return undefined;
