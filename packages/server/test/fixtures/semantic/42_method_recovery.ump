@@ -1,0 +1,14 @@
+class A {
+  void /*@def_good*/good() { BROKEN STUFF }
+  GARBAGE HERE
+}
+
+class B {
+  BROKEN { void bad() {} }
+}
+
+class Calculator {
+  void /*@def_add*/add(Integer a, Integer b) { return a + b; }
+  BROKEN GARBAGE HERE
+  void /*@def_multiply*/multiply(Integer x, Integer y) { return x * y; }
+}

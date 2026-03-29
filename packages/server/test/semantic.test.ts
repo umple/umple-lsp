@@ -1523,6 +1523,54 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 42: Method recovery — valid methods recovered, malformed pseudo-methods skipped
+  {
+    name: "42 method_recovery: valid method near broken code recovered, pseudo-method skipped",
+    fixtures: ["42_method_recovery.ump"],
+    assertions: [
+      // Positive: good() has valid declaration shape — recovered
+      {
+        type: "recovered_symbol",
+        fixture: "42_method_recovery.ump",
+        name: "good",
+        kind: "method",
+        expectRecovered: true,
+      },
+      // Negative: BROKEN is not a real method — not recovered
+      {
+        type: "symbol_count",
+        fixture: "42_method_recovery.ump",
+        name: "BROKEN",
+        kind: "method",
+        expect: 0,
+      },
+      // Positive: multiply has ERROR in return-type area but name+params are clean
+      {
+        type: "recovered_symbol",
+        fixture: "42_method_recovery.ump",
+        name: "multiply",
+        kind: "method",
+        expectRecovered: true,
+      },
+      // Positive: add is also recovered
+      {
+        type: "recovered_symbol",
+        fixture: "42_method_recovery.ump",
+        name: "add",
+        kind: "method",
+        expectRecovered: true,
+      },
+      // Negative: bad inside ERROR subtree — not recovered
+      {
+        type: "symbol_count",
+        fixture: "42_method_recovery.ump",
+        name: "bad",
+        kind: "method",
+        expect: 0,
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

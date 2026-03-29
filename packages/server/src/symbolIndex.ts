@@ -990,11 +990,36 @@ export class SymbolIndex {
       // has errors, the captured name may be garbage (e.g., "BROKEN" parsed
       // as an attribute name). Top-level kinds (class, interface, trait, enum)
       // are exempt — their name is reliable even in partial trees.
+      // Methods get a refined check: recover if the method_declaration node
+      // type is correct AND the name field is present (valid declaration shape).
       if (defNode?.hasError) {
         const TOP_LEVEL_KINDS: Set<string> = new Set([
           "class", "interface", "trait", "enum", "mixset",
         ]);
-        if (!TOP_LEVEL_KINDS.has(kind)) continue;
+        if (TOP_LEVEL_KINDS.has(kind)) {
+          // Always recover top-level kinds
+        } else if (kind === "method" && defNode.type === "method_declaration" && !defNode.isError) {
+          // Method recovery: accept if name field is valid and no ERROR exists
+          // between the name and the body opener `{`. ERROR before the name
+          // (return type/modifiers) is tolerated — tree-sitter often wraps those
+          // in ERROR during recovery but the method identity is still reliable.
+          const nameNode = defNode.childForFieldName("name");
+          if (!nameNode || nameNode.type !== "identifier") continue;
+          let hasPostNameError = false;
+          let pastName = false;
+          for (let ci = 0; ci < defNode.childCount; ci++) {
+            const c = defNode.child(ci);
+            if (!pastName) {
+              if (c.startIndex === nameNode.startIndex) pastName = true;
+              continue;
+            }
+            if (c.type === "{") break; // reached body — stop
+            if (c.type === "ERROR" || c.isError) { hasPostNameError = true; break; }
+          }
+          if (hasPostNameError) continue;
+        } else {
+          continue;
+        }
       }
 
       const entry: SymbolEntry = {
