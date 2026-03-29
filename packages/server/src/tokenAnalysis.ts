@@ -32,7 +32,30 @@ export function analyzeToken(
   line: number,
   column: number,
 ): TokenResult | null {
-  const node = tree.rootNode.descendantForPosition({ row: line, column });
+  let node = tree.rootNode.descendantForPosition({ row: line, column });
+
+  // Fallback: if cursor lands on an ERROR node, search its children for an
+  // identifier at the exact position. ERROR nodes contain parsed-but-unmatched
+  // tokens as children, so the identifier is still accessible.
+  if (node?.type === "ERROR" || node?.isError) {
+    let found: SyntaxNode | null = null;
+    for (let i = 0; i < node.childCount; i++) {
+      const child = node.child(i);
+      if (
+        child.type === "identifier" &&
+        child.startPosition.row === line &&
+        child.startPosition.column <= column &&
+        child.endPosition.column > column
+      ) {
+        found = child;
+        break;
+      }
+    }
+    if (found) {
+      node = found;
+    }
+  }
+
   if (
     !node ||
     (node.type !== "identifier" &&
@@ -51,6 +74,19 @@ export function analyzeToken(
   }
 
   let kinds = resolveDefinitionKinds(tree, node, referencesQuery);
+
+  // Fallback: if the identifier is inside an ERROR node, references.scm won't
+  // capture it. Use top-level-only kind candidates to avoid scoped-preference
+  // guessing. Container-scoped kinds (attribute, method) are excluded because
+  // they introduce ambiguity with local symbols of the same name.
+  if (
+    (!kinds || kinds.length === 0) &&
+    node.type === "identifier" &&
+    (node.parent?.type === "ERROR" || node.parent?.isError)
+  ) {
+    kinds = ["class", "interface", "trait", "enum"] as SymbolKind[];
+  }
+
   const { enclosingClass, enclosingStateMachine } =
     resolveEnclosingScope(tree, line, column);
 

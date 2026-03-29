@@ -1,0 +1,12 @@
+class /*@def_widget*/Widget {
+  /*@def_val*/val;
+}
+
+class Panel {
+  GARBAGE /*@ref_widget*/Widget STUFF
+}
+
+class Ambiguous {
+  Widget;
+  GARBAGE /*@ref_ambig_widget*/Widget STUFF
+}

@@ -1496,6 +1496,33 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 41: ERROR-node token fallback — goto-def/hover on identifiers inside ERROR nodes
+  {
+    name: "41 error_node_fallback: goto-def resolves identifier inside ERROR node",
+    fixtures: ["41_error_node_fallback.ump"],
+    assertions: [
+      // Goto-def on Widget inside ERROR node resolves to class definition
+      {
+        type: "goto_def",
+        at: "ref_widget",
+        expect: [{ at: "def_widget" }],
+      },
+      // Hover on Widget inside ERROR node shows class info + recovered note
+      {
+        type: "hover_output",
+        at: "ref_widget",
+        expectContains: ["Widget", "parse errors"],
+      },
+      // Ambiguity regression: even with a local attribute named Widget,
+      // the ERROR-node fallback resolves to class Widget (not the attribute)
+      {
+        type: "goto_def",
+        at: "ref_ambig_widget",
+        expect: [{ at: "def_widget" }],
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────
