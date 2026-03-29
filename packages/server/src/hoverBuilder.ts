@@ -341,38 +341,56 @@ export function buildHoverMarkdown(
   const defNode = findDefNode(sym);
   if (!defNode) return null;
 
+  let result: string | null;
   switch (sym.kind) {
     case "class":
     case "interface":
     case "trait":
     case "enum":
-      return buildClassLikeHover(sym, allSymbols);
+      result = buildClassLikeHover(sym, allSymbols);
+      break;
     case "attribute":
-      return buildAttributeHover(sym, defNode);
+      result = buildAttributeHover(sym, defNode);
+      break;
     case "const":
-      return buildConstHover(sym, defNode);
+      result = buildConstHover(sym, defNode);
+      break;
     case "method":
-      return buildMethodHover(sym, defNode);
+      result = buildMethodHover(sym, defNode);
+      break;
     case "statemachine":
-      return buildStateMachineHover(sym, allSymbols);
+      result = buildStateMachineHover(sym, allSymbols);
+      break;
     case "state":
-      return buildStateHover(sym, allSymbols);
+      result = buildStateHover(sym, allSymbols);
+      break;
     case "association":
-      return buildAssociationHover(sym, defNode);
+      result = buildAssociationHover(sym, defNode);
+      break;
     case "enum_value": {
-      let result = "```umple\n" + sym.name + "\n```";
+      result = "```umple\n" + sym.name + "\n```";
       if (sym.container) {
         result += `\n\n*in enum ${sym.container}*`;
       }
-      return result;
+      break;
     }
     case "mixset":
-      return "```umple\nmixset " + sym.name + "\n```";
+      result = "```umple\nmixset " + sym.name + "\n```";
+      break;
     case "requirement":
-      return "```umple\nrequirement " + sym.name + "\n```";
+      result = "```umple\nrequirement " + sym.name + "\n```";
+      break;
     case "template":
-      return "```umple\ntemplate " + sym.name + "\n```";
+      result = "```umple\ntemplate " + sym.name + "\n```";
+      break;
     default:
-      return "```umple\n" + sym.kind + " " + sym.name + "\n```";
+      result = "```umple\n" + sym.kind + " " + sym.name + "\n```";
   }
+
+  // Append recovered-symbol note
+  if (result && sym.recovered) {
+    result += "\n\n---\n*⚠ This file has parse errors — symbol info may be incomplete.*";
+  }
+
+  return result;
 }

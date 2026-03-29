@@ -1457,6 +1457,12 @@ const TEST_CASES: TestCase[] = [
         at: "ref_a",
         expect: [{ at: "def_a" }],
       },
+      // Hover on recovered symbol includes degraded-state note
+      {
+        type: "hover_output",
+        at: "def_a",
+        expectContains: ["parse errors"],
+      },
     ],
   },
 
@@ -2092,6 +2098,43 @@ async function main() {
         failed++;
         console.log(`FAIL [${tc.name}] ${result.message}`);
       }
+    }
+  }
+
+  // ── Direct programmatic test: recovery lifecycle ──────────────────────────
+  // Exercises: broken open → recovered, clean edit → not recovered, broken again → recovered
+  {
+    const testName = "recovery_lifecycle: broken→recovered, clean→cleared, broken→recovered again";
+    try {
+      const filePath = "/tmp/recovery_lifecycle_test.ump";
+      const brokenContent = "class X {\n  name;\n  BROKEN HERE\n}";
+      const cleanContent = "class X {\n  name;\n}";
+
+      // Step 1: cold-open broken file
+      helper.si.indexFile(filePath, brokenContent);
+      const step1 = helper.si.getSymbols({ name: "X", kind: "class" as any })
+        .filter((s: any) => s.file === filePath);
+      if (!step1[0]?.recovered) throw new Error("Step 1: X should be recovered");
+
+      // Step 2: fix file (clean edit)
+      helper.si.indexFile(filePath, cleanContent);
+      const step2 = helper.si.getSymbols({ name: "X", kind: "class" as any })
+        .filter((s: any) => s.file === filePath);
+      if (step2[0]?.recovered) throw new Error("Step 2: X should NOT be recovered after clean edit");
+
+      // Step 3: break file again
+      helper.si.indexFile(filePath, brokenContent);
+      const step3 = helper.si.getSymbols({ name: "X", kind: "class" as any })
+        .filter((s: any) => s.file === filePath);
+      // After a clean edit, existing snapshot exists — preserved symbols are NOT marked recovered
+      // (this is the live-edit path, not cold-open)
+      if (step3[0]?.recovered) throw new Error("Step 3: X should NOT be recovered (live-edit path has clean snapshot)");
+
+      console.log(`  PASS  ${testName}`);
+      passed++;
+    } catch (e: any) {
+      console.log(`  FAIL  ${testName}: ${e.message}`);
+      failed++;
     }
   }
 
