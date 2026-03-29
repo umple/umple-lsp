@@ -50,6 +50,7 @@ module.exports = grammar({
         $.association_class_definition,
         $.statemachine_definition,
         $.toplevel_code_injection,
+        $.strictness_directive,
       ),
 
     // =====================
@@ -89,6 +90,19 @@ module.exports = grammar({
           choice("-s", "--suboption"),
           field("suboption", $.string_literal),
         )),
+        ";",
+      ),
+
+    // Strictness directive: grammar-only, no semantic handling.
+    // Official forms: strictness (modelOnly|noExtraCode|none | allow|ignore|expect|disallow INT | disable EXPR) ;
+    strictness_directive: ($) =>
+      seq(
+        "strictness",
+        choice(
+          choice("modelOnly", "noExtraCode", "none"),
+          seq(choice("allow", "ignore", "expect", "disallow"), $.integer_literal),
+          seq("disable", /[^;]+/),
+        ),
         ";",
       ),
 

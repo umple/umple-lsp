@@ -972,6 +972,7 @@ export class SymbolIndex {
       }
 
       const defNode = node.parent;
+
       const entry: SymbolEntry = {
         name: node.text,
         kind,

@@ -1183,6 +1183,26 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 35: Strictness directives — parse clean, no symbol pollution
+  {
+    name: "35 strictness: allow/ignore/modelOnly parse clean, no extra symbols",
+    fixtures: ["35_strictness.ump"],
+    assertions: [
+      {
+        type: "parse_clean",
+        fixture: "35_strictness.ump",
+      },
+      // Only class A should be indexed — strictness directives create no symbols
+      {
+        type: "symbol_count",
+        fixture: "35_strictness.ump",
+        name: "A",
+        kind: "class",
+        expect: 1,
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

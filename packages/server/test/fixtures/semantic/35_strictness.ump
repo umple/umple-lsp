@@ -1,0 +1,10 @@
+strictness allow 30;
+strictness allow 1006;
+strictness allow 1007;
+strictness ignore 28;
+strictness ignore 1008;
+strictness modelOnly;
+
+class A {
+  name;
+}
