@@ -1369,6 +1369,40 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 38: Port/reactive syntax — port declarations, connectors, active methods with watchlists
+  {
+    name: "38 ports_reactive: port declarations, connectors, and active methods parse clean",
+    fixtures: ["38_ports_reactive.ump"],
+    assertions: [
+      {
+        type: "parse_clean",
+        fixture: "38_ports_reactive.ump",
+      },
+      // Classes are indexed, port/connector/watchlist internals are not
+      {
+        type: "symbol_count",
+        fixture: "38_ports_reactive.ump",
+        name: "Component1",
+        kind: "class",
+        expect: 1,
+      },
+      {
+        type: "symbol_count",
+        fixture: "38_ports_reactive.ump",
+        name: "Composite",
+        kind: "class",
+        expect: 1,
+      },
+      {
+        type: "symbol_count",
+        fixture: "38_ports_reactive.ump",
+        name: "Sensor",
+        kind: "class",
+        expect: 1,
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

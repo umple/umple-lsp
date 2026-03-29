@@ -1,0 +1,48 @@
+class Component1 {
+  public in Integer pIn1;
+  public out Integer pOut1;
+  pIn1 -> pOut1;
+
+  [pIn1]
+  active increment {
+    pOut1(pIn1 + 1);
+  }
+
+  [pOut1]
+  active logOutPort1 {
+    cout << pOut1;
+  }
+}
+
+class Component2 {
+  public in Integer pIn2;
+  public out Integer pOut2;
+  pIn2 -> pOut2;
+
+  [pIn2, pIn2 < 10]
+  active stop {
+    pOut2(pIn2 + 1);
+  }
+}
+
+class Composite {
+  Component1 cmp1;
+  Component2 cmp2;
+  cmp1.pOut1 -> cmp2.pIn2;
+  cmp2.pOut2 -> cmp1.pIn1;
+}
+
+class Sensor {
+  public out int speed;
+  this.data -> client.sensorData { return new SensorData(); }
+
+  [sensorData]
+  void active init() {
+    doInit();
+  }
+
+  [clientData, period(1), sensorData != null]
+  void active computeData {
+    compute();
+  }
+}

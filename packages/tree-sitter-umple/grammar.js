@@ -34,6 +34,9 @@ module.exports = grammar({
     [$.attribute_declaration, $.state, $.method_declaration],
     [$.state, $.method_declaration],
     [$.call_expression, $._value],
+    [$._class_content, $.active_method],
+    [$.active_method, $.attribute_declaration, $.method_declaration, $.emit_method],
+    [$.active_method, $.more_code],
     [$.new_expression, $.attribute_declaration],
     [$._java_method_modifiers],
   ],
@@ -153,6 +156,9 @@ module.exports = grammar({
         $.emit_method,
         $.template_attribute,
         $.active_definition,
+        $.port_declaration,
+        $.port_connector,
+        $.active_method,
         $.trace_statement,
         $.position_directive,
         $.position_association_directive,
@@ -517,6 +523,48 @@ module.exports = grammar({
         seq("active", $.code_langs, field("name", $.identifier), repeat1($.more_code)),
         // Form B: optional thread name; any lang tags live inside moreCode blocks
         seq("active", optional(field("name", $.identifier)), repeat1($.more_code)),
+      ),
+
+    // =====================
+    // PORT DECLARATIONS & CONNECTORS (Composite Structure)
+    // =====================
+    // Port declaration: [visibility] [conjugated] (in|out|port) Type name;
+    port_declaration: ($) =>
+      seq(
+        optional($.visibility),
+        optional("conjugated"),
+        choice("in", "out", "port"),
+        $.type_name,
+        field("name", $.identifier),
+        ";",
+      ),
+
+    // Port connector: [from.] fromPort -> [to.] toPort (;|{code})
+    port_connector: ($) =>
+      seq(
+        $.qualified_name,
+        "->",
+        $.qualified_name,
+        choice(
+          ";",
+          seq("{", optional($.code_content), "}"),
+        ),
+      ),
+
+    // Active method with optional watchlist prefix:
+    // [watchlist] [visibility] [Type] [atomic|synchronous|intercept] active name [(params)] { code }
+    active_method: ($) =>
+      seq(
+        optional($.constraint), // optional watchlist: [expr, expr, ...]
+        optional($.visibility),
+        optional(field("return_type", $.type_name)),
+        optional(choice("atomic", "synchronous", "intercept")),
+        "active",
+        field("name", $.identifier),
+        optional(seq("(", optional($.param_list), ")")),
+        "{",
+        optional($.code_content),
+        "}",
       ),
 
     symmetric_reflexive_association: ($) =>
