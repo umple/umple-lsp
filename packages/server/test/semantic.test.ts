@@ -1230,6 +1230,145 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 37: Java-like members — synchronized, throws, static fields, long literals, array types
+  {
+    name: "37 java_members: Java-like methods and fields parse clean, names indexed",
+    fixtures: ["37_java_members.ump"],
+    assertions: [
+      {
+        type: "parse_clean",
+        fixture: "37_java_members.ump",
+      },
+      // Methods indexed
+      {
+        type: "symbol_count",
+        fixture: "37_java_members.ump",
+        name: "main",
+        kind: "method",
+        expect: 1,
+      },
+      {
+        type: "symbol_count",
+        fixture: "37_java_members.ump",
+        name: "sendSyn",
+        kind: "method",
+        expect: 1,
+      },
+      {
+        type: "symbol_count",
+        fixture: "37_java_members.ump",
+        name: "waitForReply",
+        kind: "method",
+        expect: 1,
+      },
+      // Methods with final/synchronized in various orders
+      {
+        type: "symbol_count",
+        fixture: "37_java_members.ump",
+        name: "getClientConnections",
+        kind: "method",
+        expect: 1,
+      },
+      {
+        type: "symbol_count",
+        fixture: "37_java_members.ump",
+        name: "receiveMessageFromClient",
+        kind: "method",
+        expect: 1,
+      },
+      // Method with qualified throws
+      {
+        type: "symbol_count",
+        fixture: "37_java_members.ump",
+        name: "countLinesInFile",
+        kind: "method",
+        expect: 1,
+      },
+      // Method with final param
+      {
+        type: "symbol_count",
+        fixture: "37_java_members.ump",
+        name: "create",
+        kind: "method",
+        expect: 1,
+      },
+      // Fields indexed as attributes
+      {
+        type: "symbol_count",
+        fixture: "37_java_members.ump",
+        name: "s",
+        kind: "attribute",
+        expect: 1,
+      },
+      {
+        type: "symbol_count",
+        fixture: "37_java_members.ump",
+        name: "startTime",
+        kind: "attribute",
+        expect: 1,
+      },
+      {
+        type: "symbol_count",
+        fixture: "37_java_members.ump",
+        name: "previousCommand",
+        kind: "attribute",
+        expect: 1,
+      },
+      {
+        type: "symbol_count",
+        fixture: "37_java_members.ump",
+        name: "messages",
+        kind: "attribute",
+        expect: 1,
+      },
+      // final fields
+      {
+        type: "symbol_count",
+        fixture: "37_java_members.ump",
+        name: "X",
+        kind: "attribute",
+        expect: 1,
+      },
+      {
+        type: "symbol_count",
+        fixture: "37_java_members.ump",
+        name: "xs",
+        kind: "attribute",
+        expect: 1,
+      },
+      // Call-expression initializers
+      {
+        type: "symbol_count",
+        fixture: "37_java_members.ump",
+        name: "validLanguages",
+        kind: "attribute",
+        expect: 1,
+      },
+      {
+        type: "symbol_count",
+        fixture: "37_java_members.ump",
+        name: "NL",
+        kind: "attribute",
+        expect: 1,
+      },
+      // Generic method call initializer + array literal initializer
+      {
+        type: "symbol_count",
+        fixture: "37_java_members.ump",
+        name: "suboptions",
+        kind: "attribute",
+        expect: 1,
+      },
+      {
+        type: "symbol_count",
+        fixture: "37_java_members.ump",
+        name: "parameters",
+        kind: "attribute",
+        expect: 1,
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

@@ -1,0 +1,19 @@
+class Sim {
+  public static void /*@def_main*/main(String [] args) {}
+  public synchronized void /*@def_send*/sendSyn() {}
+  void /*@def_wait*/waitForReply() throws InterruptedException {}
+  synchronized final public Thread[] /*@def_get*/getClientConnections() {}
+  final synchronized void /*@def_recv*/receiveMessageFromClient() {}
+  CountLines /*@def_count*/countLinesInFile(String filename) throws java.io.IOException {}
+  public static A /*@def_create*/create(final Foo x) {}
+  static PhoneSystemSimulation /*@def_field_s*/s;
+  long /*@def_startTime*/startTime = 0L;
+  static String[] /*@def_prev*/previousCommand = new String[1];
+  LinkedList<String> /*@def_msgs*/messages = new LinkedList<String>();
+  final String /*@def_x*/X = "a";
+  public static final String[] /*@def_xs*/xs = new String[1];
+  public static final String[] /*@def_valid*/validLanguages = findValidLanguages();
+  const String /*@def_nl*/NL = System.lineSeparator();
+  internal List<String> /*@def_sub*/suboptions = Collections.<String>emptyList();
+  private static final Class<?>[] /*@def_params*/parameters = new Class[]{URL.class};
+}

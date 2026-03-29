@@ -28,6 +28,14 @@ module.exports = grammar({
     [$.trace_statement, $.event_spec],
     [$.enumerated_attribute, $.state_machine],
     [$.enumerated_attribute, $.state_machine, $.state],
+    [$.state_machine, $.method_declaration],
+    [$.attribute_declaration, $.method_declaration, $.emit_method],
+    [$.attribute_declaration, $.method_declaration],
+    [$.attribute_declaration, $.state, $.method_declaration],
+    [$.state, $.method_declaration],
+    [$.call_expression, $._value],
+    [$.new_expression, $.attribute_declaration],
+    [$._java_method_modifiers],
   ],
 
   rules: {
@@ -553,10 +561,14 @@ module.exports = grammar({
     // Official grammar has fixed-order positional slots, not a free-form modifier bag.
     attribute_declaration: ($) =>
       seq(
+        optional($.visibility),
         optional("unique"),
         optional("lazy"),
+        optional("static"),
+        optional("final"),
         optional($.attribute_modifier),
         optional(field("type", $.type_name)),
+        optional(seq("[", "]")),  // array slot: Type[] name
         field("name", $.identifier),
         optional(seq("=", $._value)),
         ";",
@@ -749,15 +761,19 @@ module.exports = grammar({
     // =====================
     // METHODS
     // =====================
+    _java_method_modifiers: ($) =>
+      repeat1(choice($.visibility, "static", "final", "synchronized", "queued")),
+
     method_declaration: ($) =>
       seq(
-        optional($.visibility),
-        optional("static"),
+        optional($._java_method_modifiers),
         optional(field("return_type", $.type_name)),
+        optional(seq("[", "]")),  // array return type: Thread[]
         field("name", $.identifier),
         "(",
         optional($.param_list),
         ")",
+        optional(seq("throws", $.qualified_name, repeat(seq(",", $.qualified_name)))),
         optional($.identifier), // language tag
         "{",
         optional($.code_content),
@@ -766,13 +782,14 @@ module.exports = grammar({
 
     method_signature: ($) =>
       seq(
-        optional($.visibility),
-        optional("static"),
+        optional($._java_method_modifiers),
         optional(field("return_type", $.type_name)),
+        optional(seq("[", "]")),
         field("name", $.identifier),
         "(",
         optional($.param_list),
         ")",
+        optional(seq("throws", $.qualified_name, repeat(seq(",", $.qualified_name)))),
         ";",
       ),
 
@@ -810,7 +827,7 @@ module.exports = grammar({
 
     param_list: ($) => seq($.param, repeat(seq(",", $.param))),
 
-    param: ($) => seq($.type_name, field("name", $.identifier)),
+    param: ($) => seq(optional("final"), $.type_name, optional(seq("[", "]")), field("name", $.identifier)),
 
     before_after: ($) =>
       seq(
@@ -898,7 +915,7 @@ module.exports = grammar({
     // or a trait SM binding.  trait_binding requires "=", trait_sm_binding
     // requires "as", so <X> unambiguously resolves to type_name.
     _type_argument: ($) =>
-      choice($.trait_binding, $.trait_sm_binding, $.type_name),
+      choice($.trait_binding, $.trait_sm_binding, $.type_name, "?"),
 
     // Trait parameter application: TP = ClassName (inside <> of isA type)
     trait_binding: ($) =>
@@ -919,13 +936,29 @@ module.exports = grammar({
         $.string_literal,
         $.boolean,
         "null",
+        $.call_expression,
+        seq($.qualified_name, ".", "class"),  // URL.class
         $.qualified_name,
         $.new_expression,
         $.code_block,
       ),
 
+    // Method-call initializer: findValidLanguages(), System.lineSeparator(),
+    // Optional.empty(), Collections.<String>emptyList()
+    call_expression: ($) =>
+      choice(
+        seq($.qualified_name, "(", optional($._argument_list), ")"),
+        // Generic method call: Receiver.<Type>method(args) — uses a token to avoid
+        // conflict with qualified_name's token.immediate(".") lexer behavior.
+        seq($.qualified_name, token.immediate(/\.<[^>]+>[a-zA-Z_][a-zA-Z0-9_]*/), "(", optional($._argument_list), ")"),
+      ),
+
     new_expression: ($) =>
-      seq("new", $.qualified_name, "(", optional($._argument_list), ")"),
+      choice(
+        seq("new", $.qualified_name, token.immediate("[]"), "{", optional($._argument_list), "}"),  // new Type[]{...}
+        seq("new", $.qualified_name, "[", $._value, "]"),  // new Type[size]
+        seq("new", $.type_name, "(", optional($._argument_list), ")"),  // new Type(args)
+      ),
 
     _argument_list: ($) => seq($._value, repeat(seq(",", $._value))),
 
@@ -1015,7 +1048,7 @@ module.exports = grammar({
 
     identifier: ($) => /[a-zA-Z_][a-zA-Z0-9_]*/,
 
-    number: ($) => /-?\d+(\.\d+)?/,
+    number: ($) => /-?\d+(\.\d+)?[LlFfDd]?/,
 
     string_literal: ($) => choice(/"[^"]*"/, /'[^']*'/),
 
