@@ -29,6 +29,7 @@
 ; These require a parent scope (class, statemachine, etc.)
 
 (attribute_declaration name: (identifier) @definition.attribute)
+(enumerated_attribute name: (identifier) @definition.attribute)
 (const_declaration name: (identifier) @definition.const)
 (method_declaration name: (identifier) @definition.method)
 (method_signature name: (identifier) @definition.method)

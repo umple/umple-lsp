@@ -1203,6 +1203,33 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 36: Enumerated attributes — parse clean, attribute name indexed, values not indexed
+  {
+    name: "36 enumerated_attr: braced value-list parses clean, attribute name indexed",
+    fixtures: ["36_enumerated_attr.ump"],
+    assertions: [
+      {
+        type: "parse_clean",
+        fixture: "36_enumerated_attr.ump",
+      },
+      // Attribute names are indexed as symbols
+      {
+        type: "symbol_count",
+        fixture: "36_enumerated_attr.ump",
+        name: "description",
+        kind: "attribute",
+        expect: 1,
+      },
+      {
+        type: "symbol_count",
+        fixture: "36_enumerated_attr.ump",
+        name: "details",
+        kind: "attribute",
+        expect: 1,
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

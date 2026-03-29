@@ -26,6 +26,8 @@ module.exports = grammar({
     [$.event_spec, $.method_declaration],
     [$.constraint, $.guard],
     [$.trace_statement, $.event_spec],
+    [$.enumerated_attribute, $.state_machine],
+    [$.enumerated_attribute, $.state_machine, $.state],
   ],
 
   rules: {
@@ -124,6 +126,7 @@ module.exports = grammar({
         $.depend_statement,
         $.singleton,
         $.attribute_declaration,
+        $.enumerated_attribute,
         $.constraint,
         $.association_inline,
         $.state_machine,
@@ -557,6 +560,17 @@ module.exports = grammar({
         field("name", $.identifier),
         optional(seq("=", $._value)),
         ";",
+      ),
+
+    // Enumerated attribute: name { Value1, Value2, ... }
+    // Official Umple shorthand for defining allowed attribute values.
+    // Grammar-only for the values — attribute name is indexed as a normal attribute.
+    enumerated_attribute: ($) =>
+      seq(
+        field("name", $.identifier),
+        "{",
+        optional(seq($.identifier, repeat(seq(",", $.identifier)))),
+        "}",
       ),
 
     const_declaration: ($) =>

@@ -1,0 +1,9 @@
+class Facility {
+  code;
+  /*@def_desc*/description { Menu, Record, Screen }
+  key {code}
+}
+class Province {
+  name;
+  /*@def_details*/details { Herat, Kabul, Kunduz }
+}
