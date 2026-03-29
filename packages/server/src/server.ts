@@ -224,6 +224,7 @@ let jarWarningShown = false;
 let treeSitterWasmPath: string | undefined;
 let symbolIndexReady = false;
 let supportsFileWatcherDynamicRegistration = false;
+const recoveryWarningShown = new Set<string>();
 
 const DEFAULT_UMPLESYNC_TIMEOUT_MS = 30000;
 
@@ -361,6 +362,22 @@ connection.onDidOpenTextDocument((params) => {
     try {
       const filePath = fileURLToPath(params.textDocument.uri);
       symbolIndex.indexFile(filePath, params.textDocument.text);
+
+      // Once-per-document cold-open recovery warning
+      const tree = symbolIndex.getTree(filePath);
+      if (tree?.rootNode.hasError) {
+        const uri = params.textDocument.uri;
+        if (!recoveryWarningShown.has(uri)) {
+          recoveryWarningShown.add(uri);
+          connection.sendNotification(ShowMessageNotification.type, {
+            type: MessageType.Info,
+            message: "Some IDE features may be limited — this file has syntax errors. Diagnostics are still available.",
+          });
+        }
+      } else {
+        // File parsed clean — clear warning flag so it re-shows if errors return
+        recoveryWarningShown.delete(params.textDocument.uri);
+      }
     } catch {
       // Ignore errors for non-file URIs
     }
@@ -410,6 +427,21 @@ connection.onDidChangeTextDocument((params) => {
   const changedPath = getDocumentFilePath(updated);
   if (changedPath && symbolIndexReady) {
     symbolIndex.updateFile(changedPath, updated.getText());
+
+    // Update recovery warning lifecycle on live edits
+    const tree = symbolIndex.getTree(changedPath);
+    const uri = params.textDocument.uri;
+    if (tree && !tree.rootNode.hasError) {
+      // File is now clean — clear warning so it re-shows if errors return
+      recoveryWarningShown.delete(uri);
+    } else if (tree?.rootNode.hasError && !recoveryWarningShown.has(uri)) {
+      // File became broken again — re-show warning once
+      recoveryWarningShown.add(uri);
+      connection.sendNotification(ShowMessageNotification.type, {
+        type: MessageType.Info,
+        message: "Some IDE features may be limited — this file has syntax errors. Diagnostics are still available.",
+      });
+    }
   }
 
   scheduleValidation(updated);
@@ -421,6 +453,7 @@ connection.onDidChangeTextDocument((params) => {
 connection.onDidCloseTextDocument((params) => {
   const normalizedUri = normalizeUri(params.textDocument.uri);
   deleteDocument(params.textDocument.uri);
+  recoveryWarningShown.delete(params.textDocument.uri);
   const pendingValidation = pendingValidations.get(normalizedUri);
   if (pendingValidation) {
     clearTimeout(pendingValidation);
@@ -768,6 +801,15 @@ connection.onPrepareRename(async (params) => {
   );
   if (!resolved || resolved.symbols.length === 0) return null;
 
+  // Block rename on recovered symbols (cold-open error tolerance)
+  if (resolved.symbols.some((s) => s.recovered)) {
+    connection.sendNotification(ShowMessageNotification.type, {
+      type: MessageType.Warning,
+      message: "Cannot rename: this file has parse errors. Fix errors before renaming.",
+    });
+    return null;
+  }
+
   // Kind must be in the renameable set
   if (!RENAMEABLE_KINDS.has(resolved.symbols[0].kind)) return null;
 
@@ -810,6 +852,10 @@ connection.onRenameRequest(async (params) => {
     params.position.character,
   );
   if (!resolved || resolved.symbols.length === 0) return null;
+
+  // Block rename on recovered symbols (cold-open error tolerance)
+  if (resolved.symbols.some((s) => s.recovered)) return null;
+
   if (!RENAMEABLE_KINDS.has(resolved.symbols[0].kind)) return null;
   if (!isUnambiguousRename(resolved.symbols)) return null;
 

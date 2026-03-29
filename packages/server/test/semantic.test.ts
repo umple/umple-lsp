@@ -102,7 +102,8 @@ type Assertion =
   | FormatIdempotentAssertion
   | UseGraphRefsAssertion
   | ParseCleanAssertion
-  | SymbolCountAssertion;
+  | SymbolCountAssertion
+  | RecoveredSymbolAssertion;
 
 interface ParseCleanAssertion {
   type: "parse_clean";
@@ -115,6 +116,14 @@ interface SymbolCountAssertion {
   name: string;
   kind: string;
   expect: number;
+}
+
+interface RecoveredSymbolAssertion {
+  type: "recovered_symbol";
+  fixture: string;
+  name: string;
+  kind: string;
+  expectRecovered: boolean;
 }
 
 /** Tests the use-graph discovery pipeline: inject importer edges without full indexing,
@@ -1403,6 +1412,84 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 39: Cold-open error recovery — recovered symbols from malformed file
+  {
+    name: "39 cold_open_recovery: class/attribute/method recovered from broken file, no state/SM",
+    fixtures: ["39_cold_open_recovery.ump"],
+    assertions: [
+      // File has parse errors (intentional)
+      // Class A is recovered
+      {
+        type: "recovered_symbol",
+        fixture: "39_cold_open_recovery.ump",
+        name: "A",
+        kind: "class",
+        expectRecovered: true,
+      },
+      // Attribute "name" is recovered
+      {
+        type: "recovered_symbol",
+        fixture: "39_cold_open_recovery.ump",
+        name: "name",
+        kind: "attribute",
+        expectRecovered: true,
+      },
+      // Method "foo" is recovered
+      {
+        type: "recovered_symbol",
+        fixture: "39_cold_open_recovery.ump",
+        name: "foo",
+        kind: "method",
+        expectRecovered: true,
+      },
+      // Class B is recovered
+      {
+        type: "recovered_symbol",
+        fixture: "39_cold_open_recovery.ump",
+        name: "B",
+        kind: "class",
+        expectRecovered: true,
+      },
+      // Goto-def on recovered class still works
+      {
+        type: "goto_def",
+        at: "ref_a",
+        expect: [{ at: "def_a" }],
+      },
+    ],
+  },
+
+  // 40: Clean parse — symbols from clean file are NOT marked recovered
+  {
+    name: "40 clean_parse: symbols from error-free file have no recovered flag",
+    fixtures: ["40_live_edit_regression.ump"],
+    assertions: [
+      // File parses clean — symbols should NOT be recovered
+      {
+        type: "recovered_symbol",
+        fixture: "40_live_edit_regression.ump",
+        name: "CleanClass",
+        kind: "class",
+        expectRecovered: false,
+      },
+      {
+        type: "recovered_symbol",
+        fixture: "40_live_edit_regression.ump",
+        name: "name",
+        kind: "attribute",
+        expectRecovered: false,
+      },
+      // State preserved from clean parse
+      {
+        type: "recovered_symbol",
+        fixture: "40_live_edit_regression.ump",
+        name: "Active",
+        kind: "state",
+        expectRecovered: false,
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────
@@ -1851,6 +1938,30 @@ function runAssertion(
       return {
         ok: false,
         message: `symbol_count ${assertion.name}(${assertion.kind}): expected ${assertion.expect}, got ${syms.length}`,
+      };
+    }
+    return { ok: true, message: "" };
+  }
+
+  if (assertion.type === "recovered_symbol") {
+    const fileInfo = files.get(assertion.fixture);
+    if (!fileInfo) return { ok: false, message: `fixture ${assertion.fixture} not found` };
+
+    const syms = helper.si.getSymbols({
+      name: assertion.name,
+      kind: assertion.kind as any,
+    }).filter((s: any) => s.file === fileInfo.path);
+    if (syms.length === 0) {
+      return {
+        ok: false,
+        message: `recovered_symbol ${assertion.name}(${assertion.kind}): symbol not found`,
+      };
+    }
+    const isRecovered = syms[0].recovered === true;
+    if (isRecovered !== assertion.expectRecovered) {
+      return {
+        ok: false,
+        message: `recovered_symbol ${assertion.name}(${assertion.kind}): expected recovered=${assertion.expectRecovered}, got ${isRecovered}`,
       };
     }
     return { ok: true, message: "" };

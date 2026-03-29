@@ -1,0 +1,9 @@
+class /*@def_a*/A {
+  /*@def_name*/name;
+  Integer BROKEN SYNTAX HERE
+  void /*@def_foo*/foo() {}
+}
+
+class /*@def_b*/B {
+  isA /*@ref_a*/A;
+}

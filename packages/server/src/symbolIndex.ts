@@ -192,17 +192,30 @@ export class SymbolIndex {
     // statemachine) from the last clean snapshot.
     let symbols: SymbolEntry[];
     if (tree.rootNode.hasError) {
-      const LIVE_KINDS: Set<SymbolKind> = new Set([
+      // High-confidence kinds safe to extract from error trees
+      const RECOVERY_SAFE_KINDS: Set<SymbolKind> = new Set([
         "class", "interface", "trait", "enum",
-        "mixset", "attribute", "const",
+        "mixset", "attribute", "const", "method",
       ]);
 
-      const liveSymbols = newSymbols.filter((s) => LIVE_KINDS.has(s.kind));
+      const liveSymbols = newSymbols.filter((s) => RECOVERY_SAFE_KINDS.has(s.kind));
       const preservedSymbols = existing
-        ? existing.symbols.filter((s) => !LIVE_KINDS.has(s.kind))
+        ? existing.symbols.filter((s) => !RECOVERY_SAFE_KINDS.has(s.kind))
         : [];
+
+      // Cold-open recovery: mark extracted symbols as recovered when no prior clean snapshot
+      if (!existing) {
+        for (const s of liveSymbols) {
+          s.recovered = true;
+        }
+      }
+
       symbols = [...liveSymbols, ...preservedSymbols];
     } else {
+      // Clean parse: clear any recovered flags from previous error state
+      for (const s of newSymbols) {
+        delete s.recovered;
+      }
       symbols = newSymbols;
     }
 
@@ -972,6 +985,17 @@ export class SymbolIndex {
       }
 
       const defNode = node.parent;
+
+      // Skip symbols from malformed subtrees: if the definition node itself
+      // has errors, the captured name may be garbage (e.g., "BROKEN" parsed
+      // as an attribute name). Top-level kinds (class, interface, trait, enum)
+      // are exempt — their name is reliable even in partial trees.
+      if (defNode?.hasError) {
+        const TOP_LEVEL_KINDS: Set<string> = new Set([
+          "class", "interface", "trait", "enum", "mixset",
+        ]);
+        if (!TOP_LEVEL_KINDS.has(kind)) continue;
+      }
 
       const entry: SymbolEntry = {
         name: node.text,

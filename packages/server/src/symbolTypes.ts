@@ -23,6 +23,8 @@ export interface SymbolEntry {
   defEndColumn?: number;
   // For states: nesting path from root SM, e.g., ["EEE", "Open", "Inner"]
   statePath?: string[];
+  // True if extracted from a tree with parse errors (cold-open recovery)
+  recovered?: boolean;
 }
 
 export interface UseStatementWithPosition {

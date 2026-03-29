@@ -1,0 +1,6 @@
+class /*@def_cls*/CleanClass {
+  /*@def_attr*/name;
+  status {
+    /*@def_state*/Active {}
+  }
+}
