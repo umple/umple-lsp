@@ -100,7 +100,22 @@ type Assertion =
   | FormatOutputAssertion
   | FormatOutputWithOptionsAssertion
   | FormatIdempotentAssertion
-  | UseGraphRefsAssertion;
+  | UseGraphRefsAssertion
+  | ParseCleanAssertion
+  | SymbolCountAssertion;
+
+interface ParseCleanAssertion {
+  type: "parse_clean";
+  fixture: string;
+}
+
+interface SymbolCountAssertion {
+  type: "symbol_count";
+  fixture: string;
+  name: string;
+  kind: string;
+  expect: number;
+}
 
 /** Tests the use-graph discovery pipeline: inject importer edges without full indexing,
  *  then verify refs include the importer after lazy on-demand indexing. */
@@ -1134,6 +1149,40 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 34: Layout directives — parse clean, repeated class defs all indexed
+  {
+    name: "34 layout_directives: parse clean, repeated class defs all indexed, goto-def resolves all",
+    fixtures: ["34_layout_directives.ump"],
+    assertions: [
+      // File with layout directives parses without ERROR nodes
+      {
+        type: "parse_clean",
+        fixture: "34_layout_directives.ump",
+      },
+      // Repeated class blocks (including layout-only) are all indexed as definitions
+      {
+        type: "symbol_count",
+        fixture: "34_layout_directives.ump",
+        name: "RealClass",
+        kind: "class",
+        expect: 2,
+      },
+      {
+        type: "symbol_count",
+        fixture: "34_layout_directives.ump",
+        name: "Other",
+        kind: "class",
+        expect: 3,
+      },
+      // Go-to-def from type reference resolves to all 3 Other definitions
+      {
+        type: "goto_def",
+        at: "ref_other",
+        expect: [{ at: "def_other1" }, { at: "def_other2" }, { at: "def_other3" }],
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────
@@ -1550,6 +1599,38 @@ function runAssertion(
       return {
         ok: false,
         message: `format_output_with_options ${assertion.fixture}: expected ${JSON.stringify(assertion.expectText)}, got ${JSON.stringify(actual)}`,
+      };
+    }
+    return { ok: true, message: "" };
+  }
+
+  if (assertion.type === "parse_clean") {
+    const fileInfo = files.get(assertion.fixture);
+    if (!fileInfo) return { ok: false, message: `fixture ${assertion.fixture} not found` };
+
+    const tree = helper.si.getTree(fileInfo.path);
+    if (!tree) return { ok: false, message: `parse_clean ${assertion.fixture}: no tree` };
+    if (tree.rootNode.hasError) {
+      return {
+        ok: false,
+        message: `parse_clean ${assertion.fixture}: tree has ERROR nodes`,
+      };
+    }
+    return { ok: true, message: "" };
+  }
+
+  if (assertion.type === "symbol_count") {
+    const fileInfo = files.get(assertion.fixture);
+    if (!fileInfo) return { ok: false, message: `fixture ${assertion.fixture} not found` };
+
+    const syms = helper.si.getSymbols({
+      name: assertion.name,
+      kind: assertion.kind as any,
+    }).filter((s: any) => s.file === fileInfo.path);
+    if (syms.length !== assertion.expect) {
+      return {
+        ok: false,
+        message: `symbol_count ${assertion.name}(${assertion.kind}): expected ${assertion.expect}, got ${syms.length}`,
       };
     }
     return { ok: true, message: "" };

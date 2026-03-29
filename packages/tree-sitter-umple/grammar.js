@@ -129,6 +129,8 @@ module.exports = grammar({
         $.template_attribute,
         $.active_definition,
         $.trace_statement,
+        $.position_directive,
+        $.position_association_directive,
         ";", // bare semicolons are valid in class/mixset bodies
       ),
 
@@ -441,7 +443,22 @@ module.exports = grammar({
     singleton: ($) => seq("singleton", ";"),
 
     display_color: ($) =>
-      seq(choice("displayColor", "displayColour"), $.string_literal, ";"),
+      seq(choice("displayColor", "displayColour"), choice($.string_literal, $.identifier), ";"),
+
+    // Layout directives: position and position.association
+    // These are layout metadata (not model semantics) — parsed to avoid ERROR nodes
+    // but not indexed, referenced, or offered in completion.
+    position_directive: ($) =>
+      seq("position", $.integer_literal, $.integer_literal, $.integer_literal, $.integer_literal, ";"),
+
+    position_association_directive: ($) =>
+      seq(
+        "position.association",
+        /[^\s;]+/,  // association payload (e.g., "Card__Code:cardId")
+        /-?\d+(\.\d+)?,-?\d+(\.\d+)?/,  // first coordinate pair (supports negative/decimal)
+        /-?\d+(\.\d+)?,-?\d+(\.\d+)?/,  // second coordinate pair
+        ";",
+      ),
 
     key_definition: ($) =>
       seq(

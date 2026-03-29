@@ -1,0 +1,26 @@
+class RealClass {
+  name;
+  Integer age;
+  position 10 20 100 50;
+  displayColour lightgrey;
+}
+
+class RealClass {
+  position 565 182 109 60;
+  position.association RealClass__Other 100,-3 0,56.5;
+  displayColour pink;
+}
+
+class /*@def_other1*/Other {
+  value;
+}
+
+class /*@def_other2*/Other {
+  position 200 300 109 45;
+}
+
+class /*@def_other3*/Other {}
+
+class User {
+  isA /*@ref_other*/Other;
+}
