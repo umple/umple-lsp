@@ -1,0 +1,11 @@
+class Rect {
+  Double height;
+  Double width;
+  Double /*@def_area*/area =
+    Java {height*width} Php {$height*$width}
+}
+
+class Formatter {
+  int /*@def_m1*/m1() Java { return 1; } Php { return 0; }
+  void /*@def_f*/f() { code(); }
+}

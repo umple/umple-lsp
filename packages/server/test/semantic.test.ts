@@ -1910,6 +1910,40 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 52: Multi-language blocks — derived attrs + method bodies with lang tags
+  {
+    name: "52 multi_language: multi-lang derived attrs and methods parse clean",
+    fixtures: ["52_multi_language.ump"],
+    assertions: [
+      {
+        type: "parse_clean",
+        fixture: "52_multi_language.ump",
+      },
+      {
+        type: "symbol_count",
+        fixture: "52_multi_language.ump",
+        name: "area",
+        kind: "attribute",
+        expect: 1,
+      },
+      {
+        type: "symbol_count",
+        fixture: "52_multi_language.ump",
+        name: "m1",
+        kind: "method",
+        expect: 1,
+      },
+      // Single-lang method still works
+      {
+        type: "symbol_count",
+        fixture: "52_multi_language.ump",
+        name: "f",
+        kind: "method",
+        expect: 1,
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

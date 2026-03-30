@@ -40,6 +40,7 @@ module.exports = grammar({
     [$.method_declaration, $.abstract_method_declaration, $.trait_method_signature],
     [$.abstract_method_declaration, $.trait_method_signature, $.visibility],
     [$.abstract_method_declaration, $.trait_method_signature],
+    [$.more_code, $.code_block],
     [$.trait_method_signature, $.visibility],
     [$.method_signature, $.trait_method_signature],
     [$.attribute_declaration, $.state, $.method_declaration, $.method_signature],
@@ -647,8 +648,8 @@ module.exports = grammar({
         choice(
           // Standard form: [= value];
           seq(optional(seq("=", $._value)), ";"),
-          // Derived attribute form: = { expression } (no semicolon)
-          seq("=", $.code_block),
+          // Derived attribute form: = [LangTag] { expression } [LangTag { expr }]* (no semicolon)
+          seq("=", repeat1($.more_code)),
         ),
       ),
 
@@ -859,10 +860,7 @@ module.exports = grammar({
         optional($.param_list),
         ")",
         optional(seq("throws", $.qualified_name, repeat(seq(",", $.qualified_name)))),
-        optional($.identifier), // language tag
-        "{",
-        optional($.code_content),
-        "}",
+        repeat1($.more_code),
       ),
 
     // Java annotation: @Name or @Name("arg") or @Name(key = "val")
