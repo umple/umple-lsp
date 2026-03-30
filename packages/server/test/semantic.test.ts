@@ -1850,6 +1850,33 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 50: top directives + namespace --redefine
+  {
+    name: "50 top_namespace: top directive and namespace --redefine parse clean",
+    fixtures: ["50_top_namespace.ump"],
+    assertions: [
+      {
+        type: "parse_clean",
+        fixture: "50_top_namespace.ump",
+      },
+      // Classes still indexed, top/namespace directives don't pollute
+      {
+        type: "symbol_count",
+        fixture: "50_top_namespace.ump",
+        name: "Day",
+        kind: "class",
+        expect: 1,
+      },
+      {
+        type: "symbol_count",
+        fixture: "50_top_namespace.ump",
+        name: "Other",
+        kind: "class",
+        expect: 1,
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

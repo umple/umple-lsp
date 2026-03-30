@@ -77,6 +77,7 @@ module.exports = grammar({
         $.association_class_definition,
         $.statemachine_definition,
         $.toplevel_code_injection,
+        $.toplevel_extra_code,
         $.strictness_directive,
       ),
 
@@ -84,7 +85,7 @@ module.exports = grammar({
     // NAMESPACE & USE
     // =====================
     namespace_declaration: ($) =>
-      seq("namespace", field("name", $.qualified_name), ";"),
+      seq("namespace", choice(field("name", $.qualified_name), "default"), optional("--redefine"), ";"),
 
     use_statement: ($) =>
       prec.right(
@@ -988,6 +989,17 @@ module.exports = grammar({
         optional(field("operation_source", choice("custom", "generated", "all"))),
         field("operation", $.identifier),
         optional(seq("(", optional($.param_list), ")")),
+        "{",
+        optional($.code_content),
+        "}",
+      ),
+
+    // top ClassName [LangTag] { code } — top-level extra code for a class
+    toplevel_extra_code: ($) =>
+      seq(
+        "top",
+        field("target", $.identifier),
+        optional($.identifier), // optional language tag (e.g., RTCpp)
         "{",
         optional($.code_content),
         "}",

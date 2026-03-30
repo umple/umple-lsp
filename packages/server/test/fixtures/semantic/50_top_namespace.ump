@@ -1,0 +1,15 @@
+namespace com.example;
+
+class Day {}
+
+top Day RTCpp {
+  enum Day { MONDAY=0, FRIDAY=1; }
+}
+
+top Day {
+  enum Day { SUNDAY=2; }
+}
+
+namespace default --redefine;
+
+class Other {}
