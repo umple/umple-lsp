@@ -1833,6 +1833,23 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 49: External class/interface variants
+  {
+    name: "49 external_class: external with semicolon, interface keyword, and body content",
+    fixtures: ["49_external_class.ump"],
+    assertions: [
+      {
+        type: "parse_clean",
+        fixture: "49_external_class.ump",
+      },
+      {
+        type: "goto_def",
+        at: "ref_thread",
+        expect: [{ at: "def_thread" }],
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

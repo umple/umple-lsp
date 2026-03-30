@@ -261,7 +261,15 @@ module.exports = grammar({
     // EXTERNAL DEFINITION
     // =====================
     external_definition: ($) =>
-      seq("external", field("name", $.identifier), "{", "}"),
+      prec.left(seq(
+        "external",
+        optional("interface"),
+        field("name", $.identifier),
+        "{",
+        repeat($._class_content),
+        "}",
+        optional(";"),
+      )),
 
     // =====================
     // ENUM DEFINITION
