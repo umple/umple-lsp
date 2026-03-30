@@ -1877,6 +1877,39 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 51: Java annotations — parsed and ignored, surrounding methods indexed
+  {
+    name: "51 java_annotation: annotations parse clean, methods still indexed",
+    fixtures: ["51_java_annotation.ump"],
+    assertions: [
+      {
+        type: "parse_clean",
+        fixture: "51_java_annotation.ump",
+      },
+      {
+        type: "symbol_count",
+        fixture: "51_java_annotation.ump",
+        name: "toString",
+        kind: "method",
+        expect: 1,
+      },
+      {
+        type: "symbol_count",
+        fixture: "51_java_annotation.ump",
+        name: "prepare",
+        kind: "method",
+        expect: 1,
+      },
+      {
+        type: "symbol_count",
+        fixture: "51_java_annotation.ump",
+        name: "old",
+        kind: "method",
+        expect: 1,
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

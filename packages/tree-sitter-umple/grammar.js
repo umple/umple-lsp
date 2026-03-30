@@ -79,6 +79,7 @@ module.exports = grammar({
         $.toplevel_code_injection,
         $.toplevel_extra_code,
         $.strictness_directive,
+        $.java_annotation,
       ),
 
     // =====================
@@ -156,6 +157,7 @@ module.exports = grammar({
         $.constraint,
         $.association_inline,
         $.state_machine,
+        $.java_annotation,
         $.method_declaration,
         $.abstract_method_declaration,
         $.before_after,
@@ -861,6 +863,15 @@ module.exports = grammar({
         "{",
         optional($.code_content),
         "}",
+      ),
+
+    // Java annotation: @Name or @Name("arg") or @Name(key = "val")
+    // Parsed as standalone class content — semantically ignorable.
+    java_annotation: ($) =>
+      seq(
+        "@",
+        $.identifier,
+        optional(seq("(", optional(/[^)]+/), ")")),
       ),
 
     // Abstract method in class body: [public|protected] abstract [Type] name(params) [throws] ;

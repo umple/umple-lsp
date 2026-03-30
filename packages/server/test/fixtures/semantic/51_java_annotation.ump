@@ -1,0 +1,11 @@
+@SuppressWarnings("deprecation")
+class /*@def_formatter*/Formatter {
+  @Override
+  public String /*@def_tostring*/toString() { return ""; }
+
+  @SuppressWarnings("null")
+  public void /*@def_prepare*/prepare() {}
+
+  @Deprecated
+  void /*@def_old*/old() {}
+}
