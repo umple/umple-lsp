@@ -1,0 +1,15 @@
+req 001dealing {
+  Deal cards to players
+}
+
+req L01-LicenseTypes {
+  Support multiple license types
+}
+
+class /*@def_game*/Game {
+  name;
+  implementsReq R01;
+  implementsReq R01, R02;
+}
+
+implementsReq R03;

@@ -1963,6 +1963,41 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 54: Requirement ids — numeric-leading and hyphenated ids + implementsReq
+  {
+    name: "54 req_ids: numeric and hyphenated req ids + implementsReq parse clean",
+    fixtures: ["54_req_ids.ump"],
+    assertions: [
+      {
+        type: "parse_clean",
+        fixture: "54_req_ids.ump",
+      },
+      {
+        type: "symbol_count",
+        fixture: "54_req_ids.ump",
+        name: "Game",
+        kind: "class",
+        expect: 1,
+      },
+      // Numeric req id indexed as requirement symbol
+      {
+        type: "symbol_count",
+        fixture: "54_req_ids.ump",
+        name: "001dealing",
+        kind: "requirement",
+        expect: 1,
+      },
+      // Hyphenated req id indexed as requirement symbol
+      {
+        type: "symbol_count",
+        fixture: "54_req_ids.ump",
+        name: "L01-LicenseTypes",
+        kind: "requirement",
+        expect: 1,
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

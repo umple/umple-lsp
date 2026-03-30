@@ -81,6 +81,7 @@ module.exports = grammar({
         $.toplevel_extra_code,
         $.strictness_directive,
         $.java_annotation,
+        $.req_implementation,
       ),
 
     // =====================
@@ -298,10 +299,13 @@ module.exports = grammar({
     // =====================
     // REQUIREMENT DEFINITION
     // =====================
+    // Requirement ids can start with digits and contain hyphens: 001dealing, L01-LicenseTypes
+    req_id: ($) => /[a-zA-Z0-9][a-zA-Z0-9_-]*/,
+
     requirement_definition: ($) =>
       seq(
         "req",
-        field("name", $.identifier),
+        field("name", choice($.identifier, $.req_id)),
         optional(field("language", $.req_language)),
         "{",
         optional(field("content", $.req_content)),
@@ -600,8 +604,8 @@ module.exports = grammar({
     req_implementation: ($) =>
       seq(
         "implementsReq",
-        $.identifier,
-        repeat(seq(",", $.identifier)),
+        choice($.identifier, $.req_id),
+        repeat(seq(",", choice($.identifier, $.req_id))),
         ";",
       ),
 

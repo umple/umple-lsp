@@ -19,6 +19,7 @@
 (external_definition name: (identifier) @definition.class)
 (association_definition name: (identifier) @definition.association)
 (requirement_definition name: (identifier) @definition.requirement)
+(requirement_definition name: (req_id) @definition.requirement)
 (mixset_definition name: (identifier) @definition.mixset)
 (association_class_definition name: (identifier) @definition.class)
 (statemachine_definition name: (identifier) @definition.statemachine)
