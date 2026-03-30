@@ -1671,6 +1671,23 @@ const TEST_CASES: TestCase[] = [
         kind: "state",
         expect: 0,
       },
+      // References on recovered SM: definition site found
+      {
+        type: "refs",
+        decl: { name: "status", kind: "statemachine", container: "Door.status" },
+        expectAt: ["def_status"],
+      },
+      // References on recovered state: definition + transition target
+      {
+        type: "refs",
+        decl: { name: "Open", kind: "state", container: "Door.status" },
+        expectAt: ["def_open", "ref_open"],
+      },
+      {
+        type: "refs",
+        decl: { name: "Closed", kind: "state", container: "Door.status" },
+        expectAt: ["def_closed", "ref_closed"],
+      },
     ],
   },
 

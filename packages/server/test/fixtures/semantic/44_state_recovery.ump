@@ -1,7 +1,7 @@
 class Door {
-  status {
-    Open { close -> Closed; }
-    Closed { open -> Open; }
+  /*@def_status*/status {
+    /*@def_open*/Open { close -> /*@ref_closed*/Closed; }
+    /*@def_closed*/Closed { open -> /*@ref_open*/Open; }
   }
   BROKEN GARBAGE
 }
