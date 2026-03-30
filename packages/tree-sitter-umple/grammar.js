@@ -944,9 +944,7 @@ module.exports = grammar({
           repeat(seq(token.immediate("*"), optional(token.immediate(/[a-zA-Z0-9_]+/)))),
         ),
         optional(seq("(", optional($.param_list), ")")),
-        "{",
-        optional($.code_content),
-        "}",
+        repeat1($.more_code),
       ),
 
     // =====================

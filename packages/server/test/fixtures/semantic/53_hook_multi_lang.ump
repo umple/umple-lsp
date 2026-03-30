@@ -1,0 +1,7 @@
+class Person {
+  name;
+  void /*@def_setName*/setName(String n) {}
+  before setName Java { validate(); } Php { $this->validate(); }
+  after setName Java,Php { log(); }
+  before e* { trace(); }
+}

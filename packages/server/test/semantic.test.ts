@@ -1944,6 +1944,25 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 53: Multi-language before/after hooks
+  {
+    name: "53 hook_multi_lang: multi-lang hooks parse clean, method still indexed",
+    fixtures: ["53_hook_multi_lang.ump"],
+    assertions: [
+      {
+        type: "parse_clean",
+        fixture: "53_hook_multi_lang.ump",
+      },
+      {
+        type: "symbol_count",
+        fixture: "53_hook_multi_lang.ump",
+        name: "setName",
+        kind: "method",
+        expect: 1,
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────
