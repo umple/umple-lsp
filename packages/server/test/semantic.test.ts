@@ -1721,6 +1721,54 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 46: Derived attributes — expression body `= { ... }` without semicolon
+  {
+    name: "46 derived_attribute: expression bodies parse clean, attributes indexed",
+    fixtures: ["46_derived_attribute.ump"],
+    assertions: [
+      {
+        type: "parse_clean",
+        fixture: "46_derived_attribute.ump",
+      },
+      {
+        type: "symbol_count",
+        fixture: "46_derived_attribute.ump",
+        name: "fullName",
+        kind: "attribute",
+        expect: 1,
+      },
+      {
+        type: "symbol_count",
+        fixture: "46_derived_attribute.ump",
+        name: "rho",
+        kind: "attribute",
+        expect: 1,
+      },
+      {
+        type: "symbol_count",
+        fixture: "46_derived_attribute.ump",
+        name: "isAdult",
+        kind: "attribute",
+        expect: 1,
+      },
+      // Modifier regression: unique + final on derived form
+      {
+        type: "symbol_count",
+        fixture: "46_derived_attribute.ump",
+        name: "uniqueName",
+        kind: "attribute",
+        expect: 1,
+      },
+      {
+        type: "symbol_count",
+        fixture: "46_derived_attribute.ump",
+        name: "finalVal",
+        kind: "attribute",
+        expect: 1,
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

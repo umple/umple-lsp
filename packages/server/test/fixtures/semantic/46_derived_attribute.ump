@@ -1,0 +1,11 @@
+class Person {
+  firstName;
+  lastName;
+  /*@def_full*/fullName = {firstName + " " + lastName}
+  Float /*@def_rho*/rho = {
+    Math.sqrt(x*x + y*y)
+  }
+  Boolean /*@def_adult*/isAdult = {age >= 18}
+  unique String /*@def_unique*/uniqueName = {firstName + id}
+  final String /*@def_final*/finalVal = {computeIt()}
+}

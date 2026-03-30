@@ -34,6 +34,7 @@ module.exports = grammar({
     [$.attribute_declaration, $.state, $.method_declaration],
     [$.state, $.method_declaration],
     [$.call_expression, $._value],
+    [$.attribute_declaration, $._value],
     [$._class_content, $.active_method],
     [$.active_method, $.attribute_declaration, $.method_declaration, $.emit_method],
     [$.active_method, $.more_code],
@@ -616,10 +617,14 @@ module.exports = grammar({
         optional("final"),
         optional($.attribute_modifier),
         optional(field("type", $.type_name)),
-        optional(seq("[", "]")),  // array slot: Type[] name
+        optional(seq("[", "]")),
         field("name", $.identifier),
-        optional(seq("=", $._value)),
-        ";",
+        choice(
+          // Standard form: [= value];
+          seq(optional(seq("=", $._value)), ";"),
+          // Derived attribute form: = { expression } (no semicolon)
+          seq("=", $.code_block),
+        ),
       ),
 
     // Enumerated attribute: name { Value1, Value2, ... }
