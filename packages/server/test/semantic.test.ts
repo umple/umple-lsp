@@ -1815,6 +1815,24 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 48: Sorted associations
+  {
+    name: "48 sorted_association: sorted modifier on both sides parses clean",
+    fixtures: ["48_sorted_association.ump"],
+    assertions: [
+      {
+        type: "parse_clean",
+        fixture: "48_sorted_association.ump",
+      },
+      // Goto-def on association type still works
+      {
+        type: "goto_def",
+        at: "ref_course",
+        expect: [{ at: "def_course" }],
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

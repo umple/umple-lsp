@@ -683,12 +683,17 @@ module.exports = grammar({
         optional("immutable"),
         $.multiplicity,
         optional(field("left_role", $.identifier)),
+        optional($.sorted_modifier),
         $.arrow,
         $.multiplicity,
         field("right_type", $.identifier),
         optional(field("right_role", $.identifier)),
+        optional($.sorted_modifier),
         ";",
       ),
+
+    sorted_modifier: ($) =>
+      seq("sorted", "{", $.identifier, "}"),
 
     multiplicity: ($) => choice("*", /\d+/, /\d+\.\.\d+/, /\d+\.\.\*/),
 
@@ -712,10 +717,12 @@ module.exports = grammar({
         $.multiplicity,
         field("left_type", $.identifier),
         optional(field("left_role", $.identifier)),
+        optional($.sorted_modifier),
         $.arrow,
         $.multiplicity,
         field("right_type", $.identifier),
         optional(field("right_role", $.identifier)),
+        optional($.sorted_modifier),
         ";",
       ),
 

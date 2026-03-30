@@ -1,0 +1,9 @@
+class /*@def_course*/Course {
+  name;
+  1 -- * Student registrants sorted {id};
+}
+
+class Student {
+  Integer id;
+  * sorted {name} -- 1 /*@ref_course*/Course;
+}
