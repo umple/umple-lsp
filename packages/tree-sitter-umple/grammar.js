@@ -29,10 +29,23 @@ module.exports = grammar({
     [$.enumerated_attribute, $.state_machine],
     [$.enumerated_attribute, $.state_machine, $.state],
     [$.state_machine, $.method_declaration],
+    [$.active_method, $.attribute_declaration, $.method_declaration, $.method_signature, $.emit_method],
+    [$.attribute_declaration, $.method_declaration, $.method_signature, $.emit_method],
+    [$.attribute_declaration, $.method_declaration, $.method_signature],
     [$.attribute_declaration, $.method_declaration, $.emit_method],
     [$.attribute_declaration, $.method_declaration],
+    [$.method_declaration, $.method_signature, $.trait_method_signature],
+    [$.method_declaration, $.abstract_method_declaration],
+    [$.abstract_method_declaration, $.visibility],
+    [$.method_declaration, $.abstract_method_declaration, $.trait_method_signature],
+    [$.abstract_method_declaration, $.trait_method_signature, $.visibility],
+    [$.abstract_method_declaration, $.trait_method_signature],
+    [$.trait_method_signature, $.visibility],
+    [$.method_signature, $.trait_method_signature],
+    [$.attribute_declaration, $.state, $.method_declaration, $.method_signature],
     [$.attribute_declaration, $.state, $.method_declaration],
     [$.state, $.method_declaration],
+    [$.state_machine, $.method_declaration, $.method_signature],
     [$.call_expression, $._value],
     [$.attribute_declaration, $._value],
     [$._class_content, $.active_method],
@@ -143,6 +156,7 @@ module.exports = grammar({
         $.association_inline,
         $.state_machine,
         $.method_declaration,
+        $.abstract_method_declaration,
         $.before_after,
         $.display_color,
         $.key_definition,
@@ -831,6 +845,21 @@ module.exports = grammar({
         "{",
         optional($.code_content),
         "}",
+      ),
+
+    // Abstract method in class body: [public|protected] abstract [Type] name(params) [throws] ;
+    // Per real Umple grammar, only public/protected + abstract is valid (not private, not static).
+    abstract_method_declaration: ($) =>
+      seq(
+        optional(choice("public", "protected")),
+        "abstract",
+        optional(field("return_type", $.type_name)),
+        field("name", $.identifier),
+        "(",
+        optional($.param_list),
+        ")",
+        optional(seq("throws", $.qualified_name, repeat(seq(",", $.qualified_name)))),
+        ";",
       ),
 
     method_signature: ($) =>

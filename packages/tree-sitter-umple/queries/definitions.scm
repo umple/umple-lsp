@@ -32,6 +32,7 @@
 (enumerated_attribute name: (identifier) @definition.attribute)
 (const_declaration name: (identifier) @definition.const)
 (method_declaration name: (identifier) @definition.method)
+(abstract_method_declaration name: (identifier) @definition.method)
 (method_signature name: (identifier) @definition.method)
 (trait_method_signature name: (identifier) @definition.method)
 (state_machine name: (identifier) @definition.statemachine)

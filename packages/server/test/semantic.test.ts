@@ -1769,6 +1769,52 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 47: Abstract methods in classes
+  {
+    name: "47 abstract_method: abstract methods parse clean, indexed as methods",
+    fixtures: ["47_abstract_method.ump"],
+    assertions: [
+      // Note: file intentionally has invalid "void noAbstract();" so parse_clean is not expected
+      {
+        type: "symbol_count",
+        fixture: "47_abstract_method.ump",
+        name: "draw",
+        kind: "method",
+        expect: 1,
+      },
+      {
+        type: "symbol_count",
+        fixture: "47_abstract_method.ump",
+        name: "resize",
+        kind: "method",
+        expect: 1,
+      },
+      {
+        type: "symbol_count",
+        fixture: "47_abstract_method.ump",
+        name: "describe",
+        kind: "method",
+        expect: 1,
+      },
+      // Negative: "void noAbstract();" in class body is NOT a valid method (no abstract keyword)
+      {
+        type: "symbol_count",
+        fixture: "47_abstract_method.ump",
+        name: "noAbstract",
+        kind: "method",
+        expect: 0,
+      },
+      // Negative: "abstract void withBody() {}" is NOT valid (abstract + body)
+      {
+        type: "symbol_count",
+        fixture: "47_abstract_method.ump",
+        name: "withBody",
+        kind: "method",
+        expect: 0,
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

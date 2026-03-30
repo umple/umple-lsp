@@ -1,0 +1,10 @@
+class Shape {
+  abstract void /*@def_draw*/draw();
+  public abstract void /*@def_resize*/resize();
+  protected abstract String /*@def_desc*/describe();
+}
+
+class Invalid {
+  void noAbstract();
+  abstract void withBody() {}
+}
