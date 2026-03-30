@@ -1571,6 +1571,139 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 43: V2a — statemachine recovery from broken files
+  {
+    name: "43 sm_recovery: class-local and top-level SMs recovered from error files",
+    fixtures: ["43_sm_recovery.ump"],
+    assertions: [
+      // Class-local SM recovered
+      {
+        type: "recovered_symbol",
+        fixture: "43_sm_recovery.ump",
+        name: "sm",
+        kind: "statemachine",
+        expectRecovered: true,
+      },
+      // Top-level SM recovered
+      {
+        type: "recovered_symbol",
+        fixture: "43_sm_recovery.ump",
+        name: "GlobalSM",
+        kind: "statemachine",
+        expectRecovered: true,
+      },
+      // Class is also recovered
+      {
+        type: "recovered_symbol",
+        fixture: "43_sm_recovery.ump",
+        name: "A",
+        kind: "class",
+        expectRecovered: true,
+      },
+      // Negative: misparsed "class D {}" becomes empty state_machine — NOT recovered
+      {
+        type: "symbol_count",
+        fixture: "43_sm_recovery.ump",
+        name: "D",
+        kind: "statemachine",
+        expect: 0,
+      },
+      // Positive: realSm with content IS recovered
+      {
+        type: "recovered_symbol",
+        fixture: "43_sm_recovery.ump",
+        name: "realSm",
+        kind: "statemachine",
+        expectRecovered: true,
+      },
+    ],
+  },
+
+  // 44: V2b — depth-1 state recovery, nested states rejected
+  {
+    name: "44 state_recovery: depth-1 states recovered, nested states rejected",
+    fixtures: ["44_state_recovery.ump"],
+    assertions: [
+      // Depth-1 states recovered
+      {
+        type: "recovered_symbol",
+        fixture: "44_state_recovery.ump",
+        name: "Open",
+        kind: "state",
+        expectRecovered: true,
+      },
+      {
+        type: "recovered_symbol",
+        fixture: "44_state_recovery.ump",
+        name: "Closed",
+        kind: "state",
+        expectRecovered: true,
+      },
+      // SM recovered
+      {
+        type: "recovered_symbol",
+        fixture: "44_state_recovery.ump",
+        name: "status",
+        kind: "statemachine",
+        expectRecovered: true,
+      },
+      // Depth-1 states in second SM
+      {
+        type: "recovered_symbol",
+        fixture: "44_state_recovery.ump",
+        name: "Ground",
+        kind: "state",
+        expectRecovered: true,
+      },
+      {
+        type: "recovered_symbol",
+        fixture: "44_state_recovery.ump",
+        name: "Upper",
+        kind: "state",
+        expectRecovered: true,
+      },
+      // Nested state NOT recovered (depth > 1)
+      {
+        type: "symbol_count",
+        fixture: "44_state_recovery.ump",
+        name: "Inner",
+        kind: "state",
+        expect: 0,
+      },
+    ],
+  },
+
+  // 45: Malformed state header — state with ERROR in header is not recovered
+  {
+    name: "45 state_malformed: malformed state header not recovered, clean siblings are",
+    fixtures: ["45_state_malformed.ump"],
+    assertions: [
+      // Clean states recovered
+      {
+        type: "recovered_symbol",
+        fixture: "45_state_malformed.ump",
+        name: "Open",
+        kind: "state",
+        expectRecovered: true,
+      },
+      {
+        type: "recovered_symbol",
+        fixture: "45_state_malformed.ump",
+        name: "Closed",
+        kind: "state",
+        expectRecovered: true,
+      },
+      // Malformed "Closing" with ERROR in header — NOT recovered
+      {
+        type: "symbol_count",
+        fixture: "45_state_malformed.ump",
+        name: "Closing",
+        kind: "state",
+        expect: 0,
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────
@@ -2204,6 +2337,37 @@ async function main() {
       // After a clean edit, existing snapshot exists — preserved symbols are NOT marked recovered
       // (this is the live-edit path, not cold-open)
       if (step3[0]?.recovered) throw new Error("Step 3: X should NOT be recovered (live-edit path has clean snapshot)");
+
+      console.log(`  PASS  ${testName}`);
+      passed++;
+    } catch (e: any) {
+      console.log(`  FAIL  ${testName}: ${e.message}`);
+      failed++;
+    }
+  }
+
+  // ── Direct programmatic test: live-edit state preservation ──────────────
+  // Clean states preserved as non-recovered after broken edit
+  {
+    const testName = "live_edit_state_preservation: clean states stay non-recovered after broken edit";
+    try {
+      const filePath = "/tmp/state_preservation_test.ump";
+      const cleanContent = "class A {\n  sm { Open {} Closed {} }\n}";
+      const brokenContent = "class A {\n  sm { Open {} Closed {} }\n  BROKEN\n}";
+
+      // Step 1: index clean file — states should exist without recovered flag
+      helper.si.indexFile(filePath, cleanContent);
+      const step1 = helper.si.getSymbols({ name: "Open", kind: "state" as any })
+        .filter((s: any) => s.file === filePath);
+      if (step1.length !== 1) throw new Error("Step 1: Open should exist");
+      if (step1[0].recovered) throw new Error("Step 1: Open should NOT be recovered");
+
+      // Step 2: break the file — preserved clean states should stay non-recovered
+      helper.si.indexFile(filePath, brokenContent);
+      const step2 = helper.si.getSymbols({ name: "Open", kind: "state" as any })
+        .filter((s: any) => s.file === filePath);
+      if (step2.length !== 1) throw new Error("Step 2: Open should still exist (preserved)");
+      if (step2[0].recovered) throw new Error("Step 2: Open should NOT be recovered (preserved from clean snapshot)");
 
       console.log(`  PASS  ${testName}`);
       passed++;

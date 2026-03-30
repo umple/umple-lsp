@@ -196,9 +196,39 @@ export class SymbolIndex {
       const RECOVERY_SAFE_KINDS: Set<SymbolKind> = new Set([
         "class", "interface", "trait", "enum",
         "mixset", "attribute", "const", "method",
+        "statemachine", "state",
       ]);
 
-      const liveSymbols = newSymbols.filter((s) => RECOVERY_SAFE_KINDS.has(s.kind));
+      let liveSymbols = newSymbols.filter((s) => RECOVERY_SAFE_KINDS.has(s.kind));
+
+      // Cold-open: filter out bogus symbols that pass normal extraction but
+      // shouldn't be trusted in a broken file:
+      // - empty-body statemachines (misparsed class boundaries)
+      // - nested states (depth > 1) — path ambiguity too high
+      if (!existing) {
+        const SM_CONTENT = new Set(["state", "standalone_transition", "mixset_definition", "trace_statement"]);
+        liveSymbols = liveSymbols.filter((s) => {
+          if (s.kind === "statemachine") {
+            // Reject empty-body SMs
+            const smNode = tree.rootNode.descendantForPosition(
+              { row: s.defLine ?? s.line, column: s.defColumn ?? s.column },
+              { row: s.defEndLine ?? s.line, column: s.defEndColumn ?? s.column },
+            );
+            if (!smNode) return false;
+            for (let ci = 0; ci < smNode.namedChildCount; ci++) {
+              const c = smNode.namedChild(ci);
+              if (c && SM_CONTENT.has(c.type)) return true;
+            }
+            return false;
+          }
+          if (s.kind === "state") {
+            // Reject nested states (depth > 1)
+            return !s.statePath || s.statePath.length <= 1;
+          }
+          return true;
+        });
+      }
+
       const preservedSymbols = existing
         ? existing.symbols.filter((s) => !RECOVERY_SAFE_KINDS.has(s.kind))
         : [];
@@ -1017,6 +1047,43 @@ export class SymbolIndex {
             if (c.type === "ERROR" || c.isError) { hasPostNameError = true; break; }
           }
           if (hasPostNameError) continue;
+        } else if (kind === "statemachine") {
+          // SM recovery: accept if node type is correct, name field exists,
+          // not itself an ERROR node, and body has real SM content.
+          const SM_TYPES = new Set(["state_machine", "statemachine_definition"]);
+          if (!SM_TYPES.has(defNode.type) || defNode.isError) continue;
+          const smNameNode = defNode.childForFieldName("name");
+          if (!smNameNode || smNameNode.type !== "identifier") continue;
+          // Class-local SMs: require resolvable enclosing class
+          if (defNode.type === "state_machine") {
+            const classContainer = this.resolveClassContainer(node);
+            if (!classContainer) continue;
+          }
+          // Require at least one SM-content child to reject bogus empty SMs
+          // (e.g., "class B {}" misparsed as a state_machine inside a broken class)
+          const SM_CONTENT = new Set(["state", "standalone_transition", "mixset_definition", "trace_statement"]);
+          let hasContent = false;
+          for (let ci = 0; ci < defNode.namedChildCount; ci++) {
+            const c = defNode.namedChild(ci);
+            if (c && SM_CONTENT.has(c.type)) { hasContent = true; break; }
+          }
+          if (!hasContent) continue;
+        } else if (kind === "state") {
+          // State recovery (V2b): only depth-1 direct children of a valid SM.
+          if (defNode.type !== "state" || defNode.isError) continue;
+          const stateNameNode = defNode.childForFieldName("name");
+          if (!stateNameNode || stateNameNode.type !== "identifier") continue;
+          // No ERROR in header before `{`
+          let hasHeaderError = false;
+          for (let ci = 0; ci < defNode.childCount; ci++) {
+            const c = defNode.child(ci);
+            if (c.type === "{") break;
+            if (c.type === "ERROR" || c.isError) { hasHeaderError = true; break; }
+          }
+          if (hasHeaderError) continue;
+          // Depth-1 only: statePath must have exactly 1 element
+          const sp = resolveStatePath(stateNameNode);
+          if (sp.length !== 1) continue;
         } else {
           continue;
         }

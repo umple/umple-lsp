@@ -1,0 +1,15 @@
+class A {
+  sm { Open {} Closed {} }
+  BROKEN GARBAGE
+}
+
+statemachine GlobalSM {
+  Init {}
+  Running {}
+}
+BROKEN STUFF
+
+class C {
+  realSm { Active {} }
+BROKEN
+class D {}

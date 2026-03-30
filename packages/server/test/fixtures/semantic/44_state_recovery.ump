@@ -1,0 +1,17 @@
+class Door {
+  status {
+    Open { close -> Closed; }
+    Closed { open -> Open; }
+  }
+  BROKEN GARBAGE
+}
+
+class Elevator {
+  floor {
+    Ground { up -> Upper; }
+    Upper {
+      Inner {}
+    }
+  }
+  BROKEN STUFF
+}

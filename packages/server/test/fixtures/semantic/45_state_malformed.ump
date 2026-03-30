@@ -1,0 +1,8 @@
+class Door {
+  status {
+    Open { close -> Closed; }
+    + BROKEN Closing {}
+    Closed {}
+  }
+  GARBAGE HERE
+}
