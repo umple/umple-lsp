@@ -1,5 +1,5 @@
 trait T1 {
-  sm1 { s1 {} s2 { e1 -> s1; } }
+  sm1 { s1 { e1 -> s2; } s2 {} }
 }
 
 class A {
@@ -17,4 +17,16 @@ class C {
 class D {
   status { on {} off {} }
   isA T1<sm1 as status.on>;
+}
+
+class E {
+  isA T1<sm1.e1(Integer) as event1>;
+}
+
+class F {
+  isA T1<sm1.s1() as end>;
+}
+
+class G {
+  isA T1<+sm1.s1.e1(Integer)>;
 }

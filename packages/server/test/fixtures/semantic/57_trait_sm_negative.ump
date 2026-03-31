@@ -1,0 +1,7 @@
+trait T1 {
+  sm1 { s1 { e1 -> s2; } s2 {} }
+}
+
+class Invalid1 {
+  isA T1<sm1(Integer)>;
+}

@@ -102,11 +102,17 @@ type Assertion =
   | FormatIdempotentAssertion
   | UseGraphRefsAssertion
   | ParseCleanAssertion
+  | ParseHasErrorAssertion
   | SymbolCountAssertion
   | RecoveredSymbolAssertion;
 
 interface ParseCleanAssertion {
   type: "parse_clean";
+  fixture: string;
+}
+
+interface ParseHasErrorAssertion {
+  type: "parse_has_error";
   fixture: string;
 }
 
@@ -2113,6 +2119,18 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 57: Trait SM binding negative — invalid no-prefix event form
+  {
+    name: "57 trait_sm_negative: no-prefix event without as is rejected",
+    fixtures: ["57_trait_sm_negative.ump"],
+    assertions: [
+      {
+        type: "parse_has_error",
+        fixture: "57_trait_sm_negative.ump",
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────
@@ -2544,6 +2562,21 @@ function runAssertion(
       return {
         ok: false,
         message: `parse_clean ${assertion.fixture}: tree has ERROR nodes`,
+      };
+    }
+    return { ok: true, message: "" };
+  }
+
+  if (assertion.type === "parse_has_error") {
+    const fileInfo = files.get(assertion.fixture);
+    if (!fileInfo) return { ok: false, message: `fixture ${assertion.fixture} not found` };
+
+    const tree = helper.si.getTree(fileInfo.path);
+    if (!tree) return { ok: false, message: `parse_has_error ${assertion.fixture}: no tree` };
+    if (!tree.rootNode.hasError) {
+      return {
+        ok: false,
+        message: `parse_has_error ${assertion.fixture}: expected ERROR nodes but tree is clean`,
       };
     }
     return { ok: true, message: "" };

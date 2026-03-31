@@ -1042,12 +1042,27 @@ module.exports = grammar({
     trait_binding: ($) =>
       seq(field("param", $.identifier), "=", field("value", $.qualified_name)),
 
-    // Trait SM operation — Phase 1: simple add/remove operators only
-    // -sm1, +sm2, -sm1.s2, +sm1.s1, -sm.s1.r1
+    // Trait SM operation — Phase 1+2: add/remove operators + event params/rename
     trait_sm_operation: ($) =>
-      seq(
-        choice("-", "+"),
-        $.qualified_name,
+      choice(
+        // Phase 1: -/+ prefix with simple path
+        seq(
+          choice("-", "+"),
+          $.qualified_name,
+          optional(seq("(", optional($.type_list), ")")),  // Phase 2: event params
+        ),
+        // Phase 2: event with params + required rename (no prefix)
+        // Only 1-2 segment paths: sm.e1(Integer) as event1, player.stop() as end
+        // Deeper paths like sm.s1.e1() are compiler-rejected without prefix
+        seq(
+          $.identifier,
+          optional(seq(token.immediate("."), alias(token.immediate(/[a-zA-Z_][a-zA-Z0-9_]*/), $.identifier))),
+          "(",
+          optional($.type_list),
+          ")",
+          "as",
+          $.identifier,
+        ),
       ),
 
     // Trait SM injection: sm1 as sm.s2 (Extending a State)
