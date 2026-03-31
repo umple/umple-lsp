@@ -990,6 +990,9 @@ connection.onDocumentFormatting(async (params) => {
   const tree = symbolIndex.getTree(docPath);
   if (!tree) return [];
 
+  // Do not format files with parse errors — formatting can corrupt broken trees
+  if (tree.rootNode.hasError) return [];
+
   let text = document.getText();
 
   const originalText = text;
@@ -1047,6 +1050,25 @@ connection.onDocumentFormatting(async (params) => {
 
   // Return single whole-document replace
   if (finalText === originalText) return [];
+
+  // Safety net: verify formatting preserved semantics
+  const originalClean = !tree.rootNode.hasError;
+  if (originalClean) {
+    const originalSymbols = symbolIndex.getFileSymbols(docPath);
+    // Temporarily index formatted text to check
+    symbolIndex.updateFile(docPath, finalText);
+    const formattedTree = symbolIndex.getTree(docPath);
+    const formattedClean = formattedTree ? !formattedTree.rootNode.hasError : false;
+    const formattedSymbols = symbolIndex.getFileSymbols(docPath);
+    // Restore original
+    symbolIndex.updateFile(docPath, originalText);
+
+    const check = checkFormatSafety(originalSymbols, formattedSymbols, originalClean, formattedClean);
+    if (!check.safe) {
+      connection.console.warn(`Format safety check failed: ${check.reason}. Edits suppressed.`);
+      return [];
+    }
+  }
 
   const lastLine = document.lineCount - 1;
   const lastChar = (originalText.split("\n")[lastLine] ?? "").length;
@@ -1857,6 +1879,7 @@ function extractJson(text: string): string | null {
 
 // Register custom diagram click-to-select request handlers
 import { registerDiagramRequests } from "./diagramRequests";
+import { checkFormatSafety } from "./formatSafetyNet";
 registerDiagramRequests(connection, {
   symbolIndex,
   isSymbolIndexReady: () => symbolIndexReady,

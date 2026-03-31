@@ -13,6 +13,7 @@ import { buildSemanticCompletionItems } from "../src/completionBuilder";
 import { buildHoverMarkdown } from "../src/hoverBuilder";
 import { buildDocumentSymbolTree } from "../src/documentSymbolBuilder";
 import { expandCompactStates, computeIndentEdits, fixTransitionSpacing, fixAssociationSpacing, normalizeTopLevelBlankLines, reindentEmbeddedCode } from "../src/formatter";
+import { checkFormatSafety } from "../src/formatSafetyNet";
 import { CompletionItem } from "vscode-languageserver/node";
 
 // __dirname at runtime is .test-out/test/, so ../../ reaches the package root
@@ -388,6 +389,9 @@ export class SemanticTestHelper {
     let tree = this.si.getTree(filePath);
     if (!tree) return content.split("\n");
 
+    // Skip formatting for broken files
+    if (tree.rootNode.hasError) return content.split("\n");
+
     // Phase 0: expand compact state blocks
     let text = expandCompactStates(content, tree);
     if (text !== content) {
@@ -427,6 +431,22 @@ export class SemanticTestHelper {
       const end = toOffset(edit.range.end.line, edit.range.end.character);
       result = result.substring(0, start) + edit.newText + result.substring(end);
     }
+
+    // Safety net: verify formatting preserved semantics (same as server.ts)
+    const originalClean = !tree.rootNode.hasError;
+    if (originalClean && result !== content) {
+      const originalSymbols = this.si.getFileSymbols(filePath);
+      this.si.indexFile(filePath, result);
+      const formattedTree = this.si.getTree(filePath);
+      const formattedClean = formattedTree ? !formattedTree.rootNode.hasError : false;
+      const formattedSymbols = this.si.getFileSymbols(filePath);
+      this.si.indexFile(filePath, content); // restore
+      const check = checkFormatSafety(originalSymbols, formattedSymbols, originalClean, formattedClean);
+      if (!check.safe) {
+        throw new Error(`Format safety check failed: ${check.reason}`);
+      }
+    }
+
     return result.split("\n");
   }
 
@@ -441,6 +461,9 @@ export class SemanticTestHelper {
     this.si.indexFile(filePath, content);
     let tree = this.si.getTree(filePath);
     if (!tree) return content;
+
+    // Skip formatting for broken files
+    if (tree.rootNode.hasError) return content;
 
     let text = expandCompactStates(content, tree);
     if (text !== content) {
@@ -475,6 +498,21 @@ export class SemanticTestHelper {
       const end = toOffset(edit.range.end.line, edit.range.end.character);
       result = result.substring(0, start) + edit.newText + result.substring(end);
     }
+
+    // Safety net (same as formatFile)
+    if (result !== content) {
+      const originalSymbols = this.si.getFileSymbols(filePath);
+      this.si.indexFile(filePath, result);
+      const formattedTree = this.si.getTree(filePath);
+      const formattedClean = formattedTree ? !formattedTree.rootNode.hasError : false;
+      const formattedSymbols = this.si.getFileSymbols(filePath);
+      this.si.indexFile(filePath, content);
+      const check = checkFormatSafety(originalSymbols, formattedSymbols, true, formattedClean);
+      if (!check.safe) {
+        throw new Error(`Format safety check failed: ${check.reason}`);
+      }
+    }
+
     return result;
   }
 

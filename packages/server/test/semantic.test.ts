@@ -2839,6 +2839,25 @@ async function main() {
     }
   }
 
+  // ── Direct test: formatting skips broken files ──────────────────────────
+  {
+    const testName = "format_safety: broken input returns unchanged content";
+    try {
+      const filePath = "/tmp/format_broken_test.ump";
+      const brokenContent = "class A {\n  BROKEN INDENT\n  name;\n}";
+      const lines = helper.formatFile(filePath, brokenContent);
+      const formatted = lines.join("\n");
+      if (formatted !== brokenContent) {
+        throw new Error("Broken input was modified by formatter");
+      }
+      console.log(`  PASS  ${testName}`);
+      passed++;
+    } catch (e: any) {
+      console.log(`  FAIL  ${testName}: ${e.message}`);
+      failed++;
+    }
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }
