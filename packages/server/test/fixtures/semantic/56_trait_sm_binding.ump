@@ -1,0 +1,20 @@
+trait T1 {
+  sm1 { s1 {} s2 { e1 -> s1; } }
+}
+
+class A {
+  isA T1<-sm1>;
+}
+
+class B {
+  isA T1<+sm1.s1>;
+}
+
+class C {
+  isA T1<-sm1.s2>;
+}
+
+class D {
+  status { on {} off {} }
+  isA T1<sm1 as status.on>;
+}

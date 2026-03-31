@@ -2093,6 +2093,26 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 56: Trait SM binding Phase 1 — removal and addition operators
+  {
+    name: "56 trait_sm_binding: removal/addition operators parse clean, existing forms preserved",
+    fixtures: ["56_trait_sm_binding.ump"],
+    assertions: [
+      {
+        type: "parse_clean",
+        fixture: "56_trait_sm_binding.ump",
+      },
+      // Existing sm as path form still works
+      {
+        type: "symbol_count",
+        fixture: "56_trait_sm_binding.ump",
+        name: "D",
+        kind: "class",
+        expect: 1,
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

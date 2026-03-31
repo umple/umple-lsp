@@ -41,6 +41,7 @@ module.exports = grammar({
     [$.abstract_method_declaration, $.trait_method_signature, $.visibility],
     [$.abstract_method_declaration, $.trait_method_signature],
     [$.more_code, $.code_block],
+    [$.type_name, $.trait_sm_operation],
     [$.trait_method_signature, $.visibility],
     [$.method_signature, $.trait_method_signature],
     [$.attribute_declaration, $.state, $.method_declaration, $.method_signature],
@@ -1035,11 +1036,19 @@ module.exports = grammar({
     // or a trait SM binding.  trait_binding requires "=", trait_sm_binding
     // requires "as", so <X> unambiguously resolves to type_name.
     _type_argument: ($) =>
-      choice($.trait_binding, $.trait_sm_binding, $.type_name, "?"),
+      choice($.trait_binding, $.trait_sm_binding, $.trait_sm_operation, $.type_name, "?"),
 
     // Trait parameter application: TP = ClassName (inside <> of isA type)
     trait_binding: ($) =>
       seq(field("param", $.identifier), "=", field("value", $.qualified_name)),
+
+    // Trait SM operation — Phase 1: simple add/remove operators only
+    // -sm1, +sm2, -sm1.s2, +sm1.s1, -sm.s1.r1
+    trait_sm_operation: ($) =>
+      seq(
+        choice("-", "+"),
+        $.qualified_name,
+      ),
 
     // Trait SM injection: sm1 as sm.s2 (Extending a State)
     trait_sm_binding: ($) =>
