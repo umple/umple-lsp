@@ -1,4 +1,6 @@
-req 001dealing {
+req /*@def_r01*/R01 { First requirement }
+
+req /*@def_dealing*/001dealing {
   Deal cards to players
 }
 
@@ -8,8 +10,8 @@ req L01-LicenseTypes {
 
 class /*@def_game*/Game {
   name;
-  implementsReq R01;
-  implementsReq R01, R02;
+  implementsReq /*@ref_r01*/R01;
+  implementsReq /*@ref_dealing*/001dealing;
 }
 
 implementsReq R03;

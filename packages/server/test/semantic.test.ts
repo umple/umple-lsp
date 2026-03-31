@@ -1996,6 +1996,35 @@ const TEST_CASES: TestCase[] = [
         kind: "requirement",
         expect: 1,
       },
+      // Goto-def from implementsReq R01 → req R01 definition
+      {
+        type: "goto_def",
+        at: "ref_r01",
+        expect: [{ at: "def_r01" }],
+      },
+      // Goto-def from implementsReq 001dealing → req 001dealing definition
+      {
+        type: "goto_def",
+        at: "ref_dealing",
+        expect: [{ at: "def_dealing" }],
+      },
+      // Definition-side: hover/goto-def on req definition name
+      {
+        type: "hover_output",
+        at: "def_r01",
+        expectContains: ["R01"],
+      },
+      {
+        type: "hover_output",
+        at: "def_dealing",
+        expectContains: ["001dealing"],
+      },
+      // References for R01 include definition + implementsReq use
+      {
+        type: "refs",
+        decl: { name: "R01", kind: "requirement", container: "R01" },
+        expectAt: ["def_r01", "ref_r01"],
+      },
     ],
   },
 ];

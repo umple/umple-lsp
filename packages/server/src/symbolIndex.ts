@@ -572,7 +572,8 @@ export class SymbolIndex {
       !node ||
       (node.type !== "identifier" &&
         node.type !== "use_path" &&
-        node.type !== "filter_pattern")
+        node.type !== "filter_pattern" &&
+        node.type !== "req_id")
     ) {
       return null;
     }

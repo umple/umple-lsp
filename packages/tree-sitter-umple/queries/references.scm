@@ -18,6 +18,8 @@
 (interface_definition name: (identifier) @reference.interface)
 (trait_definition name: (identifier) @reference.trait)
 (enum_definition name: (identifier) @reference.enum)
+(requirement_definition name: (identifier) @reference.requirement)
+(requirement_definition name: (req_id) @reference.requirement)
 
 ; =====================
 ; TRAIT PARAMETER REFERENCES
@@ -102,6 +104,13 @@
 
 ; before/after method hook — method name reference
 (before_after (identifier) @reference.method)
+
+; =====================
+; REQUIREMENT REFERENCES
+; =====================
+; implementsReq R01, R02; — requirement name references
+(req_implementation (identifier) @reference.requirement)
+(req_implementation (req_id) @reference.requirement)
 
 ; =====================
 ; ASSOCIATION TYPE REFERENCES
