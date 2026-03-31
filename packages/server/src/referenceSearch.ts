@@ -85,8 +85,22 @@ export function searchReferences(
       const refKinds = parseCaptureKinds(capture.name);
       if (!refKinds || !refKinds.includes(symKind)) continue;
 
+      // For sorted keys, resolve the owner class from the association and check
+      // it matches the declaration container (with inheritance).
+      if (node.parent?.type === "sorted_modifier" && symKind === "attribute") {
+        const ownerClass = resolveSortedKeyOwner(node);
+        if (ownerClass) {
+          // Owner class must match declaration container or be in its inheritance chain
+          if (!validContainers.has(ownerClass) &&
+              !Array.from(validContainers).some((c) => isInheritanceChain(ownerClass, c, isAGraph))) {
+            continue;
+          }
+        }
+        // Skip the normal container scope check — sorted key uses cross-class resolution
+      }
+
       // For container-scoped kinds, verify enclosing scope matches any valid container
-      if (isContainerScoped && symContainer) {
+      else if (isContainerScoped && symContainer) {
         const enclosing = resolveEnclosingScopeFromNode(node, symKind);
         if (enclosing && !validContainers.has(enclosing)) {
           // Check expanded matches: standalone SM, reuse bindings, inheritance
@@ -231,6 +245,53 @@ function resolveEnclosingScopeFromNode(
   }
 
   return enclosingClass;
+}
+
+/**
+ * Resolve the owner class for a sorted key from the association AST.
+ * Returns the class name that owns the sorted collection, or undefined.
+ */
+function resolveSortedKeyOwner(node: SyntaxNode): string | undefined {
+  const sortedMod = node.parent;
+  if (sortedMod?.type !== "sorted_modifier") return undefined;
+  const assocNode = sortedMod.parent;
+  if (!assocNode) return undefined;
+
+  // Find arrow position to determine left vs right side
+  let arrowPos = -1;
+  for (let i = 0; i < assocNode.childCount; i++) {
+    if (assocNode.child(i).type === "arrow") {
+      arrowPos = assocNode.child(i).startIndex;
+      break;
+    }
+  }
+  if (arrowPos < 0) return undefined;
+
+  const isLeftSide = sortedMod.startIndex < arrowPos;
+
+  if (assocNode.type === "association_inline") {
+    if (isLeftSide) {
+      // Left-side sorted → enclosing class
+      let current: SyntaxNode | null = assocNode.parent;
+      while (current) {
+        if (["class_definition", "trait_definition", "interface_definition",
+             "association_class_definition"].includes(current.type)) {
+          return current.childForFieldName("name")?.text;
+        }
+        current = current.parent;
+      }
+    } else {
+      // Right-side sorted → right_type
+      return assocNode.childForFieldName("right_type")?.text;
+    }
+  } else if (assocNode.type === "association_member") {
+    if (isLeftSide) {
+      return assocNode.childForFieldName("left_type")?.text;
+    } else {
+      return assocNode.childForFieldName("right_type")?.text;
+    }
+  }
+  return undefined;
 }
 
 function resolveTraitSmBindingValueSM(node: SyntaxNode): string | undefined {

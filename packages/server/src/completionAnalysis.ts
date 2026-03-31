@@ -69,7 +69,7 @@ export interface CompletionInfo {
   /** Operators the parser expects at this position. */
   operators: string[];
   /** Which symbol kinds to offer, or null for none. */
-  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | null;
+  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "sorted_attribute" | null;
   /** True if cursor is at a definition-name position (suppress all). */
   isDefinitionName: boolean;
   /** True if cursor is inside a comment. */
@@ -82,6 +82,8 @@ export interface CompletionInfo {
   enclosingStateMachine?: string;
   /** Dotted path prefix for state completions (e.g., ["EEE", "Open"] when typing "EEE.Open."). */
   dottedStatePrefix?: string[];
+  /** Owner class for sorted key completion (resolved from association AST). */
+  sortedKeyOwner?: string;
 }
 
 // ── Main analysis function ──────────────────────────────────────────────────
@@ -255,6 +257,38 @@ export function analyzeCompletion(
     }
   }
 
+  // --- Sorted key owner resolution ---
+  let sortedKeyOwner: string | undefined;
+  if (symbolKinds === "sorted_attribute") {
+    const cursorNode = tree.rootNode.descendantForPosition({ row: line, column });
+    const sortedMod = findAncestorOfType(cursorNode, "sorted_modifier");
+    if (sortedMod) {
+      const assocNode = sortedMod.parent;
+      if (assocNode) {
+        let arrowPos = -1;
+        for (let i = 0; i < assocNode.childCount; i++) {
+          if (assocNode.child(i).type === "arrow") {
+            arrowPos = assocNode.child(i).startIndex;
+            break;
+          }
+        }
+        if (arrowPos >= 0) {
+          const isLeftSide = sortedMod.startIndex < arrowPos;
+          if (assocNode.type === "association_inline") {
+            sortedKeyOwner = isLeftSide
+              ? enclosingClass
+              : assocNode.childForFieldName("right_type")?.text;
+          } else if (assocNode.type === "association_member") {
+            sortedKeyOwner = isLeftSide
+              ? assocNode.childForFieldName("left_type")?.text
+              : assocNode.childForFieldName("right_type")?.text;
+          }
+        }
+      }
+    }
+    if (!sortedKeyOwner) sortedKeyOwner = enclosingClass;
+  }
+
   return {
     keywords,
     operators,
@@ -265,7 +299,17 @@ export function analyzeCompletion(
     enclosingClass,
     enclosingStateMachine,
     dottedStatePrefix,
+    sortedKeyOwner,
   };
+}
+
+function findAncestorOfType(node: any, type: string): any | null {
+  let current = node;
+  while (current) {
+    if (current.type === type) return current;
+    current = current.parent;
+  }
+  return null;
 }
 
 // ── Private helpers ─────────────────────────────────────────────────────────
@@ -366,6 +410,7 @@ function resolveCompletionScope(
   if (kindStr === "own_attribute") return "own_attribute";
   if (kindStr === "guard_attribute_method") return "guard_attribute_method";
   if (kindStr === "trace_attribute_method") return "trace_attribute_method";
+  if (kindStr === "sorted_attribute") return "sorted_attribute";
   if (kindStr === "none") return null;
 
   return kindStr.split("_") as SymbolKind[];

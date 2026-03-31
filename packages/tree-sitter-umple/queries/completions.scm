@@ -18,6 +18,9 @@
 (code_content) @scope.suppress
 (code_block) @scope.suppress
 
+; Sorted key — offer attributes of owner class only
+(sorted_modifier) @scope.sorted_attribute
+
 ; =====================
 ; TOP-LEVEL SCOPES (keywords only)
 ; =====================

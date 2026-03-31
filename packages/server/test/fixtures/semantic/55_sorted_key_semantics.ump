@@ -1,0 +1,33 @@
+class Student {
+  Integer /*@def_id*/id;
+  String name;
+}
+
+class Course {
+  /*@def_course_name*/name;
+  1 -- * Student registrants sorted {/*@ref_id*/id};
+}
+
+class Registration {
+  /*@def_reg_name*/name = {getStudent().getName()}
+  * sorted {/*@ref_reg_name*/name} -- 1 Course;
+}
+
+class Base {
+  Integer /*@def_priority*/priority;
+}
+
+class Derived {
+  isA Base;
+}
+
+class Manager {
+  1 -- * Derived items sorted {/*@ref_inherited*/priority};
+}
+
+class CompletionTest {
+  Integer score;
+  String label;
+  1 -- * Student pupils sorted {/*@comp_right*/i};
+  * sorted {/*@comp_left*/s} -- 1 Course;
+}

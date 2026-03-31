@@ -118,7 +118,8 @@ export function buildSemanticCompletionItems(
   if (
     symbolKinds === "own_attribute" ||
     symbolKinds === "guard_attribute_method" ||
-    symbolKinds === "trace_attribute_method"
+    symbolKinds === "trace_attribute_method" ||
+    symbolKinds === "sorted_attribute"
   ) {
     keywords = keywords.filter((kw) => !CONSTRAINT_BLOCKLIST.has(kw));
   }
@@ -134,7 +135,8 @@ export function buildSemanticCompletionItems(
   if (
     symbolKinds !== "own_attribute" &&
     symbolKinds !== "guard_attribute_method" &&
-    symbolKinds !== "trace_attribute_method"
+    symbolKinds !== "trace_attribute_method" &&
+    symbolKinds !== "sorted_attribute"
   ) {
     for (const op of info.operators) {
       if (!seen.has(op)) {
@@ -179,7 +181,25 @@ export function buildSemanticCompletionItems(
     return items;
   }
 
-  // 5. Guard/trace scope: attributes + methods from enclosing class (with inheritance)
+  // 5. Sorted key scope: attributes of the owner class (with inheritance)
+  if (symbolKinds === "sorted_attribute" && info.sortedKeyOwner) {
+    const symbols = symbolIndex
+      .getSymbols({ container: info.sortedKeyOwner, kind: "attribute", inherited: true })
+      .filter((s) => reachableFiles.has(path.normalize(s.file)));
+    for (const sym of symbols) {
+      if (!seen.has(sym.name)) {
+        seen.add(sym.name);
+        items.push({
+          label: sym.name,
+          kind: symbolKindToCompletionKind("attribute"),
+          detail: "attribute",
+        });
+      }
+    }
+    return items;
+  }
+
+  // 6. Guard/trace scope: attributes + methods from enclosing class (with inheritance)
   if (
     (symbolKinds === "guard_attribute_method" ||
       symbolKinds === "trace_attribute_method") &&

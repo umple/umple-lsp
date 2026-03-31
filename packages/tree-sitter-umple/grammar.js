@@ -709,7 +709,7 @@ module.exports = grammar({
       ),
 
     sorted_modifier: ($) =>
-      seq("sorted", "{", $.identifier, "}"),
+      seq("sorted", "{", optional(field("sort_key", $.identifier)), "}"),
 
     multiplicity: ($) => choice("*", /\d+/, /\d+\.\.\d+/, /\d+\.\.\*/),
 

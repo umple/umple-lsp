@@ -161,6 +161,19 @@ export function resolveSymbolAtPosition(
       break;
     }
 
+    case "sorted_key": {
+      // sorted {key} — resolve attribute against the owner class (with inheritance)
+      symbols = si
+        .getSymbols({
+          name: token.word,
+          kind: ["attribute"],
+          container: token.context.ownerClass,
+          inherited: true,
+        })
+        .filter((s) => reachableFiles.has(path.normalize(s.file)));
+      break;
+    }
+
     case "default_value_qualifier":
     case "normal": {
       // Split kinds into scoped (class/SM-local) and unscoped (global).

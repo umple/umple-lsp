@@ -193,6 +193,40 @@ export function analyzeToken(
     }
   }
 
+  // Sorted association key: sorted {key} — attribute reference against owner class
+  if (
+    node.type === "identifier" &&
+    parent?.type === "sorted_modifier" &&
+    parent.childForFieldName("sort_key")?.id === node.id
+  ) {
+    // Walk up to find the association node and determine the owner class
+    const assocNode = parent.parent;
+    if (assocNode) {
+      let ownerClass: string | undefined;
+      if (assocNode.type === "association_inline") {
+        // Check if sorted_modifier is before or after the arrow
+        const arrow = findChildByType(assocNode, "arrow");
+        if (arrow && parent.startIndex < arrow.startIndex) {
+          // Left-side sorted → owner is the enclosing class
+          ownerClass = enclosingClass;
+        } else {
+          // Right-side sorted → owner is right_type
+          ownerClass = assocNode.childForFieldName("right_type")?.text;
+        }
+      } else if (assocNode.type === "association_member") {
+        const arrow = findChildByType(assocNode, "arrow");
+        if (arrow && parent.startIndex < arrow.startIndex) {
+          ownerClass = assocNode.childForFieldName("left_type")?.text;
+        } else {
+          ownerClass = assocNode.childForFieldName("right_type")?.text;
+        }
+      }
+      if (ownerClass) {
+        context = { type: "sorted_key", ownerClass };
+      }
+    }
+  }
+
   // Default-value qualifier in "Status.ACTIVE"
   if (
     node.type === "identifier" &&
@@ -221,6 +255,14 @@ export function analyzeToken(
 }
 
 // ── Private helpers ─────────────────────────────────────────────────────────
+
+/** Find a direct child node by type (e.g., "arrow" in an association). */
+function findChildByType(node: SyntaxNode, type: string): SyntaxNode | null {
+  for (let i = 0; i < node.childCount; i++) {
+    if (node.child(i).type === type) return node.child(i);
+  }
+  return null;
+}
 
 /**
  * Use references.scm query to determine which symbol kinds are valid

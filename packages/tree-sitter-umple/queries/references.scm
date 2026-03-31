@@ -115,6 +115,9 @@
 (association_member right_type: (identifier) @reference.class_interface_trait)
 (single_association_end type: (identifier) @reference.class_interface_trait)
 
+; Sorted association key — attribute reference against the owning class
+(sorted_modifier sort_key: (identifier) @reference.attribute)
+
 ; =====================
 ; STATE REFERENCES
 ; =====================

@@ -2027,6 +2027,72 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 55: Sorted-key semantics — goto-def, refs, rename for sorted {key}
+  {
+    name: "55 sorted_key_semantics: goto-def resolves to owner-class attribute, refs include sorted use",
+    fixtures: ["55_sorted_key_semantics.ump"],
+    assertions: [
+      {
+        type: "parse_clean",
+        fixture: "55_sorted_key_semantics.ump",
+      },
+      // Right-side: sorted {id} → Student.id
+      {
+        type: "goto_def",
+        at: "ref_id",
+        expect: [{ at: "def_id" }],
+      },
+      // Left-side: sorted {name} → Registration.name (enclosing class)
+      {
+        type: "goto_def",
+        at: "ref_reg_name",
+        expect: [{ at: "def_reg_name" }],
+      },
+      // Inherited: sorted {priority} → Base.priority via Derived isA Base
+      {
+        type: "goto_def",
+        at: "ref_inherited",
+        expect: [{ at: "def_priority" }],
+      },
+      // Refs for Student.id include sorted use site
+      {
+        type: "refs",
+        decl: { name: "id", kind: "attribute", container: "Student" },
+        expectAt: ["def_id", "ref_id"],
+      },
+      // Completion inside sorted { } — left-side offers enclosing class attrs
+      {
+        type: "completion_kinds",
+        at: "comp_left",
+        expect: "sorted_attribute",
+      },
+      // Left-side sorted completion includes enclosing class attrs
+      {
+        type: "completion_includes",
+        at: "comp_left",
+        expect: ["score", "label"],
+      },
+      // Left-side sorted completion excludes non-attribute symbols
+      {
+        type: "completion_excludes",
+        at: "comp_left",
+        expect: ["Student", "Course", "Integer"],
+      },
+      // Right-side sorted completion includes target class attrs (Student)
+      {
+        type: "completion_includes",
+        at: "comp_right",
+        expect: ["id", "name"],
+      },
+      // Right-side sorted completion excludes enclosing class attrs
+      {
+        type: "completion_excludes",
+        at: "comp_right",
+        expect: ["score", "label"],
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────
