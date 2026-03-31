@@ -1,6 +1,6 @@
 {
   "name": "umple-lsp-server",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "Language Server Protocol implementation for the Umple modeling language",
   "main": "out/server.js",
   "bin": {
