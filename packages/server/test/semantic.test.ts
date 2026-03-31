@@ -2131,6 +2131,26 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 58: Formatter — inline compact states not corrupted
+  {
+    name: "58 format_inline_states: inline states preserved, output clean and idempotent",
+    fixtures: ["58_format_inline_states.ump"],
+    assertions: [
+      {
+        type: "format_idempotent",
+        fixture: "58_format_inline_states.ump",
+      },
+      // Formatted output still has Light class (semantic preservation)
+      {
+        type: "symbol_count",
+        fixture: "58_format_inline_states.ump",
+        name: "Light",
+        kind: "class",
+        expect: 1,
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

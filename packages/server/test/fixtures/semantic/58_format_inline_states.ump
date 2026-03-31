@@ -1,0 +1,13 @@
+trait Switchable {
+    sm { on { turnOff -> off; } off { turnOn -> on; } }
+  }
+
+class /*@def_light*/Light {
+  isA Switchable;
+}
+
+class Door {
+  status {
+    Open { close -> Closed; } Closed { open -> Open; }
+  }
+}

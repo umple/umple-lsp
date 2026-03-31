@@ -112,7 +112,14 @@ export function expandCompactStates(text: string, tree: Tree): string {
     const startCol = stateNode.startPosition.column;
     const endCol = stateNode.endPosition.column;
     const line = result.split("\n")[row];
-    const nodeText = line.substring(startCol, endCol);
+
+    // Only expand states that occupy a standalone line:
+    // 1. State starts at the first non-whitespace position (no code before)
+    // 2. Only whitespace follows the state on the same line (no trailing code)
+    // Inline states (e.g., "sm { on { ... } off { ... } }") are left compact.
+    const lineLeadingWs = line.length - line.trimStart().length;
+    if (startCol !== lineLeadingWs) continue;
+    if (line.substring(endCol).trim().length > 0) continue;
 
     // Find the state name
     const nameNode = stateNode.childForFieldName("name");
@@ -128,7 +135,7 @@ export function expandCompactStates(text: string, tree: Tree): string {
       }
     }
 
-    // Compute the indent of the state itself (leading whitespace before it)
+    // Compute the indent from leading whitespace only (safe — verified above)
     const stateIndent = line.substring(0, startCol);
     const childIndent = stateIndent + "  "; // +1 level
 
