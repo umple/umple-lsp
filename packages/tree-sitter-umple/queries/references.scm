@@ -37,7 +37,6 @@
 (enum_value name: (identifier) @reference.enum_value)
 (external_definition name: (identifier) @reference.class)
 (mixset_definition name: (identifier) @reference.mixset)
-(requirement_definition name: (identifier) @reference.requirement)
 (association_class_definition name: (identifier) @reference.class)
 (statemachine_definition name: (identifier) @reference.statemachine)
 (state_machine name: (identifier) @reference.statemachine)
@@ -87,12 +86,6 @@
 ; use without .ump extension references a mixset
 
 (use_statement path: (_) @reference.mixset)
-
-; =====================
-; REQUIREMENT REFERENCES
-; =====================
-
-(req_implementation (identifier) @reference.requirement)
 
 ; =====================
 ; TOP-LEVEL CODE INJECTION
