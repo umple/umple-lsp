@@ -1042,14 +1042,24 @@ module.exports = grammar({
     trait_binding: ($) =>
       seq(field("param", $.identifier), "=", field("value", $.qualified_name)),
 
-    // Trait SM operation — Phase 1+2: add/remove operators + event params/rename
+    // Trait SM operation — Phase 1+2+3: add/remove operators + event params/rename + guards
     trait_sm_operation: ($) =>
       choice(
-        // Phase 1: -/+ prefix with simple path
+        // Phase 1+3: -/+ prefix with path, optional event params, optional guard
         seq(
           choice("-", "+"),
           $.qualified_name,
-          optional(seq("(", optional($.type_list), ")")),  // Phase 2: event params
+          optional(choice(
+            // Event form: (params)[guard]?  e.g. -sm.s1.e4()[cond]
+            seq(
+              "(", optional($.type_list), ")",
+              optional($.trait_sm_guard),
+            ),
+            // Guard-only form: .[guard] or .[]  e.g. -sm.s2.[cond], -sm.s3.[]
+            // token.immediate(".[") avoids ambiguity with qualified_name's token.immediate(".")
+            // — at ".[", the 2-char token wins over the 1-char dot, so qualified_name stops
+            seq(token.immediate(".["), repeat($._constraint_expr), "]"),
+          )),
         ),
         // Phase 2: event with params + required rename (no prefix)
         // Only 1-2 segment paths: sm.e1(Integer) as event1, player.stop() as end
@@ -1064,6 +1074,10 @@ module.exports = grammar({
           $.identifier,
         ),
       ),
+
+    // Trait SM guard: [constraint] or [] (empty guard) — used in trait SM operations
+    trait_sm_guard: ($) =>
+      seq("[", repeat($._constraint_expr), "]"),
 
     // Trait SM injection: sm1 as sm.s2 (Extending a State)
     trait_sm_binding: ($) =>

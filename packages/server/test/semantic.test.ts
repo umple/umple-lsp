@@ -2151,6 +2151,73 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+  // 59: Trait SM binding Phase 3 — guard operations
+  {
+    name: "59 trait_sm_guards: event+guard, auto-transition guard, empty guard parse clean",
+    fixtures: ["59_trait_sm_guards.ump"],
+    assertions: [
+      {
+        type: "parse_clean",
+        fixture: "59_trait_sm_guards.ump",
+      },
+      // All classes indexed
+      {
+        type: "symbol_count",
+        fixture: "59_trait_sm_guards.ump",
+        name: "A",
+        kind: "class",
+        expect: 1,
+      },
+      {
+        type: "symbol_count",
+        fixture: "59_trait_sm_guards.ump",
+        name: "B",
+        kind: "class",
+        expect: 1,
+      },
+      {
+        type: "symbol_count",
+        fixture: "59_trait_sm_guards.ump",
+        name: "C",
+        kind: "class",
+        expect: 1,
+      },
+      {
+        type: "symbol_count",
+        fixture: "59_trait_sm_guards.ump",
+        name: "D",
+        kind: "class",
+        expect: 1,
+      },
+      // Phase 1+2 regression: still parse
+      {
+        type: "symbol_count",
+        fixture: "59_trait_sm_guards.ump",
+        name: "P1",
+        kind: "class",
+        expect: 1,
+      },
+      {
+        type: "symbol_count",
+        fixture: "59_trait_sm_guards.ump",
+        name: "P2",
+        kind: "class",
+        expect: 1,
+      },
+    ],
+  },
+
+  // 60: Trait SM guard negative — guard-only form without prefix is rejected
+  {
+    name: "60 trait_sm_guard_negative: guard-only without prefix produces parse error",
+    fixtures: ["60_trait_sm_guard_negative.ump"],
+    assertions: [
+      {
+        type: "parse_has_error",
+        fixture: "60_trait_sm_guard_negative.ump",
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

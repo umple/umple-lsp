@@ -1,0 +1,18 @@
+// Negative test: guard-only form without prefix should not parse as trait_sm_operation
+// (unprefixed form requires (params) as newName — no guard-only variant)
+
+trait T1 {
+  sm {
+    s1 {
+      [cond] -> s2;
+      e1 -> s2;
+    }
+    s2 { e2 -> s1; }
+  }
+}
+
+// This should parse as a type_name (identifier), not a trait_sm_operation
+// because there is no -/+ prefix. The compiler would report an error.
+class /*@neg_no_prefix*/X {
+  isA T1<sm.s1.[cond]>;
+}
