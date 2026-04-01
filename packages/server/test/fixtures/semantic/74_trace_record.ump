@@ -1,0 +1,19 @@
+class /*@rec_class*/A {
+  /*@rec_name*/name;
+  Integer id;
+
+  // record with string literal (NEW)
+  trace id record "i am tracing id";
+
+  // record with identifier (already worked)
+  trace id record name;
+
+  // Comma-separated + record string
+  trace id, /*@rec_second*/name record "interesting";
+
+  // Combined postfixes
+  trace /*@rec_goto*/name record "test" where [id > 0];
+
+  // Plain trace still works
+  trace name;
+}

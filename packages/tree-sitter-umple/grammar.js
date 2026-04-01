@@ -484,7 +484,7 @@ module.exports = grammar({
     trace_postfix: ($) =>
       choice(
         seq(choice("where", "until", "after", "giving"), $.guard),
-        seq("record", $.identifier),
+        seq("record", choice($.identifier, $.string_literal)),
         seq("logLevel", choice(
           "trace", "debug", "info", "warn", "error", "fatal",
           "all", "finest", "fine", "config", "warning", "severe",

@@ -2783,6 +2783,18 @@ const TEST_CASES: TestCase[] = [
       { type: "goto_def", at: "for_get", expect: [{ at: "for_name" }] },
     ],
   },
+
+  // 74: Trace enhanced record postfix
+  {
+    name: "74 trace_record: string and identifier record payloads parse clean",
+    fixtures: ["74_trace_record.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "74_trace_record.ump" },
+      { type: "symbol_count", fixture: "74_trace_record.ump", name: "A", kind: "class", expect: 1 },
+      { type: "goto_def", at: "rec_goto", expect: [{ at: "rec_name" }] },
+      { type: "goto_def", at: "rec_second", expect: [{ at: "rec_name" }] },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────
