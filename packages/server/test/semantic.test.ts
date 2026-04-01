@@ -2381,11 +2381,11 @@ const TEST_CASES: TestCase[] = [
         at: "comp_unprefix",
         expect: "trait_sm_op_event",
       },
-      // Unprefixed should NOT include state names
+      // Unprefixed should NOT include state names or cross-trait events
       {
         type: "completion_excludes",
         at: "comp_unprefix",
-        expect: ["s1", "s2", "s3", "x1", "x2"],
+        expect: ["s1", "s2", "s3", "x1", "x2", "z9()"],
       },
       // Nested -sm.s1. → children of s1 + event signatures from s1
       {
