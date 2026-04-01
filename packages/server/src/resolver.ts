@@ -122,6 +122,53 @@ export function resolveSymbolAtPosition(
       break;
     }
 
+    case "trait_sm_op": {
+      // trait_sm_operation path (e.g., sm.s1 in isA T1<-sm.s1.e4()[cond]>).
+      // Navigate SM/state path segments into the trait's symbol scope.
+      const { traitName, pathSegments, segmentIndex, isEventSegment } = token.context;
+      if (isEventSegment) break; // event names deferred — return empty
+
+      const smName = pathSegments[0];
+      const smContainer = `${traitName}.${smName}`;
+
+      if (segmentIndex === 0) {
+        // First segment = statemachine in the trait
+        symbols = si
+          .getSymbols({
+            name: smName,
+            kind: ["statemachine"],
+            container: smContainer,
+          })
+          .filter((s) => reachableFiles.has(path.normalize(s.file)));
+      } else {
+        // Later segments = states in the trait's SM
+        symbols = si
+          .getSymbols({
+            name: token.word,
+            kind: ["state"],
+            container: smContainer,
+          })
+          .filter((s) => reachableFiles.has(path.normalize(s.file)));
+
+        // Disambiguate by path depth
+        const precedingStatePath = pathSegments.slice(1, segmentIndex);
+        if (precedingStatePath.length === 0) {
+          symbols = symbols.filter(
+            (s) => !s.statePath || s.statePath.length === 1,
+          );
+        } else if (symbols.length > 1) {
+          const resolved = si.resolveStateInPath(
+            precedingStatePath,
+            token.word,
+            smContainer,
+            reachableFiles,
+          );
+          if (resolved) symbols = [resolved];
+        }
+      }
+      break;
+    }
+
     case "referenced_sm": {
       // referenced_statemachine: "door as status" — try class-local SM first,
       // then fall back to top-level standalone statemachine.

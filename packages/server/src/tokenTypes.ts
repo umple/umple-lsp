@@ -51,7 +51,8 @@ export type LookupContext =
   | { type: "referenced_sm" }
   | { type: "toplevel_injection"; targetClass: string }
   | { type: "default_value_qualifier" }
-  | { type: "sorted_key"; ownerClass: string };
+  | { type: "sorted_key"; ownerClass: string }
+  | { type: "trait_sm_op"; traitName: string; pathSegments: string[]; segmentIndex: number; isEventSegment: boolean };
 
 /** Post-lookup disambiguation for dotted state references in transitions. */
 export interface DottedStateRef {

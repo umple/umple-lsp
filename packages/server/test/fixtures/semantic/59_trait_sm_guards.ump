@@ -1,17 +1,17 @@
-// Phase 3: trait SM guard operations
+// Phase 3: trait SM guard operations + goto-def semantics
 // All forms below are compiler-verified valid syntax
 
 trait T1 {
-  sm {
-    s1 {
+  /*@sm_decl*/sm {
+    /*@s1_decl*/s1 {
       e4 [cond] -> s2;
       e5 -> s2;
     }
-    s2 {
+    /*@s2_decl*/s2 {
       [cond] -> s1;
       e6 -> s1;
     }
-    s3 {
+    /*@s3_decl*/s3 {
       -> s1;
       e7 -> s1;
     }
@@ -19,32 +19,34 @@ trait T1 {
 }
 
 // Phase 3 form 1: event removal with guard
-class /*@guard_event_class*/A {
+class A {
   Boolean cond;
-  isA T1<-sm.s1.e4()[cond]>;
+  isA T1<-/*@op_sm1*/sm./*@op_s1*/s1./*@op_e4*/e4()[cond]>;
 }
 
 // Phase 3 form 2: guarded auto-transition removal
-class /*@guard_auto_class*/B {
+class B {
   Boolean cond;
-  isA T1<-sm.s2.[cond]>;
+  isA T1<-/*@op_sm2*/sm./*@op_s2*/s2.[cond]>;
 }
 
 // Phase 3 form 3: empty guard removal
-class /*@guard_empty_class*/C {
-  isA T1<-sm.s3.[]>;
+class C {
+  isA T1<-/*@op_sm3*/sm./*@op_s3*/s3.[]>;
 }
 
 // Phase 3 with + prefix
-class /*@guard_plus_class*/D {
+class D {
   Boolean cond;
-  isA T1<+sm.s1.e4()[cond]>;
+  isA T1<+/*@op_sm4*/sm./*@op_s1b*/s1.e4()[cond]>;
 }
 
-// Phase 1+2 regression (must still parse)
-class /*@phase1_class*/P1 {
-  isA T1<-sm>;
+// Phase 1 regression
+class P1 {
+  isA T1<-/*@op_sm_p1*/sm>;
 }
-class /*@phase2_class*/P2 {
-  isA T1<sm.e4() as newEvent>;
+
+// Phase 2 regression: sm.e4() as newEvent
+class P2 {
+  isA T1</*@op_sm_p2*/sm./*@op_e4_p2*/e4() as /*@op_newevt*/newEvent>;
 }

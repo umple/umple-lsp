@@ -2151,56 +2151,125 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
-  // 59: Trait SM binding Phase 3 — guard operations
+  // 59: Trait SM guard operations — grammar + goto-def semantics
   {
-    name: "59 trait_sm_guards: event+guard, auto-transition guard, empty guard parse clean",
+    name: "59 trait_sm_guards: parse clean + goto-def for SM/state path segments",
     fixtures: ["59_trait_sm_guards.ump"],
     assertions: [
       {
         type: "parse_clean",
         fixture: "59_trait_sm_guards.ump",
       },
-      // All classes indexed
+      // ── Goto-def: SM name in path → SM declaration in trait ──
+      // Phase 3 form 1: -sm.s1.e4()[cond] → sm
+      {
+        type: "goto_def",
+        at: "op_sm1",
+        expect: [{ at: "sm_decl" }],
+      },
+      // Phase 3 form 2: -sm.s2.[cond] → sm
+      {
+        type: "goto_def",
+        at: "op_sm2",
+        expect: [{ at: "sm_decl" }],
+      },
+      // Phase 3 form 3: -sm.s3.[] → sm
+      {
+        type: "goto_def",
+        at: "op_sm3",
+        expect: [{ at: "sm_decl" }],
+      },
+      // Phase 3 with + prefix
+      {
+        type: "goto_def",
+        at: "op_sm4",
+        expect: [{ at: "sm_decl" }],
+      },
+      // Phase 1: -sm → sm
+      {
+        type: "goto_def",
+        at: "op_sm_p1",
+        expect: [{ at: "sm_decl" }],
+      },
+      // Phase 2: sm.e4() as newEvent → sm
+      {
+        type: "goto_def",
+        at: "op_sm_p2",
+        expect: [{ at: "sm_decl" }],
+      },
+      // ── Goto-def: state name in path → state declaration in trait ──
+      // Phase 3 form 1: s1
+      {
+        type: "goto_def",
+        at: "op_s1",
+        expect: [{ at: "s1_decl" }],
+      },
+      // Phase 3 form 2: s2
+      {
+        type: "goto_def",
+        at: "op_s2",
+        expect: [{ at: "s2_decl" }],
+      },
+      // Phase 3 form 3: s3
+      {
+        type: "goto_def",
+        at: "op_s3",
+        expect: [{ at: "s3_decl" }],
+      },
+      // Phase 3 + prefix: s1
+      {
+        type: "goto_def",
+        at: "op_s1b",
+        expect: [{ at: "s1_decl" }],
+      },
+      // ── Goto-def empty: event names + "as" target → deferred ──
+      {
+        type: "goto_def_empty",
+        at: "op_e4",
+      },
+      {
+        type: "goto_def_empty",
+        at: "op_e4_p2",
+      },
+      {
+        type: "goto_def_empty",
+        at: "op_newevt",
+      },
+      // ── Refs regression: trait SM op sites must NOT appear in refs ──
+      {
+        type: "refs_exclude",
+        decl: { name: "sm", kind: "statemachine", container: "T1.sm" },
+        excludeAt: ["op_sm1", "op_sm2", "op_sm3", "op_sm4", "op_sm_p1", "op_sm_p2"],
+      },
+    ],
+  },
+
+  // 61: Formatter — auto-transition spacing must not overlap indent edits
+  {
+    name: "61 format_auto_transition: auto-transitions preserve indentation and target",
+    fixtures: ["61_format_auto_transition.ump"],
+    assertions: [
+      // Formatted output is idempotent (no overlapping edits)
+      {
+        type: "format_idempotent",
+        fixture: "61_format_auto_transition.ump",
+      },
+      // Auto-transition lines keep "-> target;" with correct indentation
+      {
+        type: "format_output",
+        fixture: "61_format_auto_transition.ump",
+        expectLines: [
+          { line: 5, text: "      e1 -> s2;" },    // normalized spacing
+          { line: 6, text: "      -> s2;" },         // auto-transition preserved
+          { line: 10, text: "      e2 -> s1;" },     // normalized spacing
+          { line: 13, text: "      -> s1;" },         // auto-transition preserved
+        ],
+      },
+      // Semantic preservation: class A still indexed
       {
         type: "symbol_count",
-        fixture: "59_trait_sm_guards.ump",
+        fixture: "61_format_auto_transition.ump",
         name: "A",
-        kind: "class",
-        expect: 1,
-      },
-      {
-        type: "symbol_count",
-        fixture: "59_trait_sm_guards.ump",
-        name: "B",
-        kind: "class",
-        expect: 1,
-      },
-      {
-        type: "symbol_count",
-        fixture: "59_trait_sm_guards.ump",
-        name: "C",
-        kind: "class",
-        expect: 1,
-      },
-      {
-        type: "symbol_count",
-        fixture: "59_trait_sm_guards.ump",
-        name: "D",
-        kind: "class",
-        expect: 1,
-      },
-      // Phase 1+2 regression: still parse
-      {
-        type: "symbol_count",
-        fixture: "59_trait_sm_guards.ump",
-        name: "P1",
-        kind: "class",
-        expect: 1,
-      },
-      {
-        type: "symbol_count",
-        fixture: "59_trait_sm_guards.ump",
-        name: "P2",
         kind: "class",
         expect: 1,
       },

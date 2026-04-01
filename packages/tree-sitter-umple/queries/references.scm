@@ -34,6 +34,9 @@
 ; param references trait-side statemachine; value path references class-side SM/state
 (trait_sm_binding param: (identifier) @reference.statemachine)
 (trait_sm_binding value: (qualified_name (identifier) @reference.statemachine_state))
+; NOTE: trait_sm_operation identifiers are NOT captured here — goto-def is handled
+; entirely by tokenAnalysis.ts context detection. Adding a capture here would widen
+; refs/rename scope, which is deferred for trait SM operations.
 (enum_value name: (identifier) @reference.enum_value)
 (external_definition name: (identifier) @reference.class)
 (mixset_definition name: (identifier) @reference.mixset)

@@ -171,6 +171,104 @@ export function analyzeToken(
     }
   }
 
+  // trait_sm_operation path: isA T1<-sm.s1.e4()[cond]>
+  if (
+    node.type === "identifier" &&
+    parent?.type === "qualified_name" &&
+    parent.parent?.type === "trait_sm_operation"
+  ) {
+    const opNode = parent.parent;
+    // Extract path segments and cursor index
+    const segments: string[] = [];
+    let idx = -1;
+    for (let i = 0; i < parent.namedChildCount; i++) {
+      const child = parent.namedChild(i);
+      if (child?.type === "identifier") {
+        if (child.id === node.id) idx = segments.length;
+        segments.push(child.text);
+      }
+    }
+    // Determine if last segment is an event (followed by "(")
+    const hasEventParams = opNode.children.some((c: { type: string }) => c.type === "(");
+    const isLastSegment = idx === segments.length - 1;
+    const isEventSegment = isLastSegment && hasEventParams;
+
+    // Find enclosing trait name from isA → type_name → qualified_name
+    let traitName = "";
+    const typeName = opNode.parent; // type_name containing the trait_sm_operation
+    if (typeName?.type === "type_name") {
+      const qn = typeName.childForFieldName("name") ?? typeName.namedChild(0);
+      if (qn?.type === "qualified_name") {
+        const lastId = qn.namedChild(qn.namedChildCount - 1);
+        if (lastId?.type === "identifier") traitName = lastId.text;
+      }
+    }
+
+    if (idx >= 0 && traitName) {
+      context = { type: "trait_sm_op", traitName, pathSegments: segments, segmentIndex: idx, isEventSegment };
+      if (isEventSegment) {
+        kinds = null; // event → deferred, no goto-def
+      } else {
+        kinds = idx === 0 ? ["statemachine"] : ["state"];
+      }
+    }
+  }
+
+  // trait_sm_operation Phase 2 (unprefixed): isA T1<sm.e4() as newEvent>
+  // Identifiers are direct children of trait_sm_operation (no qualified_name wrapper).
+  // First identifier = SM name (navigable), second = event (deferred), last after "as" = new name (deferred).
+  if (
+    node.type === "identifier" &&
+    parent?.type === "trait_sm_operation" &&
+    context.type === "normal" // not already handled by qualified_name branch
+  ) {
+    const opNode = parent;
+    // Collect identifier children before "as" keyword
+    const identifiers: { id: number; text: string }[] = [];
+    let afterAs = false;
+    let isAfterAs = false;
+    for (let i = 0; i < opNode.childCount; i++) {
+      const child = opNode.child(i);
+      if (!child) continue;
+      if (child.type === "as") { afterAs = true; continue; }
+      if (child.type === "identifier") {
+        if (afterAs) { isAfterAs = child.id === node.id; continue; }
+        identifiers.push({ id: child.id, text: child.text });
+      }
+    }
+
+    if (!isAfterAs) {
+      let idx = identifiers.findIndex((id) => id.id === node.id);
+      const segments = identifiers.map((id) => id.text);
+      // First = SM name, rest = event (has parens)
+      const hasEventParams = opNode.children.some((c: { type: string }) => c.type === "(");
+
+      let traitName = "";
+      const typeName = opNode.parent;
+      if (typeName?.type === "type_name") {
+        const qn = typeName.childForFieldName("name") ?? typeName.namedChild(0);
+        if (qn?.type === "qualified_name") {
+          const lastId = qn.namedChild(qn.namedChildCount - 1);
+          if (lastId?.type === "identifier") traitName = lastId.text;
+        }
+      }
+
+      if (idx >= 0 && traitName) {
+        const isLastSegment = idx === segments.length - 1;
+        const isEventSegment = isLastSegment && hasEventParams;
+        context = { type: "trait_sm_op", traitName, pathSegments: segments, segmentIndex: idx, isEventSegment };
+        if (isEventSegment) {
+          kinds = null;
+        } else {
+          kinds = idx === 0 ? ["statemachine"] : ["state"];
+        }
+      }
+    } else {
+      // "as newName" — deferred, return no kinds
+      kinds = null;
+    }
+  }
+
   // referenced_statemachine: "door as status"
   if (
     node.type === "identifier" &&
