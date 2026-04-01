@@ -1,0 +1,3 @@
+// Invalid: prefixed SM rename with visibility — compiler rejects
+trait T1 { sm1 { s1 {} } }
+class A { isA T1<+sm1 as private mach1>; }

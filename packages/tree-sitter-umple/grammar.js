@@ -1156,6 +1156,8 @@ module.exports = grammar({
             ),
             // Guard-only form: .[guard] or .[]  e.g. -sm.s2.[cond], -sm.s3.[]
             seq(token.immediate(".["), repeat($._constraint_expr), "]"),
+            // Bare SM rename: +sm1 as mach1 (no params, no visibility)
+            seq("as", $.identifier),
           )),
         ),
         // Phase 2: event with params + required rename (no prefix)

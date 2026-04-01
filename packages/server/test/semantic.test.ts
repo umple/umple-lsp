@@ -2901,6 +2901,25 @@ const TEST_CASES: TestCase[] = [
       { type: "parse_has_error", fixture: "84_trait_rename_negative.ump" },
     ],
   },
+
+  // 85: Prefixed SM rename
+  {
+    name: "85 prefixed_sm_rename: +sm1 as mach1 parses clean",
+    fixtures: ["85_prefixed_sm_rename.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "85_prefixed_sm_rename.ump" },
+      { type: "symbol_count", fixture: "85_prefixed_sm_rename.ump", name: "C1", kind: "class", expect: 1 },
+    ],
+  },
+
+  // 86: Negative — prefixed SM rename with visibility rejected
+  {
+    name: "86 prefixed_sm_rename_neg: +sm1 as private mach1 produces parse error",
+    fixtures: ["86_prefixed_sm_rename_negative.ump"],
+    assertions: [
+      { type: "parse_has_error", fixture: "86_prefixed_sm_rename_negative.ump" },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────
