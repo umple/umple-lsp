@@ -389,6 +389,7 @@ function buildTraitSmOpItems(
   ) {
     const events = symbolIndex.getEventSignatures(
       traitFile,
+      ctx.traitName,
       ctx.smName,
       symbolKinds === "trait_sm_op_event" ? undefined : ctx.statePath,
     );

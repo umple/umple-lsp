@@ -650,6 +650,7 @@ export class SymbolIndex {
    */
   getEventSignatures(
     traitFile: string,
+    traitName: string,
     smName: string,
     statePath?: string[],
   ): { name: string; params: string[]; label: string }[] {
@@ -694,20 +695,29 @@ export class SymbolIndex {
       }
     };
 
-    // Walk tree to find the SM, then the target state(s)
-    const walkToSm = (node: any): any => {
-      if (
-        (node.type === "state_machine" || node.type === "statemachine_definition") &&
-        node.childForFieldName("name")?.text === smName
-      ) return node;
-      for (let i = 0; i < node.childCount; i++) {
-        const found = walkToSm(node.child(i));
-        if (found) return found;
+    // Walk tree to find the specific trait, then the SM within it
+    let traitNode: any = null;
+    const walkToTrait = (node: any) => {
+      if (node.type === "trait_definition" && node.childForFieldName("name")?.text === traitName) {
+        traitNode = node;
+        return;
       }
-      return null;
+      for (let i = 0; i < node.childCount && !traitNode; i++) walkToTrait(node.child(i));
     };
+    walkToTrait(tree.rootNode);
+    if (!traitNode) return [];
 
-    const smNode = walkToSm(tree.rootNode);
+    let smNode: any = null;
+    for (let i = 0; i < traitNode.namedChildCount; i++) {
+      const child = traitNode.namedChild(i);
+      if (
+        (child?.type === "state_machine" || child?.type === "statemachine_definition") &&
+        child.childForFieldName("name")?.text === smName
+      ) {
+        smNode = child;
+        break;
+      }
+    }
     if (!smNode) return [];
 
     if (!statePath || statePath.length === 0) {

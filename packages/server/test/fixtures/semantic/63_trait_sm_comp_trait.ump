@@ -1,3 +1,11 @@
+// T2 defined BEFORE T1 to test trait-scoped event extraction
+// (must not leak z9 into T1's completion)
+trait T2 {
+  sm {
+    wrong { z9 -> wrong; }
+  }
+}
+
 trait T1 {
   sm {
     s1 {

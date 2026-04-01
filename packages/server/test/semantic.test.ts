@@ -2402,7 +2402,7 @@ const TEST_CASES: TestCase[] = [
       {
         type: "completion_excludes",
         at: "comp_nested",
-        expect: ["e3()"],
+        expect: ["e3()", "z9()"],
       },
       {
         type: "completion_excludes",
