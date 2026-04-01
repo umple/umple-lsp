@@ -34,9 +34,11 @@
 ; param references trait-side statemachine; value path references class-side SM/state
 (trait_sm_binding param: (identifier) @reference.statemachine)
 (trait_sm_binding value: (qualified_name (identifier) @reference.statemachine_state))
-; NOTE: trait_sm_operation identifiers are NOT captured here — goto-def is handled
-; entirely by tokenAnalysis.ts context detection. Adding a capture here would widen
-; refs/rename scope, which is deferred for trait SM operations.
+; Trait SM operation: isA T<-sm.s1.e4()[cond]> — path refs trait-side SM/state
+; Two captures for both AST shapes; referenceSearch.ts post-filters to exclude
+; event segments, guard content, and "as newName" targets.
+(trait_sm_operation (qualified_name (identifier) @reference.statemachine_state))
+(trait_sm_operation (identifier) @reference.statemachine_state)
 (enum_value name: (identifier) @reference.enum_value)
 (external_definition name: (identifier) @reference.class)
 (mixset_definition name: (identifier) @reference.mixset)

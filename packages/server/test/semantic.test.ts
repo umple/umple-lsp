@@ -2235,12 +2235,36 @@ const TEST_CASES: TestCase[] = [
         type: "goto_def_empty",
         at: "op_newevt",
       },
-      // ── Refs regression: trait SM op sites must NOT appear in refs ──
+      // ── V2 Refs: trait SM op sites now participate in refs ──
+      // SM refs include all op_sm sites
       {
-        type: "refs_exclude",
+        type: "refs",
         decl: { name: "sm", kind: "statemachine", container: "T1.sm" },
-        excludeAt: ["op_sm1", "op_sm2", "op_sm3", "op_sm4", "op_sm_p1", "op_sm_p2"],
+        expectAt: ["sm_decl", "op_sm1", "op_sm2", "op_sm3", "op_sm4", "op_sm_p1", "op_sm_p2"],
       },
+      // State s1 refs include op_s1 sites
+      {
+        type: "refs",
+        decl: { name: "s1", kind: "state", container: "T1.sm" },
+        expectAt: ["s1_decl", "op_s1", "op_s1b"],
+      },
+      // State s2 refs include op_s2 site
+      {
+        type: "refs",
+        decl: { name: "s2", kind: "state", container: "T1.sm" },
+        expectAt: ["s2_decl", "op_s2"],
+      },
+      // State s3 refs include op_s3 site
+      {
+        type: "refs",
+        decl: { name: "s3", kind: "state", container: "T1.sm" },
+        expectAt: ["s3_decl", "op_s3"],
+      },
+      // Note: refs_exclude for event/guard/as markers not feasible here because
+      // the test helper uses line-only matching and all markers share lines with
+      // valid refs. Excluded segments are verified by: (1) name mismatch filters
+      // them out (e4 !== sm), (2) getTraitSmOpSegmentInfo() returns undefined for
+      // events/guards/as, and (3) programmatic verification above.
     ],
   },
 

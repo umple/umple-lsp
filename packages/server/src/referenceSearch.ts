@@ -129,6 +129,29 @@ export function searchReferences(
             valSegIdx !== sym.statePath.length) continue;
       }
 
+      // For trait_sm_operation paths, filter by segment position and trait scope.
+      // getTraitSmOpSegmentInfo() returns undefined for excluded segments (events,
+      // guard content, "as newName") — those are silently skipped.
+      const traitSmOp = getTraitSmOpSegmentInfo(node);
+      if (traitSmOp !== undefined) {
+        // Kind must match segment position
+        if (traitSmOp.segmentIndex === 0 && symKind !== "statemachine") continue;
+        if (traitSmOp.segmentIndex > 0 && symKind !== "state") continue;
+        // Trait-side container check: declaration must belong to this trait's SM
+        const expectedContainer = `${traitSmOp.traitName}.${traitSmOp.pathSegments[0]}`;
+        if (!validContainers.has(expectedContainer)) continue;
+        // State depth check
+        if (symKind === "state" && sym.statePath &&
+            traitSmOp.segmentIndex !== sym.statePath.length) continue;
+      } else if (
+        // If getTraitSmOpSegmentInfo returned undefined but node IS inside trait_sm_operation,
+        // it's an excluded segment (event, guard, "as") — skip it
+        node.parent?.type === "trait_sm_operation" ||
+        (node.parent?.type === "qualified_name" && node.parent?.parent?.type === "trait_sm_operation")
+      ) {
+        continue;
+      }
+
       // For nested states, disambiguate by path context
       if (symKind === "state" && sym.statePath && sym.statePath.length >= 1) {
         const pathCtx = extractPathContextFromNode(node);
@@ -138,6 +161,13 @@ export function searchReferences(
             node.parent?.parent?.type === "trait_sm_binding" &&
             node.parent?.parent?.childForFieldName("value")?.id ===
               node.parent?.id
+          ) {
+            preceding = preceding.slice(1);
+          }
+          // trait_sm_operation: first segment is SM name, strip it for state path matching
+          if (
+            node.parent?.parent?.type === "trait_sm_operation" ||
+            node.parent?.type === "trait_sm_operation"
           ) {
             preceding = preceding.slice(1);
           }
@@ -326,6 +356,101 @@ function getTraitSmBindingValueSegmentIndex(node: SyntaxNode): number | undefine
     }
   }
   return undefined;
+}
+
+interface TraitSmOpInfo {
+  segmentIndex: number;
+  isEventSegment: boolean;
+  traitName: string;
+  pathSegments: string[];
+}
+
+/**
+ * Determine if a node inside trait_sm_operation is a safe SM/state path segment.
+ * Returns undefined for guard content, event segments, and "as newName" targets.
+ */
+function getTraitSmOpSegmentInfo(node: SyntaxNode): TraitSmOpInfo | undefined {
+  const parent = node.parent;
+  if (!parent) return undefined;
+
+  let opNode: SyntaxNode;
+
+  // Shape 1: identifier inside qualified_name under trait_sm_operation
+  if (parent.type === "qualified_name" && parent.parent?.type === "trait_sm_operation") {
+    opNode = parent.parent;
+    const segments: string[] = [];
+    let idx = -1;
+    for (let i = 0; i < parent.namedChildCount; i++) {
+      const child = parent.namedChild(i);
+      if (child?.type === "identifier") {
+        if (child.id === node.id) idx = segments.length;
+        segments.push(child.text);
+      }
+    }
+    if (idx < 0) return undefined;
+
+    const hasEventParams = opNode.children.some((c: SyntaxNode) => c.type === "(");
+    const isLastSegment = idx === segments.length - 1;
+    const isEventSegment = isLastSegment && hasEventParams;
+    if (isEventSegment) return undefined; // event — excluded
+
+    const traitName = resolveTraitNameFromOp(opNode);
+    if (!traitName) return undefined;
+
+    return { segmentIndex: idx, isEventSegment: false, traitName, pathSegments: segments };
+  }
+
+  // Shape 2: direct-child identifier of trait_sm_operation
+  if (parent.type === "trait_sm_operation") {
+    opNode = parent;
+
+    // If operation has a qualified_name child, this identifier is guard content
+    if (opNode.namedChildren.some((c: SyntaxNode) => c.type === "qualified_name")) {
+      return undefined;
+    }
+
+    // Phase 2 unprefixed form: collect identifiers before "as"
+    const identifiers: { id: number; text: string }[] = [];
+    let afterAs = false;
+    for (let i = 0; i < opNode.childCount; i++) {
+      const child = opNode.child(i);
+      if (!child) continue;
+      if (child.type === "as") { afterAs = true; continue; }
+      if (child.type === "identifier") {
+        if (afterAs) {
+          // After "as" — excluded (new name)
+          if (child.id === node.id) return undefined;
+          continue;
+        }
+        identifiers.push({ id: child.id, text: child.text });
+      }
+    }
+
+    const idx = identifiers.findIndex((id) => id.id === node.id);
+    if (idx < 0) return undefined;
+
+    const segments = identifiers.map((id) => id.text);
+    const hasEventParams = opNode.children.some((c: SyntaxNode) => c.type === "(");
+    const isLastSegment = idx === segments.length - 1;
+    if (isLastSegment && hasEventParams) return undefined; // event — excluded
+
+    const traitName = resolveTraitNameFromOp(opNode);
+    if (!traitName) return undefined;
+
+    return { segmentIndex: idx, isEventSegment: false, traitName, pathSegments: segments };
+  }
+
+  return undefined;
+}
+
+/** Extract the trait name from trait_sm_operation's enclosing type_name. */
+function resolveTraitNameFromOp(opNode: SyntaxNode): string | undefined {
+  const typeName = opNode.parent; // type_name
+  if (typeName?.type !== "type_name") return undefined;
+  const qn = typeName.childForFieldName("name") ?? typeName.namedChild(0);
+  if (qn?.type !== "qualified_name") return undefined;
+  const lastId = qn.namedChild(qn.namedChildCount - 1);
+  return lastId?.type === "identifier" ? lastId.text : undefined;
 }
 
 function isInheritanceChain(
