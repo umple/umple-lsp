@@ -124,6 +124,52 @@ export function buildSemanticCompletionItems(
     return buildTraitSmOpItems(info, symbolKinds, symbolIndex, reachableFiles);
   }
 
+  // Trace prefix completion — class-scoped, symbol-only, no keywords
+  if (symbolKinds === "trace_state" && info.enclosingClass) {
+    const items: CompletionItem[] = [];
+    const seen = new Set<string>();
+    // States from all SMs in the enclosing class
+    const symbols = symbolIndex
+      .getSymbols({ kind: "state" })
+      .filter((s) => s.container?.startsWith(info.enclosingClass + "."))
+      .filter((s) => reachableFiles.has(path.normalize(s.file)));
+    for (const sym of symbols) {
+      if (!seen.has(sym.name)) {
+        seen.add(sym.name);
+        items.push({ label: sym.name, kind: symbolKindToCompletionKind("state"), detail: "state" });
+      }
+    }
+    return items;
+  }
+  if (symbolKinds === "trace_method" && info.enclosingClass) {
+    const items: CompletionItem[] = [];
+    const seen = new Set<string>();
+    const symbols = symbolIndex
+      .getSymbols({ kind: "method", container: info.enclosingClass, inherited: true })
+      .filter((s) => reachableFiles.has(path.normalize(s.file)));
+    for (const sym of symbols) {
+      if (!seen.has(sym.name)) {
+        seen.add(sym.name);
+        items.push({ label: sym.name, kind: symbolKindToCompletionKind("method"), detail: "method" });
+      }
+    }
+    return items;
+  }
+  if (symbolKinds === "trace_attribute" && info.enclosingClass) {
+    const items: CompletionItem[] = [];
+    const seen = new Set<string>();
+    const symbols = symbolIndex
+      .getSymbols({ kind: "attribute", container: info.enclosingClass, inherited: true })
+      .filter((s) => reachableFiles.has(path.normalize(s.file)));
+    for (const sym of symbols) {
+      if (!seen.has(sym.name)) {
+        seen.add(sym.name);
+        items.push({ label: sym.name, kind: symbolKindToCompletionKind("attribute"), detail: "attribute" });
+      }
+    }
+    return items;
+  }
+
   // 1. Keywords from LookaheadIterator (filtered in constraint contexts)
   let keywords = info.keywords;
   if (

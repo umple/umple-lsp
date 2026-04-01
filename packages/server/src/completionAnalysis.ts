@@ -69,7 +69,7 @@ export interface CompletionInfo {
   /** Operators the parser expects at this position. */
   operators: string[];
   /** Which symbol kinds to offer, or null for none. */
-  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | null;
+  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "trace_state" | "trace_method" | "trace_attribute" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | null;
   /** True if cursor is at a definition-name position (suppress all). */
   isDefinitionName: boolean;
   /** True if cursor is inside a comment. */
@@ -190,8 +190,45 @@ export function analyzeCompletion(
   }
 
   // --- Trace completion fallback for zero-identifier case ("trace |") ---
-  if (prevLeaf?.type === "trace" && prevLeaf.parent?.type === "ERROR") {
+  // Trace entity fallbacks for zero-identifier recovery
+  const TRACE_PREFIX_KEYWORDS = new Set(["trace", "set", "get", "in", "out", "entry", "exit", "cardinality", "add", "remove"]);
+  if (prevLeaf && TRACE_PREFIX_KEYWORDS.has(prevLeaf.type)) {
+    // Check if inside a trace_statement or ERROR under class body
+    let inTrace = prevLeaf.parent?.type === "trace_statement";
+    if (!inTrace && prevLeaf.parent?.type === "ERROR") {
+      let n = prevLeaf.parent.parent;
+      while (n) {
+        if (n.type === "trace_statement") { inTrace = true; break; }
+        if (n.type === "class_definition") {
+          // "trace" directly in ERROR under class → trace context
+          if (prevLeaf.type === "trace") inTrace = true;
+          break;
+        }
+        if (n.type === "source_file") break;
+        n = n.parent;
+      }
+    }
+    if (inTrace) symbolKinds = "trace_attribute_method";
+  }
+
+  // --- Trace comma fallback: later entity in trace list gets same scope ---
+  if (
+    prevLeaf?.type === "," &&
+    prevLeaf.parent?.type === "trace_statement"
+  ) {
     symbolKinds = "trace_attribute_method";
+  }
+  // Also handle comma inside ERROR within trace_statement
+  if (
+    prevLeaf?.type === "," &&
+    prevLeaf.parent?.type === "ERROR"
+  ) {
+    let n = prevLeaf.parent.parent;
+    while (n) {
+      if (n.type === "trace_statement") { symbolKinds = "trace_attribute_method"; break; }
+      if (n.type === "class_definition" || n.type === "source_file") break;
+      n = n.parent;
+    }
   }
 
   // --- Zero-identifier completion fallbacks ---
@@ -407,11 +444,10 @@ export function analyzeCompletion(
         if (ASSOC_PREFIXES.has(child.type)) { prefixType = "suppress"; break; }
       }
       if (prefixType === "state") {
-        // entry/exit: check if cursor is inside call-form → method, else → state
         const isCallForm = findAncestorOfType(cursorNode, "trace_entity_call") !== null;
-        symbolKinds = isCallForm ? ["method"] : ["state"];
+        symbolKinds = isCallForm ? "trace_method" : "trace_state";
       } else if (prefixType === "attribute") {
-        symbolKinds = ["attribute"];
+        symbolKinds = "trace_attribute";
       } else if (prefixType === "suppress") {
         symbolKinds = "suppress";
       }

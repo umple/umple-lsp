@@ -1,0 +1,25 @@
+class OtherClass {
+  sm { WrongState {} }
+}
+
+class A {
+  /*@tpc_name*/name;
+  Integer age;
+  void /*@tpc_open*/open() {}
+  sm {
+    Open {}
+    Closed {}
+  }
+
+  // Later prefixed state entity completion
+  trace entry,exit Open, /*@tpc_comp_entry_later*/ ;
+
+  // Later prefixed attribute entity completion
+  trace set,get name, /*@tpc_comp_set_later*/ ;
+
+  // Later prefixed call-form completion
+  trace exit open(), /*@tpc_comp_exit_call_later*/ ;
+
+  // add/remove suppressed
+  trace add /*@tpc_comp_add*/ ;
+}

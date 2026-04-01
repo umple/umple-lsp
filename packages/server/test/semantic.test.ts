@@ -2562,6 +2562,48 @@ const TEST_CASES: TestCase[] = [
     ],
   },
 
+  // 67: Trace prefix completion — later entities + cross-class isolation + add suppression
+  {
+    name: "67 trace_prefix_completion: later entities and add suppression",
+    fixtures: ["67_trace_prefix_completion.ump"],
+    assertions: [
+      // Later entry state completion → states from enclosing class only
+      {
+        type: "completion_kinds",
+        at: "tpc_comp_entry_later",
+        expect: "trace_state",
+      },
+      {
+        type: "completion_includes",
+        at: "tpc_comp_entry_later",
+        expect: ["Open", "Closed"],
+      },
+      // Cross-class: WrongState from OtherClass must NOT appear
+      {
+        type: "completion_excludes",
+        at: "tpc_comp_entry_later",
+        expect: ["WrongState"],
+      },
+      // Later set attribute completion → attributes from enclosing class
+      {
+        type: "completion_kinds",
+        at: "tpc_comp_set_later",
+        expect: "trace_attribute",
+      },
+      {
+        type: "completion_includes",
+        at: "tpc_comp_set_later",
+        expect: ["name", "age"],
+      },
+      // add → suppressed
+      {
+        type: "completion_kinds",
+        at: "tpc_comp_add",
+        expect: "suppress",
+      },
+    ],
+  },
+
   // 65: Trace Slice 1 negative — tracer with options still produces parse error
   {
     name: "65 trace_slice1_negative: tracer with options not yet supported",
