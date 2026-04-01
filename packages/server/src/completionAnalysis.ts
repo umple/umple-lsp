@@ -69,7 +69,7 @@ export interface CompletionInfo {
   /** Operators the parser expects at this position. */
   operators: string[];
   /** Which symbol kinds to offer, or null for none. */
-  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "sorted_attribute" | null;
+  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | null;
   /** True if cursor is at a definition-name position (suppress all). */
   isDefinitionName: boolean;
   /** True if cursor is inside a comment. */
@@ -84,6 +84,8 @@ export interface CompletionInfo {
   dottedStatePrefix?: string[];
   /** Owner class for sorted key completion (resolved from association AST). */
   sortedKeyOwner?: string;
+  /** Trait SM operation completion context. */
+  traitSmContext?: { traitName: string; smName?: string };
 }
 
 // ── Main analysis function ──────────────────────────────────────────────────
@@ -237,6 +239,46 @@ export function analyzeCompletion(
     }
   }
 
+  // --- Trait SM operation completion: after -/+ or after sm. in prefixed path ---
+  let traitSmContext: CompletionInfo["traitSmContext"];
+  if (
+    (prevLeaf?.type === "-" || prevLeaf?.type === "+") &&
+    isInsideTraitAngleBrackets(prevLeaf)
+  ) {
+    const traitName = extractTraitNameFromAngleBrackets(prevLeaf);
+    if (traitName) {
+      symbolKinds = "trait_sm_op_sm";
+      traitSmContext = { traitName };
+    }
+  }
+  if (!traitSmContext && prevLeaf?.type === ".") {
+    // After "sm." in prefixed form: the dot may be inside ERROR, with
+    // trait_sm_operation as a preceding sibling containing the SM name.
+    const errorNode = prevLeaf.parent?.type === "ERROR" ? prevLeaf.parent : null;
+    const typeName = errorNode?.parent?.type === "type_name" ? errorNode.parent : null;
+    if (typeName) {
+      // Find trait_sm_operation sibling that precedes the ERROR
+      let smName: string | undefined;
+      for (let i = 0; i < typeName.namedChildCount; i++) {
+        const child = typeName.namedChild(i);
+        if (child?.type === "trait_sm_operation") {
+          const qn = child.namedChildren.find((c: { type: string }) => c.type === "qualified_name");
+          if (qn) {
+            const lastId = qn.namedChild(qn.namedChildCount - 1);
+            if (lastId?.type === "identifier") smName = lastId.text;
+          }
+        }
+      }
+      if (smName) {
+        const traitName = extractTraitNameFromAngleBrackets(typeName);
+        if (traitName) {
+          symbolKinds = "trait_sm_op_state";
+          traitSmContext = { traitName, smName };
+        }
+      }
+    }
+  }
+
   // --- Enclosing scope for scoped lookups ---
   const { enclosingClass, enclosingStateMachine } =
     resolveEnclosingScope(tree, line, column);
@@ -300,6 +342,7 @@ export function analyzeCompletion(
     enclosingStateMachine,
     dottedStatePrefix,
     sortedKeyOwner,
+    traitSmContext,
   };
 }
 
@@ -544,4 +587,53 @@ function extractDottedPrefix(
   }
 
   return segments.length > 0 ? segments : undefined;
+}
+
+/** Check if a node is inside angle brackets of a type_name (trait type arguments). */
+function isInsideTraitAngleBrackets(node: SyntaxNode): boolean {
+  let n: SyntaxNode | null = node;
+  while (n) {
+    if (n.type === "type_name" || n.type === "type_list") return true;
+    // ERROR nodes inside isA declarations with angle brackets
+    if (n.type === "isa_declaration") return true;
+    if (n.type === "class_definition" || n.type === "source_file") return false;
+    n = n.parent;
+  }
+  return false;
+}
+
+/** Extract the trait name from the enclosing isA type_name's qualified_name. */
+function extractTraitNameFromAngleBrackets(node: SyntaxNode): string | undefined {
+  let n: SyntaxNode | null = node;
+  while (n) {
+    if (n.type === "type_name") {
+      const qn = n.childForFieldName("name") ?? n.namedChild(0);
+      if (qn?.type === "qualified_name") {
+        const lastId = qn.namedChild(qn.namedChildCount - 1);
+        return lastId?.type === "identifier" ? lastId.text : undefined;
+      }
+      return undefined;
+    }
+    // In ERROR recovery, look for qualified_name siblings (trait name before <)
+    if (n.type === "ERROR" && n.parent?.type === "isa_declaration") {
+      // Walk children to find the qualified_name before the error
+      const isa = n.parent;
+      for (let i = 0; i < isa.namedChildCount; i++) {
+        const child = isa.namedChild(i);
+        if (child?.type === "type_list") {
+          // type_list > type_name > qualified_name
+          const typeName = child.namedChild(0);
+          if (typeName?.type === "type_name") {
+            const qn = typeName.childForFieldName("name") ?? typeName.namedChild(0);
+            if (qn?.type === "qualified_name") {
+              const lastId = qn.namedChild(qn.namedChildCount - 1);
+              return lastId?.type === "identifier" ? lastId.text : undefined;
+            }
+          }
+        }
+      }
+    }
+    n = n.parent;
+  }
+  return undefined;
 }

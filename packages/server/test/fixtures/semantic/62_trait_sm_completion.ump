@@ -1,0 +1,13 @@
+trait T1 {
+  sm { s1 {} s2 {} s3 {} }
+  sm2 { x1 {} x2 {} }
+}
+
+// After -: offer SM names from T1
+class A { isA T1<- /*@comp_sm*/>; }
+
+// After +: offer SM names from T1
+class B { isA T1<+ /*@comp_sm_plus*/>; }
+
+// After sm.: offer state names from T1.sm
+class C { isA T1<-sm. /*@comp_state*/>; }

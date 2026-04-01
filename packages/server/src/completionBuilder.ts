@@ -119,7 +119,9 @@ export function buildSemanticCompletionItems(
     symbolKinds === "own_attribute" ||
     symbolKinds === "guard_attribute_method" ||
     symbolKinds === "trace_attribute_method" ||
-    symbolKinds === "sorted_attribute"
+    symbolKinds === "sorted_attribute" ||
+    symbolKinds === "trait_sm_op_sm" ||
+    symbolKinds === "trait_sm_op_state"
   ) {
     keywords = keywords.filter((kw) => !CONSTRAINT_BLOCKLIST.has(kw));
   }
@@ -136,7 +138,9 @@ export function buildSemanticCompletionItems(
     symbolKinds !== "own_attribute" &&
     symbolKinds !== "guard_attribute_method" &&
     symbolKinds !== "trace_attribute_method" &&
-    symbolKinds !== "sorted_attribute"
+    symbolKinds !== "sorted_attribute" &&
+    symbolKinds !== "trait_sm_op_sm" &&
+    symbolKinds !== "trait_sm_op_state"
   ) {
     for (const op of info.operators) {
       if (!seen.has(op)) {
@@ -199,7 +203,47 @@ export function buildSemanticCompletionItems(
     return items;
   }
 
-  // 6. Guard/trace scope: attributes + methods from enclosing class (with inheritance)
+  // 6. Trait SM operation: SM names or state names from the referenced trait
+  if (symbolKinds === "trait_sm_op_sm" && info.traitSmContext) {
+    const { traitName } = info.traitSmContext;
+    const symbols = symbolIndex
+      .getSymbols({ kind: "statemachine" })
+      .filter((s) => s.container?.startsWith(traitName + "."))
+      .filter((s) => reachableFiles.has(path.normalize(s.file)));
+    for (const sym of symbols) {
+      if (!seen.has(sym.name)) {
+        seen.add(sym.name);
+        items.push({
+          label: sym.name,
+          kind: symbolKindToCompletionKind("statemachine"),
+          detail: `statemachine (trait ${traitName})`,
+        });
+      }
+    }
+    return items;
+  }
+
+  if (symbolKinds === "trait_sm_op_state" && info.traitSmContext?.smName) {
+    const { traitName, smName } = info.traitSmContext;
+    const smContainer = `${traitName}.${smName}`;
+    const symbols = symbolIndex
+      .getSymbols({ kind: "state", container: smContainer })
+      .filter((s) => !s.statePath || s.statePath.length === 1) // depth-1 only
+      .filter((s) => reachableFiles.has(path.normalize(s.file)));
+    for (const sym of symbols) {
+      if (!seen.has(sym.name)) {
+        seen.add(sym.name);
+        items.push({
+          label: sym.name,
+          kind: symbolKindToCompletionKind("state"),
+          detail: `state (${smContainer})`,
+        });
+      }
+    }
+    return items;
+  }
+
+  // 7. Guard/trace scope: attributes + methods from enclosing class (with inheritance)
   if (
     (symbolKinds === "guard_attribute_method" ||
       symbolKinds === "trace_attribute_method") &&

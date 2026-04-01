@@ -2311,6 +2311,53 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 62: Trait SM completion (V3a) — prefixed forms only
+  {
+    name: "62 trait_sm_completion: SM names after -/+, state names after sm.",
+    fixtures: ["62_trait_sm_completion.ump"],
+    assertions: [
+      // After "-": offer SM names from trait T1
+      {
+        type: "completion_kinds",
+        at: "comp_sm",
+        expect: "trait_sm_op_sm",
+      },
+      {
+        type: "completion_includes",
+        at: "comp_sm",
+        expect: ["sm", "sm2"],
+      },
+      // After "+": same SM names
+      {
+        type: "completion_kinds",
+        at: "comp_sm_plus",
+        expect: "trait_sm_op_sm",
+      },
+      {
+        type: "completion_includes",
+        at: "comp_sm_plus",
+        expect: ["sm", "sm2"],
+      },
+      // After "sm.": offer depth-1 state names from T1.sm
+      {
+        type: "completion_kinds",
+        at: "comp_state",
+        expect: "trait_sm_op_state",
+      },
+      {
+        type: "completion_includes",
+        at: "comp_state",
+        expect: ["s1", "s2", "s3"],
+      },
+      // State completion must NOT include states from sm2
+      {
+        type: "completion_excludes",
+        at: "comp_state",
+        expect: ["x1", "x2"],
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────
