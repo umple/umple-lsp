@@ -2470,6 +2470,38 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 64: Trace Slice 1 — tracer directives + comma-separated entities
+  {
+    name: "64 trace_slice1: tracer directives and comma-separated trace entities parse clean",
+    fixtures: ["64_trace_slice1.ump"],
+    assertions: [
+      {
+        type: "parse_clean",
+        fixture: "64_trace_slice1.ump",
+      },
+      // Class A still indexed
+      {
+        type: "symbol_count",
+        fixture: "64_trace_slice1.ump",
+        name: "A",
+        kind: "class",
+        expect: 1,
+      },
+    ],
+  },
+
+  // 65: Trace Slice 1 negative — tracer with options still produces parse error
+  {
+    name: "65 trace_slice1_negative: tracer with options not yet supported",
+    fixtures: ["65_trace_slice1_negative.ump"],
+    assertions: [
+      {
+        type: "parse_has_error",
+        fixture: "65_trace_slice1_negative.ump",
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

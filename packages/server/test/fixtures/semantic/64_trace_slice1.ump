@@ -1,0 +1,27 @@
+// Trace Slice 1: tracer directives + comma-separated entities
+
+tracer Console;
+tracer log4j;
+tracer File;
+tracer String;
+
+class A {
+  name;
+  Integer age;
+  Boolean enabled;
+
+  // Comma-separated trace entities
+  trace name, age;
+  trace name(), age();
+  trace name, age, enabled;
+
+  // Comma-separated with postfix
+  trace name, age where [age > 5];
+  trace name, enabled record age;
+
+  // Existing single-entity forms (regression)
+  trace name;
+  trace name();
+  trace age where [age > 5];
+  trace name until [age > 10];
+}

@@ -83,6 +83,7 @@ module.exports = grammar({
         $.strictness_directive,
         $.java_annotation,
         $.req_implementation,
+        $.tracer_directive,
       ),
 
     // =====================
@@ -137,6 +138,10 @@ module.exports = grammar({
         ),
         ";",
       ),
+
+    // Bare tracer directive: tracer Console;
+    tracer_directive: ($) =>
+      seq("tracer", field("type", $.identifier), ";"),
 
     // =====================
     // CLASS DEFINITION
@@ -390,12 +395,15 @@ module.exports = grammar({
     //   deactivate name onThisObject ;
     // Postfix: where/until/after/giving [condition], record entity
     // Deferred: execute { code }, prefix keywords (set/get/in/out etc.), logLevel/for/period/during
+    // Trace entity: identifier with optional ()
+    _trace_entity: ($) => seq($.identifier, optional(seq("(", ")"))),
+
     trace_statement: ($) =>
       choice(
         seq(
           "trace",
-          $.identifier,
-          optional(seq("(", ")")),
+          $._trace_entity,
+          repeat(seq(",", $._trace_entity)),
           repeat($.trace_postfix),
           ";",
         ),
@@ -405,8 +413,8 @@ module.exports = grammar({
           "{",
           repeat(seq(
             "trace",
-            $.identifier,
-            optional(seq("(", ")")),
+            $._trace_entity,
+            repeat(seq(",", $._trace_entity)),
             repeat($.trace_postfix),
             ";",
           )),

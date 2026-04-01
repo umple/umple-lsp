@@ -119,6 +119,7 @@
   "active"
   "final"
   "trace"
+  "tracer"
   "tracecase"
   "activate"
   "deactivate"
@@ -126,6 +127,8 @@
 
 ; Trace postfix sub-keywords (children of trace_postfix, not trace_statement)
 (trace_postfix ["where" "until" "after" "giving" "record"] @keyword)
+; Tracer directive type
+(tracer_directive type: (identifier) @type)
 ; activate/deactivate modifiers (direct children of trace_statement)
 (trace_statement ["onAllObjects" "onThisThreadOnly" "onThisObject"] @keyword)
 
