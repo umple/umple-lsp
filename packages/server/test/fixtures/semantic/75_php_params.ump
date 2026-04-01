@@ -1,0 +1,13 @@
+class /*@php_class*/A {
+  // PHP-style method parameters
+  private function /*@php_json*/jsonSerialize($aCandidate) { return ""; }
+  public function buttonPressed($action) { return ""; }
+  private function loadElectionPolls($idElection) { return ""; }
+
+  // Normal Java-style still works
+  void /*@php_normal*/normalMethod(Integer x, String y) {}
+  void arrayMethod(Integer[] arr) {}
+
+  // Mixed: normal type + PHP param
+  name;
+}

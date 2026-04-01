@@ -2795,6 +2795,18 @@ const TEST_CASES: TestCase[] = [
       { type: "goto_def", at: "rec_second", expect: [{ at: "rec_name" }] },
     ],
   },
+
+  // 75: PHP parameter syntax in methods
+  {
+    name: "75 php_params: PHP-style $param in methods parse clean with method symbols",
+    fixtures: ["75_php_params.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "75_php_params.ump" },
+      { type: "symbol_count", fixture: "75_php_params.ump", name: "A", kind: "class", expect: 1 },
+      { type: "symbol_count", fixture: "75_php_params.ump", name: "jsonSerialize", kind: "method", expect: 1 },
+      { type: "symbol_count", fixture: "75_php_params.ump", name: "normalMethod", kind: "method", expect: 1 },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

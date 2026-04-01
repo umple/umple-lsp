@@ -1006,7 +1006,12 @@ module.exports = grammar({
 
     param_list: ($) => seq($.param, repeat(seq(",", $.param))),
 
-    param: ($) => seq(optional("final"), $.type_name, optional(seq("[", "]")), field("name", $.identifier)),
+    param: ($) => choice(
+      // Standard typed param: [final] Type [[] ] name
+      seq(optional("final"), $.type_name, optional(seq("[", "]")), field("name", $.identifier)),
+      // PHP-style param: $name (no type, $ immediately before identifier)
+      seq("$", field("name", alias(token.immediate(/[a-zA-Z_][a-zA-Z0-9_]*/), $.identifier))),
+    ),
 
     before_after: ($) =>
       seq(
