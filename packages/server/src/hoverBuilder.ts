@@ -394,3 +394,42 @@ export function buildHoverMarkdown(
 
   return result;
 }
+
+/**
+ * Build hover markdown for trait SM operation positions.
+ * Shared between server.ts and test helpers.
+ */
+export function buildTraitSmOpHover(
+  symbols: SymbolEntry[],
+  token: { word: string; context: { type: "trait_sm_op"; traitName: string; isEventSegment: boolean; pathSegments: string[] } },
+  getEventSignatures: (traitFile: string, traitName: string, smName: string, statePath?: string[]) => { name: string; label: string; statePaths: string[][] }[],
+  findTraitFile: () => string | undefined,
+): string | null {
+  const ctx = token.context;
+
+  if (symbols.length > 0) {
+    const sym = symbols[0];
+    const kind = sym.kind === "statemachine" ? "statemachine" : "state";
+    return `\`\`\`umple\n${sym.name} (${kind})\n\`\`\`\n\n*in trait ${ctx.traitName}*`;
+  }
+
+  if (ctx.isEventSegment && ctx.traitName) {
+    const traitFile = findTraitFile();
+    if (traitFile && ctx.pathSegments.length >= 1) {
+      const smName = ctx.pathSegments[0];
+      const statePath = ctx.pathSegments.length > 2 ? ctx.pathSegments.slice(1, -1) : undefined;
+      const events = getEventSignatures(traitFile, ctx.traitName, smName, statePath);
+      const matching = events.filter((e) => e.name === token.word);
+      if (matching.length > 0) {
+        const evt = matching[0];
+        const paths = evt.statePaths.map((p) => p.join("."));
+        const stateStr = paths.length === 1
+          ? `state ${paths[0]}`
+          : `states ${paths.join(", ")}`;
+        return `\`\`\`umple\n${evt.label}\n\`\`\`\n\n*event in ${stateStr} of trait ${ctx.traitName}.${smName}*`;
+      }
+    }
+  }
+
+  return null;
+}

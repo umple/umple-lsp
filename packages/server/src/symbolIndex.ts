@@ -688,7 +688,10 @@ export class SymbolIndex {
         const label = `${name}(${params.join(", ")})`;
         const existing = resultMap.get(label);
         if (existing) {
-          existing.statePaths.push([...currentPath]);
+          const pathKey = currentPath.join(".");
+          if (!existing.statePaths.some((p: string[]) => p.join(".") === pathKey)) {
+            existing.statePaths.push([...currentPath]);
+          }
         } else {
           resultMap.set(label, { name, params, label, statePaths: [[...currentPath]] });
         }

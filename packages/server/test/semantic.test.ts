@@ -2249,7 +2249,7 @@ const TEST_CASES: TestCase[] = [
       {
         type: "hover_output",
         at: "op_e4",
-        expectContains: ["e4()", "event", "trait T1"],
+        expectContains: ["e4()", "event", "state s1", "of trait T1.sm"],
       },
       // ── V2 Refs: trait SM op sites now participate in refs ──
       // SM refs include all op_sm sites

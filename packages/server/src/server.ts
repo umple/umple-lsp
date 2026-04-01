@@ -37,7 +37,7 @@ import {
   buildSemanticCompletionItems,
   symbolKindToCompletionKind,
 } from "./completionBuilder";
-import { buildHoverMarkdown } from "./hoverBuilder";
+import { buildHoverMarkdown, buildTraitSmOpHover } from "./hoverBuilder";
 import { buildDocumentSymbolTree } from "./documentSymbolBuilder";
 import {
   expandCompactStates,
@@ -957,35 +957,18 @@ connection.onHover(async (params) => {
   if (resolved?.token.context.type === "trait_sm_op") {
     const ctx = resolved.token.context;
     const reachable = ensureImportsIndexed(docPath, document.getText());
-    if (resolved.symbols.length > 0) {
-      // SM or state — format with trait context
-      const sym = resolved.symbols[0];
-      const kind = sym.kind === "statemachine" ? "statemachine" : "state";
-      const lines = [`\`\`\`umple\n${sym.name} (${kind})\n\`\`\``];
-      lines.push(`*in trait ${ctx.traitName}*`);
-      return { contents: { kind: "markdown" as const, value: lines.join("\n\n") } };
-    }
-    if (ctx.isEventSegment && ctx.traitName) {
-      // Event — use AST walk to find event info
-      const traitSyms = symbolIndex
-        .getSymbols({ name: ctx.traitName, kind: ["trait"] })
-        .filter((s) => reachable.has(path.normalize(s.file)));
-      if (traitSyms.length > 0 && ctx.pathSegments.length >= 1) {
-        const smName = ctx.pathSegments[0];
-        const statePath = ctx.pathSegments.length > 2 ? ctx.pathSegments.slice(1, -1) : undefined;
-        const events = symbolIndex.getEventSignatures(traitSyms[0].file, ctx.traitName, smName, statePath);
-        const eventName = resolved.token.word;
-        const matching = events.filter((e) => e.name === eventName);
-        if (matching.length > 0) {
-          const evt = matching[0];
-          const stateStr = evt.statePaths.map((p: string[]) => p.join(".")).join(", ");
-          const lines = [`\`\`\`umple\n${evt.label}\n\`\`\``];
-          lines.push(`*event in ${stateStr ? `state ${stateStr}, ` : ""}trait ${ctx.traitName}.${smName}*`);
-          return { contents: { kind: "markdown" as const, value: lines.join("\n\n") } };
-        }
-      }
-    }
-    return null;
+    const markdown = buildTraitSmOpHover(
+      resolved.symbols,
+      { word: resolved.token.word, context: ctx },
+      (f, tn, sm, sp) => symbolIndex.getEventSignatures(f, tn, sm, sp),
+      () => {
+        const traitSyms = symbolIndex
+          .getSymbols({ name: ctx.traitName, kind: ["trait"] })
+          .filter((s) => reachable.has(path.normalize(s.file)));
+        return traitSyms.length > 0 ? traitSyms[0].file : undefined;
+      },
+    );
+    return markdown ? { contents: { kind: "markdown" as const, value: markdown } } : null;
   }
 
   if (!resolved || resolved.symbols.length === 0) return null;
