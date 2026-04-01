@@ -139,9 +139,33 @@ module.exports = grammar({
         ";",
       ),
 
-    // Bare tracer directive: tracer Console;
+    // Tracer directive: tracer Console; / tracer log4j root = all noConfig;
     tracer_directive: ($) =>
-      seq("tracer", field("type", $.identifier), ";"),
+      seq(
+        "tracer",
+        field("type", $.identifier),
+        repeat($._tracer_log_config),
+        optional($._tracer_message_header),
+        optional($._tracer_argument),
+        ";",
+      ),
+
+    _tracer_log_config: ($) =>
+      seq($._tracer_id_list, "=", $._tracer_value_list),
+
+    _tracer_message_header: ($) =>
+      seq(choice("on", "off"), ":", $._tracer_id_list),
+
+    _tracer_argument: ($) => choice($.identifier, $.string_literal),
+
+    _tracer_id_list: ($) =>
+      seq($.identifier, repeat(seq(",", $.identifier))),
+
+    _tracer_value_list: ($) =>
+      seq(
+        choice($.identifier, $.integer_literal),
+        repeat(seq(",", choice($.identifier, $.integer_literal))),
+      ),
 
     // =====================
     // CLASS DEFINITION

@@ -1,2 +1,2 @@
-// Negative: tracer with options not yet supported (deferred)
-tracer log4j Level = 2;
+// Negative: tracer with "on" but no ":" is rejected by compiler
+tracer Console on verbose;

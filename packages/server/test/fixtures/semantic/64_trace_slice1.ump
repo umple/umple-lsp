@@ -1,9 +1,28 @@
 // Trace Slice 1: tracer directives + comma-separated entities
 
+// Bare tracer directives
 tracer Console;
 tracer log4j;
 tracer File;
 tracer String;
+
+// Tracer with logConfig options
+tracer log4j Level = 2;
+tracer log4j root = all;
+tracer log4j debug = console fatal = file;
+tracer log4j debug,error = console,file;
+tracer log4j root=all debug=console monitorInterval=30;
+tracer String maxRecords = 100;
+
+// Tracer with message header
+tracer console on : Time,Object;
+
+// Tracer with trailing argument
+tracer log4j noConfig;
+tracer File "mylog.txt";
+
+// Full combo
+tracer log4j root = all debug = console on : Time,Object noConfig;
 
 class A {
   /*@attr_name*/name;
