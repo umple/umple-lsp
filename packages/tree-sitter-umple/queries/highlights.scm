@@ -121,6 +121,7 @@
   "trace"
   "tracer"
   "tracecase"
+  "suboption"
   "activate"
   "deactivate"
 ] @keyword

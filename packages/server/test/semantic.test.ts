@@ -2668,6 +2668,25 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 69: Suboption directives — standalone top-level form
+  {
+    name: "69 suboption_directive: standalone suboption parses clean",
+    fixtures: ["69_suboption_directive.ump"],
+    assertions: [
+      {
+        type: "parse_clean",
+        fixture: "69_suboption_directive.ump",
+      },
+      {
+        type: "symbol_count",
+        fixture: "69_suboption_directive.ump",
+        name: "A",
+        kind: "class",
+        expect: 1,
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

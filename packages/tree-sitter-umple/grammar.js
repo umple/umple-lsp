@@ -84,6 +84,7 @@ module.exports = grammar({
         $.java_annotation,
         $.req_implementation,
         $.tracer_directive,
+        $.suboption_directive,
       ),
 
     // =====================
@@ -135,6 +136,10 @@ module.exports = grammar({
         )),
         ";",
       ),
+
+    // Standalone suboption directive: suboption "value";
+    suboption_directive: ($) =>
+      seq("suboption", $.string_literal, ";"),
 
     // Strictness directive: grammar-only, no semantic handling.
     // Official forms: strictness (modelOnly|noExtraCode|none | allow|ignore|expect|disallow INT | disable EXPR) ;

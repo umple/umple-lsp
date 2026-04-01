@@ -1,0 +1,10 @@
+// Standalone suboption directives — compiler-verified
+suboption "genJson";
+suboption "reqSortID";
+
+// Existing generate --suboption must still work
+generate Java --suboption "genJson";
+
+class /*@subopt_class*/A {
+  name;
+}
