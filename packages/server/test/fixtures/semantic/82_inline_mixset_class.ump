@@ -1,0 +1,13 @@
+class /*@imc_class*/X {
+  sm { a {} b {} }
+}
+
+// Inline mixset class form
+mixset extra class X {
+  sm { c {} }
+}
+
+// Block mixset still works
+mixset feature1 {
+  class Y { name; }
+}

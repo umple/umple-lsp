@@ -2872,6 +2872,16 @@ const TEST_CASES: TestCase[] = [
       { type: "symbol_count", fixture: "81_string_concat.ump", name: "DAL", kind: "class", expect: 1 },
     ],
   },
+
+  // 82: Inline mixset class declaration
+  {
+    name: "82 inline_mixset_class: mixset name class Name {} parses clean",
+    fixtures: ["82_inline_mixset_class.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "82_inline_mixset_class.ump" },
+      { type: "symbol_count", fixture: "82_inline_mixset_class.ump", name: "X", kind: "class", expect: 2 },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

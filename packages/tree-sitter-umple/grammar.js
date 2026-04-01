@@ -424,23 +424,28 @@ module.exports = grammar({
     // MIXSET DEFINITION
     // =====================
     mixset_definition: ($) =>
-      seq(
-        "mixset",
-        field("name", $.identifier),
-        "{",
-        repeat(choice(
-          $._definition,
-          $._class_content,
-          // State-level content (mixset bodies are context-free in real Umple)
-          $.transition,
-          $.entry_exit_action,
-          $.do_activity,
-          $.state,
-          $.standalone_transition,
-          $.display_color,
-          "||",
-        )),
-        "}",
+      choice(
+        // Block form: mixset name { ... }
+        seq(
+          "mixset",
+          field("name", $.identifier),
+          "{",
+          repeat(choice(
+            $._definition,
+            $._class_content,
+            // State-level content (mixset bodies are context-free in real Umple)
+            $.transition,
+            $.entry_exit_action,
+            $.do_activity,
+            $.state,
+            $.standalone_transition,
+            $.display_color,
+            "||",
+          )),
+          "}",
+        ),
+        // Inline class form: mixset name class Name { ... }
+        seq("mixset", field("name", $.identifier), $.class_definition),
       ),
 
     // =====================
