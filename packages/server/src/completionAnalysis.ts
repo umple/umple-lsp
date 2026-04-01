@@ -444,8 +444,12 @@ export function analyzeCompletion(
         if (ASSOC_PREFIXES.has(child.type)) { prefixType = "suppress"; break; }
       }
       if (prefixType === "state") {
+        // Check if cursor is in a call-form entity, or if any sibling entity is call-form
         const isCallForm = findAncestorOfType(cursorNode, "trace_entity_call") !== null;
-        symbolKinds = isCallForm ? "trace_method" : "trace_state";
+        const hasCallSibling = traceStmt.namedChildren.some(
+          (c: { type: string }) => c.type === "trace_entity_call",
+        );
+        symbolKinds = (isCallForm || hasCallSibling) ? "trace_method" : "trace_state";
       } else if (prefixType === "attribute") {
         symbolKinds = "trace_attribute";
       } else if (prefixType === "suppress") {

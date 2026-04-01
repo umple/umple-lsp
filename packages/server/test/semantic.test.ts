@@ -2595,6 +2595,22 @@ const TEST_CASES: TestCase[] = [
         at: "tpc_comp_set_later",
         expect: ["name", "age"],
       },
+      // Later exit call-form entity → methods
+      {
+        type: "completion_kinds",
+        at: "tpc_comp_exit_call_later",
+        expect: "trace_method",
+      },
+      {
+        type: "completion_includes",
+        at: "tpc_comp_exit_call_later",
+        expect: ["open"],
+      },
+      {
+        type: "completion_excludes",
+        at: "tpc_comp_exit_call_later",
+        expect: ["WrongState", "Open", "Closed"],
+      },
       // add → suppressed
       {
         type: "completion_kinds",
