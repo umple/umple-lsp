@@ -410,7 +410,11 @@ export function buildTraitSmOpHover(
   if (symbols.length > 0) {
     const sym = symbols[0];
     const kind = sym.kind === "statemachine" ? "statemachine" : "state";
-    return `\`\`\`umple\n${sym.name} (${kind})\n\`\`\`\n\n*in trait ${ctx.traitName}*`;
+    const smName = ctx.pathSegments[0];
+    const location = sym.kind === "statemachine"
+      ? `in trait ${ctx.traitName}`
+      : `in state machine ${smName} of trait ${ctx.traitName}`;
+    return `\`\`\`umple\n${sym.name} (${kind})\n\`\`\`\n\n*${location}*`;
   }
 
   if (ctx.isEventSegment && ctx.traitName) {

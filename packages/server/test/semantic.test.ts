@@ -2244,7 +2244,7 @@ const TEST_CASES: TestCase[] = [
       {
         type: "hover_output",
         at: "op_s1",
-        expectContains: ["state", "trait T1"],
+        expectContains: ["state", "state machine sm", "trait T1"],
       },
       {
         type: "hover_output",
@@ -2435,6 +2435,12 @@ const TEST_CASES: TestCase[] = [
         type: "completion_excludes",
         at: "comp_bad_path",
         expect: ["s1", "s2", "s3", "inner1", "inner2", "x1", "x2", "default", "allow"],
+      },
+      // ── Hover: aggregated multi-state event ──
+      {
+        type: "hover_output",
+        at: "hover_e1_multi",
+        expectContains: ["e1()", "states s1, s2", "of trait T1.sm"],
       },
     ],
   },

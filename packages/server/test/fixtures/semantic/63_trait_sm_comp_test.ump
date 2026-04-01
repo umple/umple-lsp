@@ -8,3 +8,6 @@ class B { isA T1<-sm.s1./*@comp_nested*/ >; }
 
 // Negative: bad nested path → empty (fail closed)
 class C { isA T1<-sm.nope./*@comp_bad_path*/ >; }
+
+// Hover: unprefixed event appearing in multiple states (e1 in s1 and s2)
+class D { isA T1<sm./*@hover_e1_multi*/e1() as renamed>; }
