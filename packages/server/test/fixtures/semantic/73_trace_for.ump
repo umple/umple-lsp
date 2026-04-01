@@ -1,0 +1,20 @@
+class /*@for_class*/A {
+  /*@for_name*/name;
+  Integer id;
+
+  // for N postfix
+  trace name for 5;
+  trace id for 10;
+
+  // Combined with other postfixes
+  trace name for 3 where [id > 0];
+
+  // Later entity with for N
+  trace id, /*@for_second*/name for 5;
+
+  // Prefixed form from real corpus
+  trace get /*@for_get*/name for 5;
+
+  // Plain trace still works
+  trace name;
+}

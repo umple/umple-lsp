@@ -489,6 +489,7 @@ module.exports = grammar({
           "trace", "debug", "info", "warn", "error", "fatal",
           "all", "finest", "fine", "config", "warning", "severe",
         )),
+        seq("for", $.integer_literal),
       ),
 
     // =====================

@@ -2771,6 +2771,18 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 73: Trace for N postfix
+  {
+    name: "73 trace_for: for N postfix parses clean with semantic parity",
+    fixtures: ["73_trace_for.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "73_trace_for.ump" },
+      { type: "symbol_count", fixture: "73_trace_for.ump", name: "A", kind: "class", expect: 1 },
+      { type: "goto_def", at: "for_second", expect: [{ at: "for_name" }] },
+      { type: "goto_def", at: "for_get", expect: [{ at: "for_name" }] },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────
