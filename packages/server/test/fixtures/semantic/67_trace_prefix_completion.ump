@@ -17,8 +17,14 @@ class A {
   // Later prefixed attribute entity completion
   trace set,get name, /*@tpc_comp_set_later*/ ;
 
-  // Later prefixed call-form completion
-  trace exit open(), /*@tpc_comp_exit_call_later*/ ;
+  // Blank later slot under exit with call-form sibling → union
+  trace exit open(), /*@tpc_comp_exit_blank_later*/ ;
+
+  // Concrete call-form: marker inside existing trace_entity_call
+  trace exit /*@tpc_comp_exit_call_concrete*/open(), Open;
+
+  // Mixed form: bare entity in a list with call-form sibling
+  trace exit /*@tpc_comp_exit_bare_mixed*/Open, open();
 
   // add/remove suppressed
   trace add /*@tpc_comp_add*/ ;

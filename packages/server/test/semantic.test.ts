@@ -2567,11 +2567,11 @@ const TEST_CASES: TestCase[] = [
     name: "67 trace_prefix_completion: later entities and add suppression",
     fixtures: ["67_trace_prefix_completion.ump"],
     assertions: [
-      // Later entry state completion → states from enclosing class only
+      // Later entry blank slot → union of states + methods (ambiguous position)
       {
         type: "completion_kinds",
         at: "tpc_comp_entry_later",
-        expect: "trace_state",
+        expect: "trace_state_method",
       },
       {
         type: "completion_includes",
@@ -2595,21 +2595,38 @@ const TEST_CASES: TestCase[] = [
         at: "tpc_comp_set_later",
         expect: ["name", "age"],
       },
-      // Later exit call-form entity → methods
+      // Blank later slot under exit → union of states + methods
       {
         type: "completion_kinds",
-        at: "tpc_comp_exit_call_later",
+        at: "tpc_comp_exit_blank_later",
+        expect: "trace_state_method",
+      },
+      {
+        type: "completion_includes",
+        at: "tpc_comp_exit_blank_later",
+        expect: ["Open", "open"],
+      },
+      // Concrete call-form entity → methods only
+      {
+        type: "completion_kinds",
+        at: "tpc_comp_exit_call_concrete",
         expect: "trace_method",
       },
       {
         type: "completion_includes",
-        at: "tpc_comp_exit_call_later",
+        at: "tpc_comp_exit_call_concrete",
         expect: ["open"],
       },
+      // Mixed form: bare entity stays state even with call-form sibling
       {
-        type: "completion_excludes",
-        at: "tpc_comp_exit_call_later",
-        expect: ["WrongState", "Open", "Closed"],
+        type: "completion_kinds",
+        at: "tpc_comp_exit_bare_mixed",
+        expect: "trace_state",
+      },
+      {
+        type: "completion_includes",
+        at: "tpc_comp_exit_bare_mixed",
+        expect: ["Open", "Closed"],
       },
       // add → suppressed
       {

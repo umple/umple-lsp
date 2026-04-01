@@ -155,6 +155,32 @@ export function buildSemanticCompletionItems(
     }
     return items;
   }
+  if (symbolKinds === "trace_state_method" && info.enclosingClass) {
+    const items: CompletionItem[] = [];
+    const seen = new Set<string>();
+    // States from all SMs in the enclosing class
+    const states = symbolIndex
+      .getSymbols({ kind: "state" })
+      .filter((s) => s.container?.startsWith(info.enclosingClass + "."))
+      .filter((s) => reachableFiles.has(path.normalize(s.file)));
+    for (const sym of states) {
+      if (!seen.has(sym.name)) {
+        seen.add(sym.name);
+        items.push({ label: sym.name, kind: symbolKindToCompletionKind("state"), detail: "state" });
+      }
+    }
+    // Methods from the enclosing class
+    const methods = symbolIndex
+      .getSymbols({ kind: "method", container: info.enclosingClass, inherited: true })
+      .filter((s) => reachableFiles.has(path.normalize(s.file)));
+    for (const sym of methods) {
+      if (!seen.has(sym.name)) {
+        seen.add(sym.name);
+        items.push({ label: sym.name, kind: symbolKindToCompletionKind("method"), detail: "method" });
+      }
+    }
+    return items;
+  }
   if (symbolKinds === "trace_attribute" && info.enclosingClass) {
     const items: CompletionItem[] = [];
     const seen = new Set<string>();

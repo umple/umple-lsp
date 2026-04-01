@@ -69,7 +69,7 @@ export interface CompletionInfo {
   /** Operators the parser expects at this position. */
   operators: string[];
   /** Which symbol kinds to offer, or null for none. */
-  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "trace_state" | "trace_method" | "trace_attribute" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | null;
+  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "trace_state" | "trace_method" | "trace_state_method" | "trace_attribute" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | null;
   /** True if cursor is at a definition-name position (suppress all). */
   isDefinitionName: boolean;
   /** True if cursor is inside a comment. */
@@ -444,12 +444,17 @@ export function analyzeCompletion(
         if (ASSOC_PREFIXES.has(child.type)) { prefixType = "suppress"; break; }
       }
       if (prefixType === "state") {
-        // Check if cursor is in a call-form entity, or if any sibling entity is call-form
-        const isCallForm = findAncestorOfType(cursorNode, "trace_entity_call") !== null;
-        const hasCallSibling = traceStmt.namedChildren.some(
-          (c: { type: string }) => c.type === "trace_entity_call",
-        );
-        symbolKinds = (isCallForm || hasCallSibling) ? "trace_method" : "trace_state";
+        // Concrete node: trace_entity → state, trace_entity_call → method
+        // Blank slot (no entity node): union of state + method
+        const isInCallForm = findAncestorOfType(cursorNode, "trace_entity_call") !== null;
+        const isInBareForm = findAncestorOfType(cursorNode, "trace_entity") !== null;
+        if (isInCallForm) {
+          symbolKinds = "trace_method";
+        } else if (isInBareForm) {
+          symbolKinds = "trace_state";
+        } else {
+          symbolKinds = "trace_state_method"; // blank slot — ambiguous
+        }
       } else if (prefixType === "attribute") {
         symbolKinds = "trace_attribute";
       } else if (prefixType === "suppress") {
