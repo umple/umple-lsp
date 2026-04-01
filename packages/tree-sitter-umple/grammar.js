@@ -1180,8 +1180,9 @@ module.exports = grammar({
       seq("[", repeat($._constraint_expr), "]"),
 
     // Trait SM injection: sm1 as sm.s2 (Extending a State)
+    // Trait SM injection: sm1 as sm.s2, sm.s0.s0.s11 as state11
     trait_sm_binding: ($) =>
-      seq(field("param", $.identifier), "as", field("value", $.qualified_name)),
+      seq(field("param", $.qualified_name), "as", field("value", $.qualified_name)),
 
     type_list: ($) => seq($.type_name, repeat(seq(",", $.type_name))),
 

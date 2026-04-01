@@ -32,7 +32,7 @@
 (trait_binding value: (qualified_name (identifier) @reference.class_interface_trait))
 ; Trait SM binding: isA T<sm1 as sm.s2>
 ; param references trait-side statemachine; value path references class-side SM/state
-(trait_sm_binding param: (identifier) @reference.statemachine)
+(trait_sm_binding param: (qualified_name (identifier) @reference.statemachine_state))
 (trait_sm_binding value: (qualified_name (identifier) @reference.statemachine_state))
 ; Trait SM operation: isA T<-sm.s1.e4()[cond]> — path refs trait-side SM/state
 ; Two captures for both AST shapes; referenceSearch.ts post-filters to exclude

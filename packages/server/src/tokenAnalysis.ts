@@ -168,19 +168,42 @@ export function analyzeToken(
 
   let context: LookupContext = { type: "normal" };
 
-  // trait_sm_binding param: isA T1<sm1 as sm.s2>
+  // trait_sm_binding param: isA T1<sm1 as sm.s2> or isA T1<sm.s0.s11 as state11>
   if (
     node.type === "identifier" &&
-    parent?.type === "trait_sm_binding" &&
-    parent.childForFieldName("param")?.id === node.id
+    parent?.type === "qualified_name" &&
+    parent.parent?.type === "trait_sm_binding" &&
+    parent.parent.childForFieldName("param")?.id === parent.id
   ) {
-    const typeName = parent.parent;
+    const binding = parent.parent;
+    // Extract path segments and index
+    const segments: string[] = [];
+    let idx = -1;
+    for (let i = 0; i < parent.namedChildCount; i++) {
+      const child = parent.namedChild(i);
+      if (child?.type === "identifier") {
+        if (child.id === node.id) idx = segments.length;
+        segments.push(child.text);
+      }
+    }
+    // Set kinds based on segment position
+    if (idx === 0) {
+      kinds = ["statemachine"];
+    } else if (idx > 0) {
+      kinds = ["state"];
+    }
+    const typeName = binding.parent;
     if (typeName?.type === "type_name") {
       const qn = typeName.childForFieldName("name") ?? typeName.namedChild(0);
       if (qn?.type === "qualified_name") {
         const lastId = qn.namedChild(qn.namedChildCount - 1);
         if (lastId?.type === "identifier") {
-          context = { type: "trait_sm_param", traitName: lastId.text };
+          // Use trait_sm_op context for deep paths (reuse existing resolver logic)
+          if (segments.length > 1) {
+            context = { type: "trait_sm_op", traitName: lastId.text, pathSegments: segments, segmentIndex: idx, isEventSegment: false };
+          } else {
+            context = { type: "trait_sm_param", traitName: lastId.text };
+          }
         }
       }
     }

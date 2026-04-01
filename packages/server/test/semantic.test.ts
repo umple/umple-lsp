@@ -2920,6 +2920,20 @@ const TEST_CASES: TestCase[] = [
       { type: "parse_has_error", fixture: "86_prefixed_sm_rename_negative.ump" },
     ],
   },
+
+  // 87: Deep-path SM rename binding
+  {
+    name: "87 deep_path_rename: sm.s0.s0.s11 as state11 parses clean",
+    fixtures: ["87_deep_path_rename.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "87_deep_path_rename.ump" },
+      { type: "symbol_count", fixture: "87_deep_path_rename.ump", name: "C1", kind: "class", expect: 1 },
+      // Deep param path leaf resolves to trait state
+      { type: "goto_def", at: "dpr_ref_s11", expect: [{ at: "dpr_s11" }] },
+      // Deep param path state participates in refs
+      { type: "refs", decl: { name: "s11", kind: "state", container: "T1.sm" }, expectAt: ["dpr_s11", "dpr_ref_s11"] },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

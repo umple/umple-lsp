@@ -129,6 +129,15 @@ export function searchReferences(
             valSegIdx !== sym.statePath.length) continue;
       }
 
+      // For trait_sm_binding param paths (deep: sm.s0.s0.s11 as state11)
+      const paramSegIdx = getTraitSmBindingParamSegmentIndex(node);
+      if (paramSegIdx !== undefined) {
+        if (paramSegIdx === 0 && symKind !== "statemachine") continue;
+        if (paramSegIdx > 0 && symKind !== "state") continue;
+        if (symKind === "state" && sym.statePath &&
+            paramSegIdx !== sym.statePath.length) continue;
+      }
+
       // For trait_sm_operation paths, filter by segment position and trait scope.
       // getTraitSmOpSegmentInfo() returns undefined for excluded segments (events,
       // guard content, "as newName") — those are silently skipped.
@@ -176,8 +185,8 @@ export function searchReferences(
           let preceding = pathCtx.preceding;
           if (
             node.parent?.parent?.type === "trait_sm_binding" &&
-            node.parent?.parent?.childForFieldName("value")?.id ===
-              node.parent?.id
+            (node.parent?.parent?.childForFieldName("value")?.id === node.parent?.id ||
+             node.parent?.parent?.childForFieldName("param")?.id === node.parent?.id)
           ) {
             preceding = preceding.slice(1);
           }
@@ -349,6 +358,25 @@ function resolveTraitSmBindingValueSM(node: SyntaxNode): string | undefined {
   if (grandparent.childForFieldName("value")?.id !== parent.id) return undefined;
   const firstId = parent.namedChild(0);
   return firstId?.type === "identifier" ? firstId.text : undefined;
+}
+
+function getTraitSmBindingParamSegmentIndex(node: SyntaxNode): number | undefined {
+  const parent = node.parent;
+  if (parent?.type !== "qualified_name") return undefined;
+  const grandparent = parent.parent;
+  if (grandparent?.type !== "trait_sm_binding") return undefined;
+  if (grandparent.childForFieldName("param")?.id !== parent.id) return undefined;
+  // Single-segment params don't need index-based filtering
+  if (parent.namedChildCount <= 1) return undefined;
+  let idx = 0;
+  for (let i = 0; i < parent.namedChildCount; i++) {
+    const child = parent.namedChild(i);
+    if (child?.type === "identifier") {
+      if (child.id === node.id) return idx;
+      idx++;
+    }
+  }
+  return undefined;
 }
 
 function resolveReferencedSmDefinition(node: SyntaxNode): string | undefined {

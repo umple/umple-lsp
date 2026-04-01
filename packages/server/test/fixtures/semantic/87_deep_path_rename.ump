@@ -1,0 +1,13 @@
+trait T1 {
+  sm {
+    s0 {
+      s0 {
+        /*@dpr_s11*/s11 {}
+      }
+    }
+  }
+}
+
+class /*@dpr_class*/C1 {
+  isA T1<sm.s0.s0./*@dpr_ref_s11*/s11 as state11>;
+}
