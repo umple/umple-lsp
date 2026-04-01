@@ -1028,6 +1028,8 @@ module.exports = grammar({
     param: ($) => choice(
       // Standard typed param: [final] Type [[] ] name
       seq(optional("final"), $.type_name, optional(seq("[", "]")), field("name", $.identifier)),
+      // Varargs param: Type... name
+      seq(optional("final"), $.type_name, "...", field("name", $.identifier)),
       // PHP-style param: $name (no type, $ immediately before identifier)
       seq("$", field("name", alias(token.immediate(/[a-zA-Z_][a-zA-Z0-9_]*/), $.identifier))),
     ),

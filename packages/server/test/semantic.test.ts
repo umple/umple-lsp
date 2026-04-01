@@ -2851,6 +2851,17 @@ const TEST_CASES: TestCase[] = [
       { type: "symbol_count", fixture: "79_chained_call.ump", name: "dim", kind: "attribute", expect: 1 },
     ],
   },
+
+  // 80: Varargs parameter support
+  {
+    name: "80 varargs: Type... param in constructors and methods parse clean",
+    fixtures: ["80_varargs.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "80_varargs.ump" },
+      { type: "symbol_count", fixture: "80_varargs.ump", name: "A", kind: "class", expect: 1 },
+      { type: "symbol_count", fixture: "80_varargs.ump", name: "foo", kind: "method", expect: 1 },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

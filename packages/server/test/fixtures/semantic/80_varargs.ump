@@ -1,0 +1,12 @@
+class /*@va_class*/A {
+  // Varargs constructor from real corpus
+  public A(String... args) { }
+
+  // Varargs method
+  void /*@va_method*/foo(Integer x, String... rest) {}
+
+  // Normal params still work
+  void bar(Integer a, String b) {}
+
+  name;
+}
