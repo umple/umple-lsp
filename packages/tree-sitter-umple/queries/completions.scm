@@ -67,7 +67,9 @@
 (guard) @scope.guard_attribute_method
 
 ; trace entity references — sentinel for keyword filtering + scoped attr/method completion
+; First entity after "trace"; subsequent entities after ","
 (trace_statement "trace" . (identifier) @scope.trace_attribute_method)
+(trace_statement "," . (identifier) @scope.trace_attribute_method)
 (trace_postfix "record" . (identifier) @scope.trace_attribute_method)
 
 ; referenced_statemachine definition — offer statemachine names from enclosing class

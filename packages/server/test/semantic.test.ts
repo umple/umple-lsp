@@ -2488,6 +2488,12 @@ const TEST_CASES: TestCase[] = [
         kind: "class",
         expect: 1,
       },
+      // Later list item has goto-def (second entity in trace list)
+      {
+        type: "goto_def",
+        at: "trace_age_ref",
+        expect: [{ at: "attr_age" }],
+      },
     ],
   },
 

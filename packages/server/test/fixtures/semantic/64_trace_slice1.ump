@@ -6,12 +6,12 @@ tracer File;
 tracer String;
 
 class A {
-  name;
-  Integer age;
+  /*@attr_name*/name;
+  Integer /*@attr_age*/age;
   Boolean enabled;
 
-  // Comma-separated trace entities
-  trace name, age;
+  // Comma-separated trace entities — later items must have semantics
+  trace name, /*@trace_age_ref*/age;
   trace name(), age();
   trace name, age, enabled;
 

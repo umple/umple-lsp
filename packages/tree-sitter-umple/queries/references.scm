@@ -149,9 +149,10 @@
 ; =====================
 ; TRACE ENTITY REFERENCES
 ; =====================
-; "trace count;" — identifier after "trace" keyword references attribute or method
-; Uses anonymous node anchor to skip tracecase/activate/deactivate identifiers
+; "trace count;" and "trace x, y;" — all trace entities reference attributes or methods
+; First entity uses "trace" anchor; subsequent entities use "," anchor
 (trace_statement "trace" . (identifier) @reference.attribute_method)
+(trace_statement "," . (identifier) @reference.attribute_method)
 ; "record x" in trace postfix — additional entity reference
 (trace_postfix "record" . (identifier) @reference.attribute_method)
 ; tracecase definition name and activate/deactivate references
