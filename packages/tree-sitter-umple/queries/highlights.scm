@@ -123,6 +123,7 @@
   "tracer"
   "tracecase"
   "suboption"
+  "distributable"
   "activate"
   "deactivate"
 ] @keyword

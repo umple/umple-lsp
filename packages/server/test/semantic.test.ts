@@ -2721,6 +2721,25 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 71: Distribution directives
+  {
+    name: "71 distributable_directive: forced, on, off, numbered forms parse clean",
+    fixtures: ["71_distributable_directive.ump"],
+    assertions: [
+      {
+        type: "parse_clean",
+        fixture: "71_distributable_directive.ump",
+      },
+      {
+        type: "symbol_count",
+        fixture: "71_distributable_directive.ump",
+        name: "A",
+        kind: "class",
+        expect: 1,
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

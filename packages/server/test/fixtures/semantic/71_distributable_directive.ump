@@ -1,0 +1,11 @@
+// Distribution directives — compiler-verified
+
+distributable forced;
+distributable on;
+distributable off;
+distributable 1 on;
+
+class /*@dist_class*/A {
+  distributable;
+  name;
+}

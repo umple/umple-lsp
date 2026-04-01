@@ -85,6 +85,7 @@ module.exports = grammar({
         $.req_implementation,
         $.tracer_directive,
         $.suboption_directive,
+        $.distributable_directive,
       ),
 
     // =====================
@@ -140,6 +141,10 @@ module.exports = grammar({
     // Standalone suboption directive: suboption "value";
     suboption_directive: ($) =>
       seq("suboption", $.string_literal, ";"),
+
+    // Distributable directive: distributable [N] (forced|on|off);
+    distributable_directive: ($) =>
+      seq("distributable", optional($.integer_literal), choice("forced", "on", "off"), ";"),
 
     // Strictness directive: grammar-only, no semantic handling.
     // Official forms: strictness (modelOnly|noExtraCode|none | allow|ignore|expect|disallow INT | disable EXPR) ;
