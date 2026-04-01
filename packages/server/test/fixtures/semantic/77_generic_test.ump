@@ -1,0 +1,18 @@
+class /*@gt_class*/Student {
+  String studentId;
+  name;
+  Integer studentAge;
+
+  generic test checkifLogged(String attribute.regex(\w*Age)) {
+    Student st1 ("S1", "John", 20);
+    assertTrue(true);
+  }
+
+  generic test checkAssoc(0..1->* association) {
+    assertTrue(true);
+  }
+
+  generic test checkMethod(Integer method Integer) {
+    assertTrue(true);
+  }
+}

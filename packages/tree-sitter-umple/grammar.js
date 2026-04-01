@@ -142,6 +142,12 @@ module.exports = grammar({
     test_case: ($) =>
       seq("test", field("name", $.identifier), "{", optional($.code_content), "}"),
 
+    // Generic test case: generic test name(params) { ... }
+    // Params are too varied to model precisely; use opaque regex for the signature
+    // Params may contain nested parens like regex(\w*Age), so use balanced matching
+    generic_test_case: ($) =>
+      seq("generic", "test", field("name", $.identifier), "(", repeat(choice(/[^()]+/, seq("(", /[^)]*/, ")"))), ")", "{", optional($.code_content), "}"),
+
     // Standalone suboption directive: suboption "value";
     suboption_directive: ($) =>
       seq("suboption", $.string_literal, ";"),
@@ -235,6 +241,7 @@ module.exports = grammar({
         $.active_method,
         $.trace_statement,
         $.test_case,
+        $.generic_test_case,
         $.position_directive,
         $.position_association_directive,
         ";", // bare semicolons are valid in class/mixset bodies

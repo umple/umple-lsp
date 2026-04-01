@@ -125,6 +125,7 @@
   "suboption"
   "distributable"
   "test"
+  "generic"
   "activate"
   "deactivate"
 ] @keyword

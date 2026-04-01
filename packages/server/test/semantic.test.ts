@@ -2817,6 +2817,16 @@ const TEST_CASES: TestCase[] = [
       { type: "symbol_count", fixture: "76_test_case.ump", name: "Student", kind: "class", expect: 1 },
     ],
   },
+
+  // 77: Generic test case DSL
+  {
+    name: "77 generic_test: generic test blocks with varied signatures parse clean",
+    fixtures: ["77_generic_test.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "77_generic_test.ump" },
+      { type: "symbol_count", fixture: "77_generic_test.ump", name: "Student", kind: "class", expect: 1 },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────
