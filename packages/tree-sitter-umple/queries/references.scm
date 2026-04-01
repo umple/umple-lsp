@@ -149,20 +149,27 @@
 ; =====================
 ; TRACE ENTITY REFERENCES
 ; =====================
-; "trace count;" and "trace x, y;" — all trace entities reference attributes or methods
-; First entity: after "trace" (no prefix) or after last prefix keyword
-(trace_statement "trace" . (identifier) @reference.attribute_method)
-(trace_statement "set" . (identifier) @reference.attribute_method)
-(trace_statement "get" . (identifier) @reference.attribute_method)
-(trace_statement "in" . (identifier) @reference.attribute_method)
-(trace_statement "out" . (identifier) @reference.attribute_method)
-(trace_statement "entry" . (identifier) @reference.attribute_method)
-(trace_statement "exit" . (identifier) @reference.attribute_method)
-(trace_statement "cardinality" . (identifier) @reference.attribute_method)
-(trace_statement "add" . (identifier) @reference.attribute_method)
-(trace_statement "remove" . (identifier) @reference.attribute_method)
-; Subsequent entities after ","
-(trace_statement "," . (identifier) @reference.attribute_method)
+; Trace entity references — prefix-sensitive kinds
+; No prefix: attribute or method
+(trace_statement "trace" . (trace_entity (identifier) @reference.attribute_method))
+(trace_statement "trace" . (trace_entity_call (identifier) @reference.method))
+; set/get → attribute
+(trace_statement "set" . (trace_entity (identifier) @reference.attribute))
+(trace_statement "get" . (trace_entity (identifier) @reference.attribute))
+; entry/exit bare → state; entry/exit call → method
+(trace_statement "entry" . (trace_entity (identifier) @reference.state))
+(trace_statement "exit" . (trace_entity (identifier) @reference.state))
+(trace_statement "entry" . (trace_entity_call (identifier) @reference.method))
+(trace_statement "exit" . (trace_entity_call (identifier) @reference.method))
+; add/remove/cardinality → association
+(trace_statement "add" . (trace_entity (identifier) @reference.association))
+(trace_statement "remove" . (trace_entity (identifier) @reference.association))
+(trace_statement "cardinality" . (trace_entity (identifier) @reference.association))
+; in/out: parse-only, no semantic assignment yet
+; Subsequent entities after "," — attribute or method (context-independent)
+; No "." anchor: tree-sitter "." has unexpected behavior with multiple commas
+(trace_statement "," (trace_entity (identifier) @reference.attribute_method))
+(trace_statement "," (trace_entity_call (identifier) @reference.method))
 ; "record x" in trace postfix — additional entity reference
 (trace_postfix "record" . (identifier) @reference.attribute_method)
 ; tracecase definition name and activate/deactivate references

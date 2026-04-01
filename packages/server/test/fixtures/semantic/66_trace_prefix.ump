@@ -1,20 +1,32 @@
+class B {}
+
 class A {
-  /*@prefix_name*/name;
-  Integer /*@prefix_age*/age;
+  /*@pref_attr_name*/name;
+  Integer /*@pref_attr_age*/age;
+  void /*@pref_method_open*/open() {}
+  /*@pref_sm*/sm {
+    /*@pref_state_open*/Open {
+      close -> Closed;
+    }
+    Closed {}
+  }
+  0..1 -- * B /*@pref_assoc_manager*/manager;
 
-  // Single prefix
-  trace set /*@pref_set_name*/name;
-  trace get name;
-  trace entry name;
-  trace exit name;
+  // entry bare → state
+  trace entry /*@trace_entry_state*/Open;
 
-  // Multi-prefix (comma-separated)
-  trace set,get name;
-  trace entry,exit name();
+  // exit call → method
+  trace exit /*@trace_exit_method*/open();
 
-  // Prefix + comma-separated entities
-  trace set name, /*@pref_set_age*/age;
+  // set → attribute
+  trace set /*@trace_set_attr*/name;
 
-  // Prefix + postfix
-  trace set name where [age > 5];
+  // add → association
+  trace add /*@trace_add_assoc*/manager;
+
+  // no prefix → attribute/method
+  trace /*@trace_noprefix*/name;
+
+  // multi-prefix + multi-entity
+  trace set,get name, /*@trace_multi_age*/age;
 }

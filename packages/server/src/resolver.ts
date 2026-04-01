@@ -255,6 +255,20 @@ export function resolveSymbolAtPosition(
         }
       }
 
+      // Fallback: state/statemachine at class level (e.g., trace entry Open)
+      // — no enclosingStateMachine, but enclosingClass can scope the search
+      if (
+        symbols.length === 0 &&
+        !container &&
+        token.enclosingClass &&
+        scopedKinds.some((k) => k === "state" || k === "statemachine")
+      ) {
+        symbols = si
+          .getSymbols({ name: token.word, kind: scopedKinds })
+          .filter((s) => s.container?.startsWith(token.enclosingClass + "."))
+          .filter((s) => reachableFiles.has(path.normalize(s.file)));
+      }
+
       if (symbols.length === 0 && unscopedKinds.length > 0) {
         symbols = si
           .getSymbols({ name: token.word, kind: unscopedKinds })

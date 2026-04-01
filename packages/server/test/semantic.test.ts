@@ -2497,26 +2497,49 @@ const TEST_CASES: TestCase[] = [
     ],
   },
 
-  // 66: Trace Slice 3a — prefix keywords with semantic parity
+  // 66: Trace prefix keywords — prefix-sensitive semantics
   {
-    name: "66 trace_prefix: prefix keywords parse clean with goto-def parity",
+    name: "66 trace_prefix: prefix-sensitive goto-def for state, method, attribute",
     fixtures: ["66_trace_prefix.ump"],
     assertions: [
       {
         type: "parse_clean",
         fixture: "66_trace_prefix.ump",
       },
-      // First entity after prefix still resolves (semantic parity)
+      // entry bare → state
       {
         type: "goto_def",
-        at: "pref_set_name",
-        expect: [{ at: "prefix_name" }],
+        at: "trace_entry_state",
+        expect: [{ at: "pref_state_open" }],
       },
-      // Later entity in prefixed trace list still resolves
+      // exit call → method
       {
         type: "goto_def",
-        at: "pref_set_age",
-        expect: [{ at: "prefix_age" }],
+        at: "trace_exit_method",
+        expect: [{ at: "pref_method_open" }],
+      },
+      // set → attribute
+      {
+        type: "goto_def",
+        at: "trace_set_attr",
+        expect: [{ at: "pref_attr_name" }],
+      },
+      // no prefix → attribute
+      {
+        type: "goto_def",
+        at: "trace_noprefix",
+        expect: [{ at: "pref_attr_name" }],
+      },
+      // multi-prefix later entity still resolves
+      {
+        type: "goto_def",
+        at: "trace_multi_age",
+        expect: [{ at: "pref_attr_age" }],
+      },
+      // add → association (goto-def empty: assoc roles not indexed as symbols)
+      {
+        type: "goto_def_empty",
+        at: "trace_add_assoc",
       },
     ],
   },

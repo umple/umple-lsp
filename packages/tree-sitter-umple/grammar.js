@@ -419,8 +419,10 @@ module.exports = grammar({
     //   deactivate name onThisObject ;
     // Postfix: where/until/after/giving [condition], record entity
     // Deferred: execute { code }, logLevel/for/period/during
-    // Trace entity: identifier with optional ()
-    _trace_entity: ($) => seq($.identifier, optional(seq("(", ")"))),
+    // Trace entities — named to distinguish bare (state/attr/assoc) from call (method)
+    trace_entity: ($) => $.identifier,
+    trace_entity_call: ($) => seq($.identifier, "(", ")"),
+    _trace_entity: ($) => choice($.trace_entity_call, $.trace_entity),
 
     // Trace prefix option: set, get, in, out, entry, exit, cardinality, add, remove
     _trace_prefix: ($) =>
