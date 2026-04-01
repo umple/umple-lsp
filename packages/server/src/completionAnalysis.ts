@@ -239,6 +239,17 @@ export function analyzeCompletion(
     }
   }
 
+  // --- Trait SM operation suppression: "as" and guard positions ---
+  // After "as" inside trait-SM context → suppress (new name position, not a reference)
+  if (prevLeaf?.type === "as" && isInsideTraitSmOpContext(prevLeaf)) {
+    symbolKinds = "suppress";
+  }
+
+  // Inside "[" in trait-SM guard position → suppress
+  if (prevLeaf?.type === "[" && isInsideTraitSmOpContext(prevLeaf)) {
+    symbolKinds = "suppress";
+  }
+
   // --- Trait SM operation completion: after -/+ or after sm. in prefixed path ---
   let traitSmContext: CompletionInfo["traitSmContext"];
   if (
@@ -631,6 +642,29 @@ function extractDottedPrefix(
   }
 
   return segments.length > 0 ? segments : undefined;
+}
+
+/** Check if a node is inside a trait_sm_operation context (within <> of isA). */
+function isInsideTraitSmOpContext(node: SyntaxNode): boolean {
+  let n: SyntaxNode | null = node;
+  while (n) {
+    if (n.type === "trait_sm_operation") return true;
+    // In ERROR recovery, check if a sibling is trait_sm_operation
+    if (n.type === "ERROR" && n.parent?.type === "type_name") {
+      for (let i = 0; i < n.parent.namedChildCount; i++) {
+        if (n.parent.namedChild(i)?.type === "trait_sm_operation") return true;
+      }
+    }
+    // Check if parent is type_name inside isa_declaration with trait_sm_operation sibling
+    if (n.type === "type_name") {
+      for (let i = 0; i < n.namedChildCount; i++) {
+        if (n.namedChild(i)?.type === "trait_sm_operation") return true;
+      }
+    }
+    if (n.type === "class_definition" || n.type === "source_file") return false;
+    n = n.parent;
+  }
+  return false;
 }
 
 /** Check if a node is inside angle brackets of a type_name (trait type arguments). */

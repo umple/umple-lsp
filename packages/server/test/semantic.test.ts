@@ -2356,6 +2356,17 @@ const TEST_CASES: TestCase[] = [
         at: "comp_state",
         expect: ["x1", "x2"],
       },
+      // ── Trait SM suppression: "as" and guard positions ──
+      {
+        type: "completion_kinds",
+        at: "comp_as_suppress",
+        expect: "suppress",
+      },
+      {
+        type: "completion_kinds",
+        at: "comp_guard_suppress",
+        expect: "suppress",
+      },
     ],
   },
 

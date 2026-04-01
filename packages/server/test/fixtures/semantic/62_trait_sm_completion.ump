@@ -11,3 +11,9 @@ class B { isA T1<+ /*@comp_sm_plus*/>; }
 
 // After sm.: offer state names from T1.sm
 class C { isA T1<-sm. /*@comp_state*/>; }
+
+// Suppressed: after "as" in trait SM op
+class D { isA T1<sm.s1() as /*@comp_as_suppress*/>; }
+
+// Suppressed: inside guard in trait SM op
+class E { isA T1<-sm.s1.e4()[ /*@comp_guard_suppress*/]>; }
