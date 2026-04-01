@@ -5,6 +5,7 @@
  * Run with: npm test (from repo root or packages/server)
  */
 
+import * as path from "path";
 import { SemanticTestHelper, MarkerPosition, DeclSpec } from "./helpers";
 
 // ── Assertion types ──────────────────────────────────────────────────────────
@@ -2222,15 +2223,19 @@ const TEST_CASES: TestCase[] = [
         at: "op_s1b",
         expect: [{ at: "s1_decl" }],
       },
-      // ── Goto-def empty: event names + "as" target → deferred ──
+      // ── Goto-def: event names → transition in trait ──
       {
-        type: "goto_def_empty",
+        type: "goto_def",
         at: "op_e4",
+        expect: [{ at: "e4_decl" }],
       },
+      // Phase 2 event also resolves
       {
-        type: "goto_def_empty",
+        type: "goto_def",
         at: "op_e4_p2",
+        expect: [{ at: "e4_decl" }],
       },
+      // "as newName" still empty (new name, not a reference)
       {
         type: "goto_def_empty",
         at: "op_newevt",
@@ -2589,6 +2594,33 @@ function runAssertion(
     if (!src) return { ok: false, message: `marker @${assertion.at} not found` };
 
     const result = helper.resolve(src.filePath, src.content, src.pos.line, src.pos.col, reachable);
+
+    // Trait SM event goto-def fallback: use dedicated event occurrence resolver
+    if (result && result.symbols.length === 0 && result.token.context.type === "trait_sm_op" && result.token.context.isEventSegment) {
+      const ctx = result.token.context;
+      const traitSyms = helper.si.getSymbols({ name: ctx.traitName, kind: ["trait"] as any[] })
+        .filter((s: any) => reachable.has(path.normalize(s.file)));
+      if (traitSyms.length > 0) {
+        const smName = ctx.pathSegments[0];
+        const statePath = ctx.pathSegments.length > 2 ? ctx.pathSegments.slice(1, -1) : undefined;
+        const occurrences = helper.si.getEventOccurrences(traitSyms[0].file, ctx.traitName, smName, statePath);
+        const eventLabel = `${result.token.word}(${(ctx.eventParams ?? []).join(", ")})`;
+        const matching = occurrences.filter((o: any) => o.label === eventLabel);
+        if (matching.length > 0) {
+          for (const exp of assertion.expect) {
+            const target = findMarker(exp.at);
+            if (!target) return { ok: false, message: `target marker @${exp.at} not found` };
+            const found = matching.some((o: any) => o.line === target.pos.line);
+            if (!found) {
+              return { ok: false, message: `goto_def @${assertion.at}: expected event target @${exp.at} (line ${target.pos.line}), got lines [${matching.map((o: any) => o.line).join(", ")}]` };
+            }
+          }
+          return { ok: true, message: "" };
+        }
+      }
+      return { ok: false, message: `goto_def @${assertion.at}: no matching event occurrences for "${result.token.word}"` };
+    }
+
     if (!result || result.symbols.length === 0) {
       return {
         ok: false,

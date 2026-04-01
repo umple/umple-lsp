@@ -654,82 +654,82 @@ export class SymbolIndex {
     smName: string,
     statePath?: string[],
   ): { name: string; params: string[]; label: string; statePaths: string[][] }[] {
+    // Adapter over getEventOccurrences — dedupes by label, aggregates statePaths
+    const occurrences = this.getEventOccurrences(traitFile, traitName, smName, statePath);
+    const resultMap = new Map<string, { name: string; params: string[]; label: string; statePaths: string[][] }>();
+    for (const occ of occurrences) {
+      const existing = resultMap.get(occ.label);
+      if (existing) {
+        const pathKey = occ.statePath.join(".");
+        if (!existing.statePaths.some((p) => p.join(".") === pathKey)) {
+          existing.statePaths.push(occ.statePath);
+        }
+      } else {
+        resultMap.set(occ.label, { name: occ.name, params: occ.params, label: occ.label, statePaths: [occ.statePath] });
+      }
+    }
+    return [...resultMap.values()];
+  }
+
+  /**
+   * Get detailed event occurrences with source locations for goto-def.
+   * Returns ALL occurrences (not deduped) with exact positions.
+   */
+  getEventOccurrences(
+    traitFile: string,
+    traitName: string,
+    smName: string,
+    statePath?: string[],
+  ): { name: string; params: string[]; label: string; statePath: string[]; line: number; column: number; endLine: number; endColumn: number }[] {
     const tree = this.files.get(path.normalize(traitFile))?.tree;
     if (!tree) return [];
 
-    const resultMap = new Map<string, { name: string; params: string[]; label: string; statePaths: string[][] }>();
+    const results: { name: string; params: string[]; label: string; statePath: string[]; line: number; column: number; endLine: number; endColumn: number }[] = [];
 
-    const collectFromState = (stateNode: any, currentPath: string[]) => {
+    const collectOccurrences = (stateNode: any, currentPath: string[]) => {
       for (let i = 0; i < stateNode.namedChildCount; i++) {
         const child = stateNode.namedChild(i);
         if (child?.type !== "transition") continue;
         const eventSpec = child.childForFieldName("event");
-        if (!eventSpec) continue; // auto-transition, skip
-        const nameNode = eventSpec.namedChildren.find(
-          (c: any) => c.type === "identifier",
-        );
+        if (!eventSpec) continue;
+        const nameNode = eventSpec.namedChildren.find((c: any) => c.type === "identifier");
         if (!nameNode) continue;
         const name = nameNode.text;
         const params: string[] = [];
-        const paramList = eventSpec.namedChildren.find(
-          (c: any) => c.type === "param_list",
-        );
+        const paramList = eventSpec.namedChildren.find((c: any) => c.type === "param_list");
         if (paramList) {
           for (let j = 0; j < paramList.namedChildCount; j++) {
             const param = paramList.namedChild(j);
             if (param?.type === "param") {
-              const typeName = param.namedChildren.find(
-                (c: any) => c.type === "type_name",
-              );
+              const typeName = param.namedChildren.find((c: any) => c.type === "type_name");
               if (typeName) params.push(typeName.text);
             }
           }
         }
-        const label = `${name}(${params.join(", ")})`;
-        const existing = resultMap.get(label);
-        if (existing) {
-          const pathKey = currentPath.join(".");
-          if (!existing.statePaths.some((p: string[]) => p.join(".") === pathKey)) {
-            existing.statePaths.push([...currentPath]);
-          }
-        } else {
-          resultMap.set(label, { name, params, label, statePaths: [[...currentPath]] });
-        }
+        results.push({
+          name,
+          params,
+          label: `${name}(${params.join(", ")})`,
+          statePath: [...currentPath],
+          line: nameNode.startPosition.row,
+          column: nameNode.startPosition.column,
+          endLine: nameNode.endPosition.row,
+          endColumn: nameNode.endPosition.column,
+        });
       }
     };
 
-    // Walk tree to find the specific trait, then the SM within it
-    let traitNode: any = null;
-    const walkToTrait = (node: any) => {
-      if (node.type === "trait_definition" && node.childForFieldName("name")?.text === traitName) {
-        traitNode = node;
-        return;
-      }
-      for (let i = 0; i < node.childCount && !traitNode; i++) walkToTrait(node.child(i));
-    };
-    walkToTrait(tree.rootNode);
+    const traitNode = this._findTraitNode(tree, traitName);
     if (!traitNode) return [];
-
-    let smNode: any = null;
-    for (let i = 0; i < traitNode.namedChildCount; i++) {
-      const child = traitNode.namedChild(i);
-      if (
-        (child?.type === "state_machine" || child?.type === "statemachine_definition") &&
-        child.childForFieldName("name")?.text === smName
-      ) {
-        smNode = child;
-        break;
-      }
-    }
+    const smNode = this._findSmInTrait(traitNode, smName);
     if (!smNode) return [];
 
     if (!statePath || statePath.length === 0) {
-      // Aggregate across all states in the SM
       const walkStates = (node: any, pathSoFar: string[]) => {
         if (node.type === "state") {
-          const name = node.childForFieldName("name")?.text;
-          const p = name ? [...pathSoFar, name] : pathSoFar;
-          collectFromState(node, p);
+          const n = node.childForFieldName("name")?.text;
+          const p = n ? [...pathSoFar, n] : pathSoFar;
+          collectOccurrences(node, p);
           for (let i = 0; i < node.childCount; i++) walkStates(node.child(i), p);
         } else {
           for (let i = 0; i < node.childCount; i++) walkStates(node.child(i), pathSoFar);
@@ -737,7 +737,6 @@ export class SymbolIndex {
       };
       walkStates(smNode, []);
     } else {
-      // Walk to the specific state by path
       let current = smNode;
       for (const seg of statePath) {
         let found = false;
@@ -751,10 +750,36 @@ export class SymbolIndex {
         }
         if (!found) return [];
       }
-      collectFromState(current, [...statePath]);
+      collectOccurrences(current, [...statePath]);
     }
 
-    return [...resultMap.values()];
+    return results;
+  }
+
+  /** Find the trait_definition node by name in the tree. */
+  private _findTraitNode(tree: any, traitName: string): any {
+    let result: any = null;
+    const walk = (node: any) => {
+      if (node.type === "trait_definition" && node.childForFieldName("name")?.text === traitName) {
+        result = node;
+        return;
+      }
+      for (let i = 0; i < node.childCount && !result; i++) walk(node.child(i));
+    };
+    walk(tree.rootNode);
+    return result;
+  }
+
+  /** Find a state_machine node within a trait node. */
+  private _findSmInTrait(traitNode: any, smName: string): any {
+    for (let i = 0; i < traitNode.namedChildCount; i++) {
+      const child = traitNode.namedChild(i);
+      if (
+        (child?.type === "state_machine" || child?.type === "statemachine_definition") &&
+        child.childForFieldName("name")?.text === smName
+      ) return child;
+    }
+    return null;
   }
 
   /**

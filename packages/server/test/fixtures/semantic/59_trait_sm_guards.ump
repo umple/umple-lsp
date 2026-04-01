@@ -4,8 +4,8 @@
 trait T1 {
   /*@sm_decl*/sm {
     /*@s1_decl*/s1 {
-      e4 [cond] -> s2;
-      e5 -> s2;
+      /*@e4_decl*/e4 [cond] -> s2;
+      /*@e5_decl*/e5 -> s2;
     }
     /*@s2_decl*/s2 {
       [cond] -> s1;

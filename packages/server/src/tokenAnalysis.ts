@@ -205,9 +205,23 @@ export function analyzeToken(
     }
 
     if (idx >= 0 && traitName) {
-      context = { type: "trait_sm_op", traitName, pathSegments: segments, segmentIndex: idx, isEventSegment };
+      // Extract event param types from type_list if this is an event segment
+      let eventParams: string[] | undefined;
       if (isEventSegment) {
-        kinds = null; // event → deferred, no goto-def
+        const typeList = opNode.namedChildren.find((c: { type: string }) => c.type === "type_list");
+        if (typeList) {
+          eventParams = [];
+          for (let j = 0; j < typeList.namedChildCount; j++) {
+            const tn = typeList.namedChild(j);
+            if (tn?.type === "type_name") eventParams.push(tn.text);
+          }
+        } else {
+          eventParams = []; // empty parens ()
+        }
+      }
+      context = { type: "trait_sm_op", traitName, pathSegments: segments, segmentIndex: idx, isEventSegment, eventParams };
+      if (isEventSegment) {
+        kinds = null;
       } else {
         kinds = idx === 0 ? ["statemachine"] : ["state"];
       }
@@ -267,7 +281,16 @@ export function analyzeToken(
         if (idx >= 0 && traitName) {
           const isLastSegment = idx === segments.length - 1;
           const isEventSegment = isLastSegment && hasEventParams;
-          context = { type: "trait_sm_op", traitName, pathSegments: segments, segmentIndex: idx, isEventSegment };
+          let eventParams: string[] | undefined;
+          if (isEventSegment) {
+            const typeList = opNode.namedChildren.find((c: { type: string }) => c.type === "type_list");
+            eventParams = typeList
+              ? Array.from({ length: typeList.namedChildCount }, (_, j) => typeList.namedChild(j))
+                  .filter((tn: any) => tn?.type === "type_name")
+                  .map((tn: any) => tn.text)
+              : [];
+          }
+          context = { type: "trait_sm_op", traitName, pathSegments: segments, segmentIndex: idx, isEventSegment, eventParams };
           if (isEventSegment) {
             kinds = null;
           } else {
