@@ -418,14 +418,19 @@ module.exports = grammar({
     //   activate name (onAllObjects|onThisThreadOnly)? ;
     //   deactivate name onThisObject ;
     // Postfix: where/until/after/giving [condition], record entity
-    // Deferred: execute { code }, prefix keywords (set/get/in/out etc.), logLevel/for/period/during
+    // Deferred: execute { code }, logLevel/for/period/during
     // Trace entity: identifier with optional ()
     _trace_entity: ($) => seq($.identifier, optional(seq("(", ")"))),
+
+    // Trace prefix option: set, get, in, out, entry, exit, cardinality, add, remove
+    _trace_prefix: ($) =>
+      choice("set", "get", "in", "out", "entry", "exit", "cardinality", "add", "remove"),
 
     trace_statement: ($) =>
       choice(
         seq(
           "trace",
+          optional(seq($._trace_prefix, repeat(seq(",", $._trace_prefix)))),
           $._trace_entity,
           repeat(seq(",", $._trace_entity)),
           repeat($.trace_postfix),
@@ -437,6 +442,7 @@ module.exports = grammar({
           "{",
           repeat(seq(
             "trace",
+            optional(seq($._trace_prefix, repeat(seq(",", $._trace_prefix)))),
             $._trace_entity,
             repeat(seq(",", $._trace_entity)),
             repeat($.trace_postfix),

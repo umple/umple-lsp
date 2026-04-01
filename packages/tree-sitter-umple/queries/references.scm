@@ -150,8 +150,18 @@
 ; TRACE ENTITY REFERENCES
 ; =====================
 ; "trace count;" and "trace x, y;" — all trace entities reference attributes or methods
-; First entity uses "trace" anchor; subsequent entities use "," anchor
+; First entity: after "trace" (no prefix) or after last prefix keyword
 (trace_statement "trace" . (identifier) @reference.attribute_method)
+(trace_statement "set" . (identifier) @reference.attribute_method)
+(trace_statement "get" . (identifier) @reference.attribute_method)
+(trace_statement "in" . (identifier) @reference.attribute_method)
+(trace_statement "out" . (identifier) @reference.attribute_method)
+(trace_statement "entry" . (identifier) @reference.attribute_method)
+(trace_statement "exit" . (identifier) @reference.attribute_method)
+(trace_statement "cardinality" . (identifier) @reference.attribute_method)
+(trace_statement "add" . (identifier) @reference.attribute_method)
+(trace_statement "remove" . (identifier) @reference.attribute_method)
+; Subsequent entities after ","
 (trace_statement "," . (identifier) @reference.attribute_method)
 ; "record x" in trace postfix — additional entity reference
 (trace_postfix "record" . (identifier) @reference.attribute_method)

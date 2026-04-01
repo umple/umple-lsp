@@ -1,0 +1,20 @@
+class A {
+  /*@prefix_name*/name;
+  Integer /*@prefix_age*/age;
+
+  // Single prefix
+  trace set /*@pref_set_name*/name;
+  trace get name;
+  trace entry name;
+  trace exit name;
+
+  // Multi-prefix (comma-separated)
+  trace set,get name;
+  trace entry,exit name();
+
+  // Prefix + comma-separated entities
+  trace set name, /*@pref_set_age*/age;
+
+  // Prefix + postfix
+  trace set name where [age > 5];
+}

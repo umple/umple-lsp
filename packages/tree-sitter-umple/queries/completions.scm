@@ -67,8 +67,18 @@
 (guard) @scope.guard_attribute_method
 
 ; trace entity references — sentinel for keyword filtering + scoped attr/method completion
-; First entity after "trace"; subsequent entities after ","
+; First entity: after "trace" (no prefix) or after last prefix keyword
 (trace_statement "trace" . (identifier) @scope.trace_attribute_method)
+(trace_statement "set" . (identifier) @scope.trace_attribute_method)
+(trace_statement "get" . (identifier) @scope.trace_attribute_method)
+(trace_statement "in" . (identifier) @scope.trace_attribute_method)
+(trace_statement "out" . (identifier) @scope.trace_attribute_method)
+(trace_statement "entry" . (identifier) @scope.trace_attribute_method)
+(trace_statement "exit" . (identifier) @scope.trace_attribute_method)
+(trace_statement "cardinality" . (identifier) @scope.trace_attribute_method)
+(trace_statement "add" . (identifier) @scope.trace_attribute_method)
+(trace_statement "remove" . (identifier) @scope.trace_attribute_method)
+; Subsequent entities after ","
 (trace_statement "," . (identifier) @scope.trace_attribute_method)
 (trace_postfix "record" . (identifier) @scope.trace_attribute_method)
 

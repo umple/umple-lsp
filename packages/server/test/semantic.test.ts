@@ -2497,6 +2497,30 @@ const TEST_CASES: TestCase[] = [
     ],
   },
 
+  // 66: Trace Slice 3a — prefix keywords with semantic parity
+  {
+    name: "66 trace_prefix: prefix keywords parse clean with goto-def parity",
+    fixtures: ["66_trace_prefix.ump"],
+    assertions: [
+      {
+        type: "parse_clean",
+        fixture: "66_trace_prefix.ump",
+      },
+      // First entity after prefix still resolves (semantic parity)
+      {
+        type: "goto_def",
+        at: "pref_set_name",
+        expect: [{ at: "prefix_name" }],
+      },
+      // Later entity in prefixed trace list still resolves
+      {
+        type: "goto_def",
+        at: "pref_set_age",
+        expect: [{ at: "prefix_age" }],
+      },
+    ],
+  },
+
   // 65: Trace Slice 1 negative — tracer with options still produces parse error
   {
     name: "65 trace_slice1_negative: tracer with options not yet supported",
