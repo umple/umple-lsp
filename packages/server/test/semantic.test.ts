@@ -2840,6 +2840,17 @@ const TEST_CASES: TestCase[] = [
       { type: "symbol_count", fixture: "78_static_final_const.ump", name: "A", kind: "class", expect: 1 },
     ],
   },
+
+  // 79: Chained call expression initializer
+  {
+    name: "79 chained_call: chained method call initializer parses clean",
+    fixtures: ["79_chained_call.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "79_chained_call.ump" },
+      { type: "symbol_count", fixture: "79_chained_call.ump", name: "A", kind: "class", expect: 1 },
+      { type: "symbol_count", fixture: "79_chained_call.ump", name: "dim", kind: "attribute", expect: 1 },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

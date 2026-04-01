@@ -1,0 +1,9 @@
+class /*@cc_class*/A {
+  // Chained call initializer from real corpus
+  lazy internal Dimension dim = Toolkit.getDefaultToolkit().getScreenSize();
+
+  // Simple call still works
+  lazy String sep = System.lineSeparator();
+
+  name;
+}

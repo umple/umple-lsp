@@ -1197,9 +1197,10 @@ module.exports = grammar({
     call_expression: ($) =>
       choice(
         seq($.qualified_name, "(", optional($._argument_list), ")"),
-        // Generic method call: Receiver.<Type>method(args) — uses a token to avoid
-        // conflict with qualified_name's token.immediate(".") lexer behavior.
+        // Generic method call: Receiver.<Type>method(args)
         seq($.qualified_name, token.immediate(/\.<[^>]+>[a-zA-Z_][a-zA-Z0-9_]*/), "(", optional($._argument_list), ")"),
+        // Chained call: expr().method(args) — e.g. Toolkit.getDefaultToolkit().getScreenSize()
+        seq($.call_expression, ".", $.identifier, "(", optional($._argument_list), ")"),
       ),
 
     new_expression: ($) =>
