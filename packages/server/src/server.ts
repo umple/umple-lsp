@@ -38,6 +38,7 @@ import {
   symbolKindToCompletionKind,
 } from "./completionBuilder";
 import { buildHoverMarkdown, buildTraitSmOpHover } from "./hoverBuilder";
+import { resolveTraitSmEventLocations } from "./traitSmEventResolver";
 import { buildDocumentSymbolTree } from "./documentSymbolBuilder";
 import {
   expandCompactStates,
@@ -649,7 +650,7 @@ connection.onDefinition(async (params) => {
     params.position.character,
   );
 
-  // Trait SM event goto-def: dedicated path, not through symbol resolver
+  // Trait SM event goto-def: dedicated resolver, not through symbol resolver
   if (
     resolved?.token.context.type === "trait_sm_op" &&
     resolved.token.context.isEventSegment &&
@@ -657,31 +658,19 @@ connection.onDefinition(async (params) => {
   ) {
     const ctx = resolved.token.context;
     const reachable = ensureImportsIndexed(docPath, document.getText());
-    const traitSyms = symbolIndex
-      .getSymbols({ name: ctx.traitName, kind: ["trait"] })
-      .filter((s) => reachable.has(path.normalize(s.file)));
-    if (traitSyms.length > 0) {
-      const smName = ctx.pathSegments[0];
-      const statePath = ctx.pathSegments.length > 2 ? ctx.pathSegments.slice(1, -1) : undefined;
-      const occurrences = symbolIndex.getEventOccurrences(
-        traitSyms[0].file, ctx.traitName, smName, statePath,
-      );
-      // Match by name + exact param signature
-      const eventLabel = `${resolved.token.word}(${(ctx.eventParams ?? []).join(", ")})`;
-      const matching = occurrences.filter((o) => o.label === eventLabel);
-      if (matching.length > 0) {
-        return matching.map((o) =>
-          Location.create(
-            pathToFileURL(traitSyms[0].file).toString(),
-            Range.create(
-              Position.create(o.line, o.column),
-              Position.create(o.endLine, o.endColumn),
-            ),
-          ),
-        );
-      }
-    }
-    return [];
+    const locations = resolveTraitSmEventLocations(
+      symbolIndex, ctx.traitName, ctx.pathSegments[0],
+      resolved.token.word, ctx.eventParams ?? [], ctx.pathSegments, reachable,
+    );
+    return locations.map((loc) =>
+      Location.create(
+        pathToFileURL(loc.file).toString(),
+        Range.create(
+          Position.create(loc.line, loc.column),
+          Position.create(loc.endLine, loc.endColumn),
+        ),
+      ),
+    );
   }
 
   if (!resolved || resolved.symbols.length === 0) return [];

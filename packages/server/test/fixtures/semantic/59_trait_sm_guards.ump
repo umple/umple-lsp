@@ -10,6 +10,11 @@ trait T1 {
     /*@s2_decl*/s2 {
       [cond] -> s1;
       e6 -> s1;
+      // Same name, different params for signature disambiguation
+      /*@e4_int_decl*/e4(Integer x) -> s1;
+      // Same exact signature, multiple transitions (different guards)
+      /*@e4_dup1*/e4 [!cond] -> s3;
+      /*@e4_dup2*/e4 -> s1;
     }
     /*@s3_decl*/s3 {
       -> s1;
@@ -49,4 +54,14 @@ class P1 {
 // Phase 2 regression: sm.e4() as newEvent
 class P2 {
   isA T1</*@op_sm_p2*/sm./*@op_e4_p2*/e4() as /*@op_newevt*/newEvent>;
+}
+
+// Param disambiguation: e4(Integer) → different from e4()
+class P3 {
+  isA T1<-sm.s2./*@op_e4_int*/e4(Integer)>;
+}
+
+// Multi-result: e4() in s2 has two transitions (different guards)
+class P4 {
+  isA T1<-sm.s2./*@op_e4_multi*/e4()>;
 }
