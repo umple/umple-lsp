@@ -1,0 +1,14 @@
+trait T1 {
+  sm {
+    s1 {
+      inner1 {}
+      inner2 {}
+    }
+    s2 {}
+    s3 {}
+  }
+  sm2 {
+    x1 {}
+    x2 {}
+  }
+}

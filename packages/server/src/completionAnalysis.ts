@@ -85,7 +85,7 @@ export interface CompletionInfo {
   /** Owner class for sorted key completion (resolved from association AST). */
   sortedKeyOwner?: string;
   /** Trait SM operation completion context. */
-  traitSmContext?: { traitName: string; smName?: string };
+  traitSmContext?: { traitName: string; smName?: string; statePath?: string[] };
 }
 
 // ── Main analysis function ──────────────────────────────────────────────────
@@ -252,28 +252,72 @@ export function analyzeCompletion(
     }
   }
   if (!traitSmContext && prevLeaf?.type === ".") {
-    // After "sm." in prefixed form: the dot may be inside ERROR, with
-    // trait_sm_operation as a preceding sibling containing the SM name.
+    // After dot in trait SM operation paths. The dot is inside ERROR,
+    // with the preceding path in a sibling node.
     const errorNode = prevLeaf.parent?.type === "ERROR" ? prevLeaf.parent : null;
     const typeName = errorNode?.parent?.type === "type_name" ? errorNode.parent : null;
     if (typeName) {
-      // Find trait_sm_operation sibling that precedes the ERROR
-      let smName: string | undefined;
+      // Case 1: prefixed form — trait_sm_operation sibling with qualified_name
       for (let i = 0; i < typeName.namedChildCount; i++) {
         const child = typeName.namedChild(i);
         if (child?.type === "trait_sm_operation") {
           const qn = child.namedChildren.find((c: { type: string }) => c.type === "qualified_name");
-          if (qn) {
-            const lastId = qn.namedChild(qn.namedChildCount - 1);
-            if (lastId?.type === "identifier") smName = lastId.text;
+          if (qn && qn.namedChildCount >= 1) {
+            const segments: string[] = [];
+            for (let j = 0; j < qn.namedChildCount; j++) {
+              const id = qn.namedChild(j);
+              if (id?.type === "identifier") segments.push(id.text);
+            }
+            if (segments.length >= 1) {
+              const traitName = extractTraitNameFromAngleBrackets(typeName);
+              if (traitName) {
+                symbolKinds = "trait_sm_op_state";
+                traitSmContext = {
+                  traitName,
+                  smName: segments[0],
+                  statePath: segments.length > 1 ? segments.slice(1) : undefined,
+                };
+              }
+            }
           }
+          // Also check for direct-child identifier (Phase 2 prefixed, single SM name)
+          if (!traitSmContext) {
+            const directId = child.namedChildren.find(
+              (c: { type: string }) => c.type === "identifier",
+            );
+            if (directId) {
+              const traitName = extractTraitNameFromAngleBrackets(typeName);
+              if (traitName) {
+                symbolKinds = "trait_sm_op_state";
+                traitSmContext = { traitName, smName: directId.text };
+              }
+            }
+          }
+          break;
         }
       }
-      if (smName) {
-        const traitName = extractTraitNameFromAngleBrackets(typeName);
-        if (traitName) {
-          symbolKinds = "trait_sm_op_state";
-          traitSmContext = { traitName, smName };
+
+      // Case 2: unprefixed form — type_name sibling containing SM name as qualified_name
+      if (!traitSmContext) {
+        for (let i = 0; i < typeName.namedChildCount; i++) {
+          const child = typeName.namedChild(i);
+          if (
+            child?.type === "type_name" &&
+            child.id !== typeName.id &&
+            child.namedChildCount >= 1
+          ) {
+            const qn = child.namedChild(0);
+            if (qn?.type === "qualified_name" && qn.namedChildCount === 1) {
+              const id = qn.namedChild(0);
+              if (id?.type === "identifier") {
+                const traitName = extractTraitNameFromAngleBrackets(typeName);
+                if (traitName) {
+                  symbolKinds = "trait_sm_op_state";
+                  traitSmContext = { traitName, smName: id.text };
+                }
+              }
+            }
+          }
         }
       }
     }

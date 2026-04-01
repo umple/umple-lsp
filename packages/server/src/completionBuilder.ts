@@ -113,15 +113,19 @@ export function buildSemanticCompletionItems(
   const items: CompletionItem[] = [];
   const seen = new Set<string>();
 
+  // Trait SM op contexts are symbol-only — no keywords or operators.
+  // Handle them first to avoid leaking generic completions on empty results.
+  if (symbolKinds === "trait_sm_op_sm" || symbolKinds === "trait_sm_op_state") {
+    return buildTraitSmOpItems(info, symbolKinds, symbolIndex, reachableFiles);
+  }
+
   // 1. Keywords from LookaheadIterator (filtered in constraint contexts)
   let keywords = info.keywords;
   if (
     symbolKinds === "own_attribute" ||
     symbolKinds === "guard_attribute_method" ||
     symbolKinds === "trace_attribute_method" ||
-    symbolKinds === "sorted_attribute" ||
-    symbolKinds === "trait_sm_op_sm" ||
-    symbolKinds === "trait_sm_op_state"
+    symbolKinds === "sorted_attribute"
   ) {
     keywords = keywords.filter((kw) => !CONSTRAINT_BLOCKLIST.has(kw));
   }
@@ -138,9 +142,7 @@ export function buildSemanticCompletionItems(
     symbolKinds !== "own_attribute" &&
     symbolKinds !== "guard_attribute_method" &&
     symbolKinds !== "trace_attribute_method" &&
-    symbolKinds !== "sorted_attribute" &&
-    symbolKinds !== "trait_sm_op_sm" &&
-    symbolKinds !== "trait_sm_op_state"
+    symbolKinds !== "sorted_attribute"
   ) {
     for (const op of info.operators) {
       if (!seen.has(op)) {
@@ -203,47 +205,7 @@ export function buildSemanticCompletionItems(
     return items;
   }
 
-  // 6. Trait SM operation: SM names or state names from the referenced trait
-  if (symbolKinds === "trait_sm_op_sm" && info.traitSmContext) {
-    const { traitName } = info.traitSmContext;
-    const symbols = symbolIndex
-      .getSymbols({ kind: "statemachine" })
-      .filter((s) => s.container?.startsWith(traitName + "."))
-      .filter((s) => reachableFiles.has(path.normalize(s.file)));
-    for (const sym of symbols) {
-      if (!seen.has(sym.name)) {
-        seen.add(sym.name);
-        items.push({
-          label: sym.name,
-          kind: symbolKindToCompletionKind("statemachine"),
-          detail: `statemachine (trait ${traitName})`,
-        });
-      }
-    }
-    return items;
-  }
-
-  if (symbolKinds === "trait_sm_op_state" && info.traitSmContext?.smName) {
-    const { traitName, smName } = info.traitSmContext;
-    const smContainer = `${traitName}.${smName}`;
-    const symbols = symbolIndex
-      .getSymbols({ kind: "state", container: smContainer })
-      .filter((s) => !s.statePath || s.statePath.length === 1) // depth-1 only
-      .filter((s) => reachableFiles.has(path.normalize(s.file)));
-    for (const sym of symbols) {
-      if (!seen.has(sym.name)) {
-        seen.add(sym.name);
-        items.push({
-          label: sym.name,
-          kind: symbolKindToCompletionKind("state"),
-          detail: `state (${smContainer})`,
-        });
-      }
-    }
-    return items;
-  }
-
-  // 7. Guard/trace scope: attributes + methods from enclosing class (with inheritance)
+  // 6. Guard/trace scope: attributes + methods from enclosing class (with inheritance)
   if (
     (symbolKinds === "guard_attribute_method" ||
       symbolKinds === "trace_attribute_method") &&
@@ -338,6 +300,68 @@ export function buildSemanticCompletionItems(
             detail: symKind,
           });
         }
+      }
+    }
+  }
+
+  return items;
+}
+
+/**
+ * Symbol-only completion for trait SM operations. Returns ONLY matching
+ * symbols — no keywords, no operators. Empty result on bad paths.
+ */
+function buildTraitSmOpItems(
+  info: CompletionInfo,
+  symbolKinds: "trait_sm_op_sm" | "trait_sm_op_state",
+  symbolIndex: SymbolIndex,
+  reachableFiles: Set<string>,
+): CompletionItem[] {
+  const items: CompletionItem[] = [];
+  const seen = new Set<string>();
+  const ctx = info.traitSmContext;
+  if (!ctx) return items;
+
+  if (symbolKinds === "trait_sm_op_sm") {
+    const symbols = symbolIndex
+      .getSymbols({ kind: "statemachine" })
+      .filter((s) => s.container?.startsWith(ctx.traitName + "."))
+      .filter((s) => reachableFiles.has(path.normalize(s.file)));
+    for (const sym of symbols) {
+      if (!seen.has(sym.name)) {
+        seen.add(sym.name);
+        items.push({
+          label: sym.name,
+          kind: symbolKindToCompletionKind("statemachine"),
+          detail: `statemachine (trait ${ctx.traitName})`,
+        });
+      }
+    }
+  }
+
+  if (symbolKinds === "trait_sm_op_state" && ctx.smName) {
+    const smContainer = `${ctx.traitName}.${ctx.smName}`;
+    const expectedDepth = (ctx.statePath?.length ?? 0) + 1;
+    const symbols = symbolIndex
+      .getSymbols({ kind: "state", container: smContainer })
+      .filter((s) => s.statePath && s.statePath.length === expectedDepth)
+      .filter((s) => {
+        if (ctx.statePath && s.statePath) {
+          for (let i = 0; i < ctx.statePath.length; i++) {
+            if (s.statePath[i] !== ctx.statePath[i]) return false;
+          }
+        }
+        return true;
+      })
+      .filter((s) => reachableFiles.has(path.normalize(s.file)));
+    for (const sym of symbols) {
+      if (!seen.has(sym.name)) {
+        seen.add(sym.name);
+        items.push({
+          label: sym.name,
+          kind: symbolKindToCompletionKind("state"),
+          detail: `state (${smContainer})`,
+        });
       }
     }
   }

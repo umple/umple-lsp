@@ -2358,6 +2358,57 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 63: Trait SM completion V3b — unprefixed SM + nested state
+  {
+    name: "63 trait_sm_completion_v3b: unprefixed sm. and nested -sm.s1. completion",
+    fixtures: ["63_trait_sm_comp_trait.ump", "63_trait_sm_comp_test.ump"],
+    assertions: [
+      // Unprefixed sm. → depth-1 state names from T1.sm
+      {
+        type: "completion_kinds",
+        at: "comp_unprefix",
+        expect: "trait_sm_op_state",
+      },
+      {
+        type: "completion_includes",
+        at: "comp_unprefix",
+        expect: ["s1", "s2", "s3"],
+      },
+      {
+        type: "completion_excludes",
+        at: "comp_unprefix",
+        expect: ["x1", "x2"],
+      },
+      // Nested -sm.s1. → children of s1 only
+      {
+        type: "completion_kinds",
+        at: "comp_nested",
+        expect: "trait_sm_op_state",
+      },
+      {
+        type: "completion_includes",
+        at: "comp_nested",
+        expect: ["inner1", "inner2"],
+      },
+      {
+        type: "completion_excludes",
+        at: "comp_nested",
+        expect: ["s1", "s2", "s3", "x1", "x2"],
+      },
+      // Negative: bad nested path → empty (no keywords, no states)
+      {
+        type: "completion_kinds",
+        at: "comp_bad_path",
+        expect: "trait_sm_op_state",
+      },
+      {
+        type: "completion_excludes",
+        at: "comp_bad_path",
+        expect: ["s1", "s2", "s3", "inner1", "inner2", "x1", "x2", "default", "allow"],
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

@@ -1,0 +1,10 @@
+use 63_trait_sm_comp_trait.ump;
+
+// Unprefixed: sm. → state names from T1.sm
+class A { isA T1<sm. /*@comp_unprefix*/>; }
+
+// Nested prefixed: -sm.s1. → children of s1
+class B { isA T1<-sm.s1. /*@comp_nested*/>; }
+
+// Negative: bad nested path → empty (fail closed)
+class C { isA T1<-sm.nope. /*@comp_bad_path*/>; }
