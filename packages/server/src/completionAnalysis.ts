@@ -397,14 +397,23 @@ export function analyzeCompletion(
       const STATE_PREFIXES = new Set(["entry", "exit"]);
       const ATTR_PREFIXES = new Set(["set", "get"]);
       const ASSOC_PREFIXES = new Set(["add", "remove", "cardinality"]);
+      let prefixType: "state" | "attribute" | "suppress" | null = null;
       for (let i = 0; i < traceStmt.childCount; i++) {
         const child = traceStmt.child(i);
         if (!child) continue;
         if (child.type === "trace_entity" || child.type === "trace_entity_call") break;
-        if (STATE_PREFIXES.has(child.type)) { symbolKinds = ["state"]; break; }
-        if (ATTR_PREFIXES.has(child.type)) { symbolKinds = ["attribute"]; break; }
-        // add/remove/cardinality: parse-only (association roles not indexed)
-        if (ASSOC_PREFIXES.has(child.type)) { symbolKinds = "suppress"; break; }
+        if (STATE_PREFIXES.has(child.type)) { prefixType = "state"; break; }
+        if (ATTR_PREFIXES.has(child.type)) { prefixType = "attribute"; break; }
+        if (ASSOC_PREFIXES.has(child.type)) { prefixType = "suppress"; break; }
+      }
+      if (prefixType === "state") {
+        // entry/exit: check if cursor is inside call-form → method, else → state
+        const isCallForm = findAncestorOfType(cursorNode, "trace_entity_call") !== null;
+        symbolKinds = isCallForm ? ["method"] : ["state"];
+      } else if (prefixType === "attribute") {
+        symbolKinds = ["attribute"];
+      } else if (prefixType === "suppress") {
+        symbolKinds = "suppress";
       }
     }
   }

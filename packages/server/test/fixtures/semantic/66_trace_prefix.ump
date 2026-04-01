@@ -32,4 +32,7 @@ class A {
 
   // entry multi-entity: both should be states (refs parity)
   trace entry,exit /*@trace_entry_open2*/Open, /*@trace_entry_closed*/Closed;
+
+  // add: parse-only — "name" here must NOT appear in attribute refs
+  trace add /*@trace_add_name*/name;
 }

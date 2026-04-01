@@ -2548,10 +2548,16 @@ const TEST_CASES: TestCase[] = [
         decl: { name: "Closed", kind: "state", container: "A.sm" },
         expectAt: ["pref_state_closed", "trace_entry_closed"],
       },
-      // add → parse-only (assoc roles not indexed, goto-def empty)
+      // add → parse-only: goto-def empty
       {
         type: "goto_def_empty",
         at: "trace_add_assoc",
+      },
+      // add → parse-only: "name" in trace add must NOT appear in attribute refs
+      {
+        type: "refs_exclude",
+        decl: { name: "name", kind: "attribute", container: "A" },
+        excludeAt: ["trace_add_name"],
       },
     ],
   },

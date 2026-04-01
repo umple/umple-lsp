@@ -152,6 +152,23 @@ export function searchReferences(
         continue;
       }
 
+      // Exclude trace entities under parse-only prefixes (add/remove/cardinality)
+      if (
+        (node.parent?.type === "trace_entity" || node.parent?.type === "trace_entity_call") &&
+        node.parent?.parent?.type === "trace_statement"
+      ) {
+        const ASSOC_PREFIXES = new Set(["add", "remove", "cardinality"]);
+        const traceStmt = node.parent.parent;
+        let isAssocPrefix = false;
+        for (let i = 0; i < traceStmt.childCount; i++) {
+          const child = traceStmt.child(i);
+          if (!child) continue;
+          if (child.type === "trace_entity" || child.type === "trace_entity_call") break;
+          if (ASSOC_PREFIXES.has(child.type)) { isAssocPrefix = true; break; }
+        }
+        if (isAssocPrefix) continue;
+      }
+
       // For nested states, disambiguate by path context
       if (symKind === "state" && sym.statePath && sym.statePath.length >= 1) {
         const pathCtx = extractPathContextFromNode(node);
