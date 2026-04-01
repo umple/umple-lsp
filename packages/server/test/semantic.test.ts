@@ -17,6 +17,12 @@ interface GotoDefAssertion {
   expect: { at: string; container?: string }[]; // target marker(s)
 }
 
+interface GotoDefExactAssertion {
+  type: "goto_def_exact";
+  at: string;
+  expect: string[]; // exact set of target markers — no more, no fewer
+}
+
 interface GotoDefEmptyAssertion {
   type: "goto_def_empty";
   at: string;
@@ -87,6 +93,7 @@ interface TokenContextAssertion {
 
 type Assertion =
   | GotoDefAssertion
+  | GotoDefExactAssertion
   | GotoDefEmptyAssertion
   | RefsAssertion
   | RefsExcludeAssertion
@@ -2224,34 +2231,35 @@ const TEST_CASES: TestCase[] = [
         at: "op_s1b",
         expect: [{ at: "s1_decl" }],
       },
-      // ── Goto-def: event names → transition in trait ──
+      // ── Goto-def exact: event names → transition in trait ──
+      // Exact-state e4() in s1 → only e4_decl (e4 [cond] -> s2 in s1)
       {
-        type: "goto_def",
+        type: "goto_def_exact",
         at: "op_e4",
-        expect: [{ at: "e4_decl" }],
+        expect: ["e4_decl"],
       },
-      // Phase 2 event also resolves
+      // Unprefixed e4() across entire SM → all e4() transitions: s1 + s2
       {
-        type: "goto_def",
+        type: "goto_def_exact",
         at: "op_e4_p2",
-        expect: [{ at: "e4_decl" }],
+        expect: ["e4_decl", "e4_dup1", "e4_dup2"],
       },
       // "as newName" still empty (new name, not a reference)
       {
         type: "goto_def_empty",
         at: "op_newevt",
       },
-      // Param disambiguation: e4(Integer) in s2 → e4_int_decl only (not e4())
+      // Param disambiguation: e4(Integer) in s2 → exactly e4_int_decl (not e4())
       {
-        type: "goto_def",
+        type: "goto_def_exact",
         at: "op_e4_int",
-        expect: [{ at: "e4_int_decl" }],
+        expect: ["e4_int_decl"],
       },
-      // Multi-result: e4() in s2 — two transitions with same signature (different guards)
+      // Multi-result: e4() in s2 — exactly two transitions (different guards)
       {
-        type: "goto_def",
+        type: "goto_def_exact",
         at: "op_e4_multi",
-        expect: [{ at: "e4_dup1" }, { at: "e4_dup2" }],
+        expect: ["e4_dup1", "e4_dup2"],
       },
       // ── Hover: trait-aware formatting ──
       {
@@ -2649,6 +2657,46 @@ function runAssertion(
           message: `goto_def @${assertion.at}: expected target @${exp.at} (line ${target.pos.line}), got lines [${result.symbols.map((s) => s.line).join(", ")}]`,
         };
       }
+    }
+    return { ok: true, message: "" };
+  }
+
+  if (assertion.type === "goto_def_exact") {
+    const src = findMarker(assertion.at);
+    if (!src) return { ok: false, message: `marker @${assertion.at} not found` };
+
+    const result = helper.resolve(src.filePath, src.content, src.pos.line, src.pos.col, reachable);
+    if (!result) return { ok: false, message: `goto_def_exact @${assertion.at}: resolve returned null` };
+
+    // Collect actual result lines (symbol-based or event-based)
+    let resultLines: number[] = [];
+    if (result.token.context.type === "trait_sm_op" && result.token.context.isEventSegment) {
+      const ctx = result.token.context;
+      const locations = resolveTraitSmEventLocations(
+        helper.si, ctx.traitName, ctx.pathSegments[0],
+        result.token.word, ctx.eventParams ?? [], ctx.pathSegments, reachable,
+      );
+      resultLines = locations.map((l) => l.line);
+    } else {
+      resultLines = result.symbols.map((s) => s.line);
+    }
+
+    // Collect expected lines from markers
+    const expectedLines: number[] = [];
+    for (const markerName of assertion.expect) {
+      const target = findMarker(markerName);
+      if (!target) return { ok: false, message: `target marker @${markerName} not found` };
+      expectedLines.push(target.pos.line);
+    }
+
+    // Check exact match
+    const sortedResult = [...resultLines].sort();
+    const sortedExpected = [...expectedLines].sort();
+    if (sortedResult.length !== sortedExpected.length || !sortedResult.every((v, i) => v === sortedExpected[i])) {
+      return {
+        ok: false,
+        message: `goto_def_exact @${assertion.at}: expected lines [${sortedExpected.join(", ")}] (${assertion.expect.join(", ")}), got [${sortedResult.join(", ")}]`,
+      };
     }
     return { ok: true, message: "" };
   }

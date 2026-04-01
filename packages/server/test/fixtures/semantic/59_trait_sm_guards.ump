@@ -23,6 +23,15 @@ trait T1 {
   }
 }
 
+// Second trait with same SM/event names — must not leak into T1 event goto-def
+trait T2 {
+  sm {
+    s1 {
+      /*@t2_e4_decl*/e4 -> s1;
+    }
+  }
+}
+
 // Phase 3 form 1: event removal with guard
 class A {
   Boolean cond;
