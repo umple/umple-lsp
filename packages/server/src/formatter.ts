@@ -257,9 +257,11 @@ export function fixTransitionSpacing(
       const arrowEndCol = arrowChild.endPosition.column;
       const line = lines[startRow];
 
-      // Find whitespace region around the structural arrow
+      // Find whitespace region around the structural arrow.
+      // Don't walk past line indentation — that belongs to computeIndentEdits().
+      const indentEnd = line.search(/\S/);
       let wsStart = arrowCol;
-      while (wsStart > 0 && line[wsStart - 1] === " ") {
+      while (wsStart > 0 && wsStart > indentEnd && line[wsStart - 1] === " ") {
         wsStart--;
       }
       let wsEnd = arrowEndCol;
@@ -268,7 +270,8 @@ export function fixTransitionSpacing(
       }
 
       const currentRegion = line.substring(wsStart, wsEnd);
-      const expectedRegion = " -> ";
+      // Auto-transitions start with "->"; no leading space if arrow is at indent boundary
+      const expectedRegion = wsStart <= indentEnd ? "-> " : " -> ";
       if (currentRegion === expectedRegion) return;
 
       edits.push(

@@ -1,0 +1,23 @@
+// Formatter regression: auto-transitions must not have indent consumed by spacing pass
+
+trait T1 {
+  sm {
+    s1 {
+      e1  ->  s2;
+      -> s2;
+    }
+    s2 {
+      [cond] -> s1;
+      e2->s1;
+    }
+    s3 {
+      -> s1;
+      e3 -> s1;
+    }
+  }
+}
+
+class /*@class_a*/A {
+  Boolean cond;
+  isA T1;
+}
