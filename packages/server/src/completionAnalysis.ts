@@ -69,7 +69,7 @@ export interface CompletionInfo {
   /** Operators the parser expects at this position. */
   operators: string[];
   /** Which symbol kinds to offer, or null for none. */
-  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | null;
+  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | null;
   /** True if cursor is at a definition-name position (suppress all). */
   isDefinitionName: boolean;
   /** True if cursor is inside a comment. */
@@ -282,11 +282,13 @@ export function analyzeCompletion(
             if (segments.length >= 1) {
               const traitName = extractTraitNameFromAngleBrackets(typeName);
               if (traitName) {
-                symbolKinds = "trait_sm_op_state";
+                const hasStatePath = segments.length > 1;
+                // After -sm. → states only; after -sm.s1. → states + events
+                symbolKinds = hasStatePath ? "trait_sm_op_state_event" : "trait_sm_op_state";
                 traitSmContext = {
                   traitName,
                   smName: segments[0],
-                  statePath: segments.length > 1 ? segments.slice(1) : undefined,
+                  statePath: hasStatePath ? segments.slice(1) : undefined,
                 };
               }
             }
@@ -323,7 +325,8 @@ export function analyzeCompletion(
               if (id?.type === "identifier") {
                 const traitName = extractTraitNameFromAngleBrackets(typeName);
                 if (traitName) {
-                  symbolKinds = "trait_sm_op_state";
+                  // Unprefixed sm. is event-position per Phase 2 grammar
+                  symbolKinds = "trait_sm_op_event";
                   traitSmContext = { traitName, smName: id.text };
                 }
               }

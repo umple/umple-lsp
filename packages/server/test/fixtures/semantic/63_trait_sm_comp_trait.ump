@@ -1,10 +1,14 @@
 trait T1 {
   sm {
     s1 {
+      e1 -> s2;
+      e2(Integer x) -> s2;
       inner1 {}
       inner2 {}
     }
-    s2 {}
+    s2 {
+      e3 -> s1;
+    }
     s3 {}
   }
   sm2 {

@@ -640,6 +640,105 @@ export class SymbolIndex {
   }
 
   /**
+   * Extract event signatures from transitions in a specific state or all states of an SM.
+   * Walks the stored parse tree — no symbol model for events.
+   *
+   * @param traitFile  File containing the trait definition
+   * @param smName     State machine name inside the trait
+   * @param statePath  If provided, events from this specific state. If undefined, aggregate across all states.
+   * @returns Array of { name, params, label } for each unique event signature
+   */
+  getEventSignatures(
+    traitFile: string,
+    smName: string,
+    statePath?: string[],
+  ): { name: string; params: string[]; label: string }[] {
+    const tree = this.files.get(path.normalize(traitFile))?.tree;
+    if (!tree) return [];
+
+    const results: { name: string; params: string[]; label: string }[] = [];
+    const seen = new Set<string>();
+
+    const collectFromState = (stateNode: any) => {
+      for (let i = 0; i < stateNode.namedChildCount; i++) {
+        const child = stateNode.namedChild(i);
+        if (child?.type !== "transition") continue;
+        const eventSpec = child.childForFieldName("event");
+        if (!eventSpec) continue; // auto-transition, skip
+        const nameNode = eventSpec.namedChildren.find(
+          (c: any) => c.type === "identifier",
+        );
+        if (!nameNode) continue;
+        const name = nameNode.text;
+        const params: string[] = [];
+        const paramList = eventSpec.namedChildren.find(
+          (c: any) => c.type === "param_list",
+        );
+        if (paramList) {
+          for (let j = 0; j < paramList.namedChildCount; j++) {
+            const param = paramList.namedChild(j);
+            if (param?.type === "param") {
+              // param = optional("final") type_name optional("[]") name
+              const typeName = param.namedChildren.find(
+                (c: any) => c.type === "type_name",
+              );
+              if (typeName) params.push(typeName.text);
+            }
+          }
+        }
+        const label = `${name}(${params.join(", ")})`;
+        if (!seen.has(label)) {
+          seen.add(label);
+          results.push({ name, params, label });
+        }
+      }
+    };
+
+    // Walk tree to find the SM, then the target state(s)
+    const walkToSm = (node: any): any => {
+      if (
+        (node.type === "state_machine" || node.type === "statemachine_definition") &&
+        node.childForFieldName("name")?.text === smName
+      ) return node;
+      for (let i = 0; i < node.childCount; i++) {
+        const found = walkToSm(node.child(i));
+        if (found) return found;
+      }
+      return null;
+    };
+
+    const smNode = walkToSm(tree.rootNode);
+    if (!smNode) return [];
+
+    if (!statePath || statePath.length === 0) {
+      // Aggregate across all states in the SM
+      const walkStates = (node: any) => {
+        if (node.type === "state") collectFromState(node);
+        for (let i = 0; i < node.childCount; i++) walkStates(node.child(i));
+      };
+      walkStates(smNode);
+    } else {
+      // Walk to the specific state by path
+      let current = smNode;
+      for (const seg of statePath) {
+        let found = false;
+        for (let i = 0; i < current.namedChildCount; i++) {
+          const child = current.namedChild(i);
+          if (child?.type === "state" && child.childForFieldName("name")?.text === seg) {
+            current = child;
+            found = true;
+            break;
+          }
+        }
+        if (!found) return [];
+      }
+      collectFromState(current);
+    }
+
+    return results;
+  }
+
+  /**
    * Resolve a state within a dotted path context, returning the matching SymbolEntry.
    * Uses pre-computed statePath for exact path matching without AST walking.
    *

@@ -115,7 +115,12 @@ export function buildSemanticCompletionItems(
 
   // Trait SM op contexts are symbol-only — no keywords or operators.
   // Handle them first to avoid leaking generic completions on empty results.
-  if (symbolKinds === "trait_sm_op_sm" || symbolKinds === "trait_sm_op_state") {
+  if (
+    symbolKinds === "trait_sm_op_sm" ||
+    symbolKinds === "trait_sm_op_state" ||
+    symbolKinds === "trait_sm_op_state_event" ||
+    symbolKinds === "trait_sm_op_event"
+  ) {
     return buildTraitSmOpItems(info, symbolKinds, symbolIndex, reachableFiles);
   }
 
@@ -313,7 +318,7 @@ export function buildSemanticCompletionItems(
  */
 function buildTraitSmOpItems(
   info: CompletionInfo,
-  symbolKinds: "trait_sm_op_sm" | "trait_sm_op_state",
+  symbolKinds: "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event",
   symbolIndex: SymbolIndex,
   reachableFiles: Set<string>,
 ): CompletionItem[] {
@@ -322,6 +327,7 @@ function buildTraitSmOpItems(
   const ctx = info.traitSmContext;
   if (!ctx) return items;
 
+  // SM names from trait
   if (symbolKinds === "trait_sm_op_sm") {
     const symbols = symbolIndex
       .getSymbols({ kind: "statemachine" })
@@ -337,10 +343,20 @@ function buildTraitSmOpItems(
         });
       }
     }
+    return items;
   }
 
-  if (symbolKinds === "trait_sm_op_state" && ctx.smName) {
-    const smContainer = `${ctx.traitName}.${ctx.smName}`;
+  if (!ctx.smName) return items;
+  const smContainer = `${ctx.traitName}.${ctx.smName}`;
+
+  // Find trait file for event extraction (filter by reachable files)
+  const traitSymbols = symbolIndex
+    .getSymbols({ name: ctx.traitName, kind: ["trait"] })
+    .filter((s) => reachableFiles.has(path.normalize(s.file)));
+  const traitFile = traitSymbols.length > 0 ? traitSymbols[0].file : undefined;
+
+  // States: for trait_sm_op_state and trait_sm_op_state_event
+  if (symbolKinds === "trait_sm_op_state" || symbolKinds === "trait_sm_op_state_event") {
     const expectedDepth = (ctx.statePath?.length ?? 0) + 1;
     const symbols = symbolIndex
       .getSymbols({ kind: "state", container: smContainer })
@@ -361,6 +377,31 @@ function buildTraitSmOpItems(
           label: sym.name,
           kind: symbolKindToCompletionKind("state"),
           detail: `state (${smContainer})`,
+        });
+      }
+    }
+  }
+
+  // Events: for trait_sm_op_state_event and trait_sm_op_event
+  if (
+    (symbolKinds === "trait_sm_op_state_event" || symbolKinds === "trait_sm_op_event") &&
+    traitFile
+  ) {
+    const events = symbolIndex.getEventSignatures(
+      traitFile,
+      ctx.smName,
+      symbolKinds === "trait_sm_op_event" ? undefined : ctx.statePath,
+    );
+    for (const evt of events) {
+      if (!seen.has(evt.label)) {
+        seen.add(evt.label);
+        items.push({
+          label: evt.label,
+          kind: CompletionItemKind.Event,
+          detail: ctx.statePath
+            ? `event (in state ${ctx.statePath[ctx.statePath.length - 1]})`
+            : `event (in ${ctx.smName})`,
+          insertText: evt.label,
         });
       }
     }

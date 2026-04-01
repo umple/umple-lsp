@@ -2375,43 +2375,45 @@ const TEST_CASES: TestCase[] = [
     name: "63 trait_sm_completion_v3b: unprefixed sm. and nested -sm.s1. completion",
     fixtures: ["63_trait_sm_comp_trait.ump", "63_trait_sm_comp_test.ump"],
     assertions: [
-      // Unprefixed sm. → depth-1 state names from T1.sm
+      // Unprefixed sm. → event signatures only (Phase 2 grammar)
       {
         type: "completion_kinds",
         at: "comp_unprefix",
-        expect: "trait_sm_op_state",
+        expect: "trait_sm_op_event",
       },
-      {
-        type: "completion_includes",
-        at: "comp_unprefix",
-        expect: ["s1", "s2", "s3"],
-      },
+      // Unprefixed should NOT include state names
       {
         type: "completion_excludes",
         at: "comp_unprefix",
-        expect: ["x1", "x2"],
+        expect: ["s1", "s2", "s3", "x1", "x2"],
       },
-      // Nested -sm.s1. → children of s1 only
+      // Nested -sm.s1. → children of s1 + event signatures from s1
       {
         type: "completion_kinds",
         at: "comp_nested",
-        expect: "trait_sm_op_state",
+        expect: "trait_sm_op_state_event",
       },
       {
         type: "completion_includes",
         at: "comp_nested",
-        expect: ["inner1", "inner2"],
+        expect: ["inner1", "inner2", "e1()", "e2(Integer)"],
+      },
+      // Events from s2 must NOT appear in s1's completion
+      {
+        type: "completion_excludes",
+        at: "comp_nested",
+        expect: ["e3()"],
       },
       {
         type: "completion_excludes",
         at: "comp_nested",
         expect: ["s1", "s2", "s3", "x1", "x2"],
       },
-      // Negative: bad nested path → empty (no keywords, no states)
+      // Negative: bad nested path → empty (no keywords, no states, no events)
       {
         type: "completion_kinds",
         at: "comp_bad_path",
-        expect: "trait_sm_op_state",
+        expect: "trait_sm_op_state_event",
       },
       {
         type: "completion_excludes",
