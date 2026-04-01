@@ -1,0 +1,19 @@
+trait T1 {
+  void method3() {}
+  void method5(Integer x) {}
+}
+
+class /*@tmr_class*/C2 {
+  // Unprefixed rename with visibility
+  isA T1< method3() as private function3 >;
+}
+
+class C3 {
+  // Prefixed rename with params
+  isA T1< +method5(Integer) as function5 >;
+}
+
+class C4 {
+  // Rename without visibility (already worked)
+  isA T1< method3() as renamed3 >;
+}

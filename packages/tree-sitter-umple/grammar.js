@@ -1148,14 +1148,13 @@ module.exports = grammar({
           choice("-", "+"),
           $.qualified_name,
           optional(choice(
-            // Event form: (params)[guard]?  e.g. -sm.s1.e4()[cond]
+            // Event form: (params)[guard]? + optional rename
             seq(
               "(", optional($.type_list), ")",
               optional($.trait_sm_guard),
+              optional(seq("as", optional(choice("public", "private", "protected")), $.identifier)),
             ),
             // Guard-only form: .[guard] or .[]  e.g. -sm.s2.[cond], -sm.s3.[]
-            // token.immediate(".[") avoids ambiguity with qualified_name's token.immediate(".")
-            // — at ".[", the 2-char token wins over the 1-char dot, so qualified_name stops
             seq(token.immediate(".["), repeat($._constraint_expr), "]"),
           )),
         ),
@@ -1169,6 +1168,7 @@ module.exports = grammar({
           optional($.type_list),
           ")",
           "as",
+          optional(choice("public", "private", "protected")), // visibility for method rename
           $.identifier,
         ),
       ),

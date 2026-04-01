@@ -2882,6 +2882,25 @@ const TEST_CASES: TestCase[] = [
       { type: "symbol_count", fixture: "82_inline_mixset_class.ump", name: "X", kind: "class", expect: 2 },
     ],
   },
+
+  // 83: Trait method rename with visibility
+  {
+    name: "83 trait_method_rename: visibility in method rename parses clean",
+    fixtures: ["83_trait_method_rename.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "83_trait_method_rename.ump" },
+      { type: "symbol_count", fixture: "83_trait_method_rename.ump", name: "C2", kind: "class", expect: 1 },
+    ],
+  },
+
+  // 84: Negative — guard + as rename rejected
+  {
+    name: "84 trait_rename_negative: guard form with as rename produces parse error",
+    fixtures: ["84_trait_rename_negative.ump"],
+    assertions: [
+      { type: "parse_has_error", fixture: "84_trait_rename_negative.ump" },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────
