@@ -485,6 +485,10 @@ module.exports = grammar({
       choice(
         seq(choice("where", "until", "after", "giving"), $.guard),
         seq("record", $.identifier),
+        seq("logLevel", choice(
+          "trace", "debug", "info", "warn", "error", "fatal",
+          "all", "finest", "fine", "config", "warning", "severe",
+        )),
       ),
 
     // =====================

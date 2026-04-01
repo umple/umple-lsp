@@ -1,0 +1,20 @@
+class /*@ll_class*/A {
+  /*@ll_name*/name;
+  Integer id;
+
+  // logLevel postfix — compiler-verified levels
+  trace name logLevel severe;
+  trace id logLevel info;
+  trace name logLevel error;
+  trace name logLevel debug;
+
+  // logLevel combined with other postfixes
+  trace /*@ll_goto*/name logLevel warn where [id > 0];
+
+  // Later entity with logLevel
+  trace id, /*@ll_second*/name logLevel info;
+
+  // Plain trace still works
+  trace name;
+  trace id;
+}

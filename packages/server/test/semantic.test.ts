@@ -2740,6 +2740,37 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 72: Trace logLevel postfix
+  {
+    name: "72 trace_loglevel: logLevel postfix parses clean with semantic parity",
+    fixtures: ["72_trace_loglevel.ump"],
+    assertions: [
+      {
+        type: "parse_clean",
+        fixture: "72_trace_loglevel.ump",
+      },
+      {
+        type: "symbol_count",
+        fixture: "72_trace_loglevel.ump",
+        name: "A",
+        kind: "class",
+        expect: 1,
+      },
+      // Traced entity still has goto-def with logLevel postfix
+      {
+        type: "goto_def",
+        at: "ll_goto",
+        expect: [{ at: "ll_name" }],
+      },
+      // Later comma-separated entity with logLevel
+      {
+        type: "goto_def",
+        at: "ll_second",
+        expect: [{ at: "ll_name" }],
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

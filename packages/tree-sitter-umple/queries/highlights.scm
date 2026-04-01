@@ -131,7 +131,8 @@
 ; Trace postfix sub-keywords (children of trace_postfix, not trace_statement)
 ; Trace prefix keywords (children of trace_statement)
 (trace_statement ["set" "get" "in" "out" "entry" "exit" "cardinality" "add" "remove"] @keyword)
-(trace_postfix ["where" "until" "after" "giving" "record"] @keyword)
+(trace_postfix ["where" "until" "after" "giving" "record" "logLevel"] @keyword)
+(trace_postfix ["trace" "debug" "info" "warn" "error" "fatal" "all" "finest" "fine" "config" "warning" "severe"] @constant)
 ; Tracer directive type
 (tracer_directive type: (identifier) @type)
 ; activate/deactivate modifiers (direct children of trace_statement)
