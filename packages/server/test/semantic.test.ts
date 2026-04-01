@@ -2536,6 +2536,12 @@ const TEST_CASES: TestCase[] = [
         at: "trace_multi_age",
         expect: [{ at: "pref_attr_age" }],
       },
+      // second entity in entry,exit list → state (prefix inherited)
+      {
+        type: "goto_def",
+        at: "trace_entry_closed",
+        expect: [{ at: "pref_state_closed" }],
+      },
       // add → association (goto-def empty: assoc roles not indexed as symbols)
       {
         type: "goto_def_empty",

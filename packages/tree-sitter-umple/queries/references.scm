@@ -166,8 +166,7 @@
 (trace_statement "remove" . (trace_entity (identifier) @reference.association))
 (trace_statement "cardinality" . (trace_entity (identifier) @reference.association))
 ; in/out: parse-only, no semantic assignment yet
-; Subsequent entities after "," — attribute or method (context-independent)
-; No "." anchor: tree-sitter "." has unexpected behavior with multiple commas
+; Subsequent entities after "," — attribute/method baseline (tokenAnalysis overrides for prefixed cases)
 (trace_statement "," (trace_entity (identifier) @reference.attribute_method))
 (trace_statement "," (trace_entity_call (identifier) @reference.method))
 ; "record x" in trace postfix — additional entity reference

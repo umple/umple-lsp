@@ -8,7 +8,7 @@ class A {
     /*@pref_state_open*/Open {
       close -> Closed;
     }
-    Closed {}
+    /*@pref_state_closed*/Closed {}
   }
   0..1 -- * B /*@pref_assoc_manager*/manager;
 
@@ -29,4 +29,10 @@ class A {
 
   // multi-prefix + multi-entity
   trace set,get name, /*@trace_multi_age*/age;
+
+  // entry multi-entity: both should be states
+  trace entry,exit /*@trace_entry_open2*/Open, /*@trace_entry_closed*/Closed;
+
+  // add: parse-only (assoc roles not indexed)
+  trace add /*@trace_add_assoc*/manager;
 }

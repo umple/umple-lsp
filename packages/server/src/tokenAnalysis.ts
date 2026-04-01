@@ -127,6 +127,41 @@ export function analyzeToken(
     stateDefinitionRef = { definitionPath: resolveStatePath(node) };
   }
 
+  // ── Trace prefix override: propagate prefix semantics to all entities ────
+  const TRACE_PREFIX_STATE = new Set(["entry", "exit"]);
+  const TRACE_PREFIX_ATTR = new Set(["set", "get"]);
+  const TRACE_PREFIX_ASSOC = new Set(["add", "remove", "cardinality"]);
+
+  if (
+    node.type === "identifier" &&
+    (parent?.type === "trace_entity" || parent?.type === "trace_entity_call") &&
+    parent.parent?.type === "trace_statement"
+  ) {
+    const traceStmt = parent.parent;
+    // Find the prefix keyword(s) — anonymous children between "trace" and first trace_entity
+    let hasPrefix = false;
+    let prefixKind: "state" | "attribute" | "association" | null = null;
+    for (let i = 0; i < traceStmt.childCount; i++) {
+      const child = traceStmt.child(i);
+      if (!child) continue;
+      if (child.type === "trace_entity" || child.type === "trace_entity_call") break; // past prefixes
+      if (TRACE_PREFIX_STATE.has(child.type)) { hasPrefix = true; prefixKind = "state"; }
+      if (TRACE_PREFIX_ATTR.has(child.type)) { hasPrefix = true; prefixKind = "attribute"; }
+      if (TRACE_PREFIX_ASSOC.has(child.type)) { hasPrefix = true; prefixKind = "association"; }
+    }
+    if (hasPrefix && prefixKind) {
+      if (prefixKind === "state" && parent.type === "trace_entity_call") {
+        kinds = ["method"]; // entry/exit with () → method
+      } else if (prefixKind === "state") {
+        kinds = ["state"];
+      } else if (prefixKind === "attribute") {
+        kinds = ["attribute"];
+      } else if (prefixKind === "association") {
+        kinds = ["association"];
+      }
+    }
+  }
+
   // ── Detect primary lookup context ────────────────────────────────────────
 
   let context: LookupContext = { type: "normal" };

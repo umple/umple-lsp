@@ -389,6 +389,25 @@ export function analyzeCompletion(
     if (!sortedKeyOwner) sortedKeyOwner = enclosingClass;
   }
 
+  // --- Trace prefix override for completion ---
+  if (symbolKinds === "trace_attribute_method") {
+    const cursorNode = tree.rootNode.descendantForPosition({ row: line, column });
+    const traceStmt = findAncestorOfType(cursorNode, "trace_statement");
+    if (traceStmt) {
+      const STATE_PREFIXES = new Set(["entry", "exit"]);
+      const ATTR_PREFIXES = new Set(["set", "get"]);
+      const ASSOC_PREFIXES = new Set(["add", "remove", "cardinality"]);
+      for (let i = 0; i < traceStmt.childCount; i++) {
+        const child = traceStmt.child(i);
+        if (!child) continue;
+        if (child.type === "trace_entity" || child.type === "trace_entity_call") break;
+        if (STATE_PREFIXES.has(child.type)) { symbolKinds = ["state"]; break; }
+        if (ATTR_PREFIXES.has(child.type)) { symbolKinds = ["attribute"]; break; }
+        if (ASSOC_PREFIXES.has(child.type)) { symbolKinds = ["association"]; break; }
+      }
+    }
+  }
+
   return {
     keywords,
     operators,
