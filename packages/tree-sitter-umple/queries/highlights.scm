@@ -87,6 +87,7 @@
   "abstract"
   "static"
   "const"
+  "constant"
   "lazy"
   "settable"
   "internal"

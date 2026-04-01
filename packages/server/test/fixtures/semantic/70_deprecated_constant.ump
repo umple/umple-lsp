@@ -1,0 +1,21 @@
+// Deprecated constant syntax — both real corpus forms
+
+// W901DeprecatedKeywordConstant1.ump
+interface Y {
+  constant /*@const_A*/A = 5;
+}
+
+// W901DeprecatedKeywordConstant2.ump
+interface Z {
+  const /*@const_B*/B = 5;
+}
+
+// Typed forms
+interface W {
+  const Integer I = 1;
+  constant Integer J = 2;
+}
+
+class /*@depr_class*/C {
+  name;
+}

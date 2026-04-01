@@ -2687,6 +2687,40 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 70: Deprecated constant syntax
+  {
+    name: "70 deprecated_constant: constant keyword and optional type parse clean",
+    fixtures: ["70_deprecated_constant.ump"],
+    assertions: [
+      {
+        type: "parse_clean",
+        fixture: "70_deprecated_constant.ump",
+      },
+      {
+        type: "symbol_count",
+        fixture: "70_deprecated_constant.ump",
+        name: "C",
+        kind: "class",
+        expect: 1,
+      },
+      // Both corpus forms index as const
+      {
+        type: "symbol_count",
+        fixture: "70_deprecated_constant.ump",
+        name: "A",
+        kind: "const",
+        expect: 1,
+      },
+      {
+        type: "symbol_count",
+        fixture: "70_deprecated_constant.ump",
+        name: "B",
+        kind: "const",
+        expect: 1,
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

@@ -724,10 +724,12 @@ module.exports = grammar({
         "}",
       ),
 
+    // const/constant declarations — used in interfaces only (classes use attribute_declaration)
+    // Type is optional: const A=5; and const Integer A=5; both valid
     const_declaration: ($) =>
       seq(
-        "const",
-        field("type", $.type_name),
+        choice("const", "constant"), // "constant" is deprecated (W901)
+        optional(field("type", $.type_name)),
         field("name", $.identifier),
         "=",
         $._value,
