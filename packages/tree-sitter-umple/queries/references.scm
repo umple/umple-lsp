@@ -149,24 +149,21 @@
 ; =====================
 ; TRACE ENTITY REFERENCES
 ; =====================
-; Trace entity references — prefix-sensitive kinds
-; No prefix: attribute or method
+; Trace entity references — prefix-sensitive kinds for ALL entities (no "." anchor)
+; No prefix: attribute or method (first entity only via "trace" anchor)
 (trace_statement "trace" . (trace_entity (identifier) @reference.attribute_method))
 (trace_statement "trace" . (trace_entity_call (identifier) @reference.method))
-; set/get → attribute
-(trace_statement "set" . (trace_entity (identifier) @reference.attribute))
-(trace_statement "get" . (trace_entity (identifier) @reference.attribute))
-; entry/exit bare → state; entry/exit call → method
-(trace_statement "entry" . (trace_entity (identifier) @reference.state))
-(trace_statement "exit" . (trace_entity (identifier) @reference.state))
-(trace_statement "entry" . (trace_entity_call (identifier) @reference.method))
-(trace_statement "exit" . (trace_entity_call (identifier) @reference.method))
-; add/remove/cardinality → association
-(trace_statement "add" . (trace_entity (identifier) @reference.association))
-(trace_statement "remove" . (trace_entity (identifier) @reference.association))
-(trace_statement "cardinality" . (trace_entity (identifier) @reference.association))
-; in/out: parse-only, no semantic assignment yet
-; Subsequent entities after "," — attribute/method baseline (tokenAnalysis overrides for prefixed cases)
+; set/get → attribute (all entities in statement)
+(trace_statement "set" (trace_entity (identifier) @reference.attribute))
+(trace_statement "get" (trace_entity (identifier) @reference.attribute))
+; entry/exit bare → state; entry/exit call → method (all entities)
+(trace_statement "entry" (trace_entity (identifier) @reference.state))
+(trace_statement "exit" (trace_entity (identifier) @reference.state))
+(trace_statement "entry" (trace_entity_call (identifier) @reference.method))
+(trace_statement "exit" (trace_entity_call (identifier) @reference.method))
+; add/remove/cardinality: parse-only (association roles not indexed as symbols)
+; in/out: parse-only
+; Subsequent entities after "," in no-prefix traces
 (trace_statement "," (trace_entity (identifier) @reference.attribute_method))
 (trace_statement "," (trace_entity_call (identifier) @reference.method))
 ; "record x" in trace postfix — additional entity reference

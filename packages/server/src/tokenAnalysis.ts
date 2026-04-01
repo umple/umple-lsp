@@ -147,17 +147,19 @@ export function analyzeToken(
       if (child.type === "trace_entity" || child.type === "trace_entity_call") break; // past prefixes
       if (TRACE_PREFIX_STATE.has(child.type)) { hasPrefix = true; prefixKind = "state"; }
       if (TRACE_PREFIX_ATTR.has(child.type)) { hasPrefix = true; prefixKind = "attribute"; }
-      if (TRACE_PREFIX_ASSOC.has(child.type)) { hasPrefix = true; prefixKind = "association"; }
+      // add/remove/cardinality: parse-only (association roles not indexed)
+      if (TRACE_PREFIX_ASSOC.has(child.type)) { hasPrefix = true; prefixKind = null; }
     }
-    if (hasPrefix && prefixKind) {
+    if (hasPrefix) {
       if (prefixKind === "state" && parent.type === "trace_entity_call") {
         kinds = ["method"]; // entry/exit with () → method
       } else if (prefixKind === "state") {
         kinds = ["state"];
       } else if (prefixKind === "attribute") {
         kinds = ["attribute"];
-      } else if (prefixKind === "association") {
-        kinds = ["association"];
+      } else {
+        // association or unrecognized prefix → parse-only, no goto-def
+        kinds = null;
       }
     }
   }

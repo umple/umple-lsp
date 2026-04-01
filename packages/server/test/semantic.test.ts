@@ -2542,7 +2542,13 @@ const TEST_CASES: TestCase[] = [
         at: "trace_entry_closed",
         expect: [{ at: "pref_state_closed" }],
       },
-      // add → association (goto-def empty: assoc roles not indexed as symbols)
+      // Refs: second state entity participates in refs for that state
+      {
+        type: "refs",
+        decl: { name: "Closed", kind: "state", container: "A.sm" },
+        expectAt: ["pref_state_closed", "trace_entry_closed"],
+      },
+      // add → parse-only (assoc roles not indexed, goto-def empty)
       {
         type: "goto_def_empty",
         at: "trace_add_assoc",

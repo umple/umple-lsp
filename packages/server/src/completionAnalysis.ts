@@ -403,7 +403,8 @@ export function analyzeCompletion(
         if (child.type === "trace_entity" || child.type === "trace_entity_call") break;
         if (STATE_PREFIXES.has(child.type)) { symbolKinds = ["state"]; break; }
         if (ATTR_PREFIXES.has(child.type)) { symbolKinds = ["attribute"]; break; }
-        if (ASSOC_PREFIXES.has(child.type)) { symbolKinds = ["association"]; break; }
+        // add/remove/cardinality: parse-only (association roles not indexed)
+        if (ASSOC_PREFIXES.has(child.type)) { symbolKinds = "suppress"; break; }
       }
     }
   }
