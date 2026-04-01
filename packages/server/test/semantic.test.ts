@@ -2648,6 +2648,26 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 68: Namespace directives — dash and URL-like forms
+  {
+    name: "68 namespace_directives: dash, URL, plain, default, --redefine all parse clean",
+    fixtures: ["68_namespace_directives.ump"],
+    assertions: [
+      {
+        type: "parse_clean",
+        fixture: "68_namespace_directives.ump",
+      },
+      // No symbol pollution: class A still indexed, no extra namespace symbols
+      {
+        type: "symbol_count",
+        fixture: "68_namespace_directives.ump",
+        name: "A",
+        kind: "class",
+        expect: 1,
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

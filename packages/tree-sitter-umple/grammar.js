@@ -90,7 +90,17 @@ module.exports = grammar({
     // NAMESPACE & USE
     // =====================
     namespace_declaration: ($) =>
-      seq("namespace", choice(field("name", $.qualified_name), "default"), optional("--redefine"), ";"),
+      seq(
+        "namespace",
+        choice(
+          field("name", $.qualified_name),
+          "default",
+          "-",                                    // namespace -; (reset/clear)
+          /[a-zA-Z][a-zA-Z0-9+.-]*:\/\/[^\s;]+/, // URL-like: http://..., https://...
+        ),
+        optional("--redefine"),
+        ";",
+      ),
 
     use_statement: ($) =>
       prec.right(

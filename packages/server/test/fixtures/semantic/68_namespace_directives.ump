@@ -1,0 +1,13 @@
+// Namespace directives — all compiler-verified forms
+
+namespace com.example;
+namespace default;
+namespace -;
+namespace http://www.eclipse.org/gmt/2005/ATL;
+namespace http://www.mlhim.org/mlhim2;
+namespace com.example --redefine;
+namespace default --redefine;
+
+class /*@ns_class*/A {
+  name;
+}
