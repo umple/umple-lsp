@@ -365,7 +365,36 @@ export class SemanticTestHelper {
     reachable: Set<string>,
   ): string | null {
     const result = this.resolve(filePath, content, line, col, reachable);
-    if (!result || result.symbols.length === 0) return null;
+    if (!result) return null;
+
+    // Trait SM operation hover: trait-aware formatting + event fallback
+    if (result.token.context.type === "trait_sm_op") {
+      const ctx = result.token.context;
+      if (result.symbols.length > 0) {
+        const sym = result.symbols[0];
+        const kind = sym.kind === "statemachine" ? "statemachine" : "state";
+        return `\`\`\`umple\n${sym.name} (${kind})\n\`\`\`\n\n*in trait ${ctx.traitName}*`;
+      }
+      if (ctx.isEventSegment && ctx.traitName) {
+        const traitSyms = this.si
+          .getSymbols({ name: ctx.traitName, kind: ["trait"] as SymbolKind[] })
+          .filter((s: SymbolEntry) => reachable.has(path.normalize(s.file)));
+        if (traitSyms.length > 0 && ctx.pathSegments.length >= 1) {
+          const smName = ctx.pathSegments[0];
+          const statePath = ctx.pathSegments.length > 2 ? ctx.pathSegments.slice(1, -1) : undefined;
+          const events = this.si.getEventSignatures(traitSyms[0].file, ctx.traitName, smName, statePath);
+          const matching = events.filter((e: { name: string }) => e.name === result.token.word);
+          if (matching.length > 0) {
+            const evt = matching[0];
+            const stateStr = evt.statePaths.map((p: string[]) => p.join(".")).join(", ");
+            return `\`\`\`umple\n${evt.label}\n\`\`\`\n\n*event in ${stateStr ? `state ${stateStr}, ` : ""}trait ${ctx.traitName}.${smName}*`;
+          }
+        }
+      }
+      return null;
+    }
+
+    if (result.symbols.length === 0) return null;
     const sym = result.symbols[0];
     return buildHoverMarkdown(sym, result.symbols, {
       getTree: (fp: string) => this.si.getTree(fp),

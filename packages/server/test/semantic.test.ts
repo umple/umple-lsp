@@ -2235,6 +2235,22 @@ const TEST_CASES: TestCase[] = [
         type: "goto_def_empty",
         at: "op_newevt",
       },
+      // ── Hover: trait-aware formatting ──
+      {
+        type: "hover_output",
+        at: "op_sm1",
+        expectContains: ["statemachine", "trait T1"],
+      },
+      {
+        type: "hover_output",
+        at: "op_s1",
+        expectContains: ["state", "trait T1"],
+      },
+      {
+        type: "hover_output",
+        at: "op_e4",
+        expectContains: ["e4()", "event", "trait T1"],
+      },
       // ── V2 Refs: trait SM op sites now participate in refs ──
       // SM refs include all op_sm sites
       {

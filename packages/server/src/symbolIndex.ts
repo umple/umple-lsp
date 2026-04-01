@@ -653,14 +653,13 @@ export class SymbolIndex {
     traitName: string,
     smName: string,
     statePath?: string[],
-  ): { name: string; params: string[]; label: string }[] {
+  ): { name: string; params: string[]; label: string; statePaths: string[][] }[] {
     const tree = this.files.get(path.normalize(traitFile))?.tree;
     if (!tree) return [];
 
-    const results: { name: string; params: string[]; label: string }[] = [];
-    const seen = new Set<string>();
+    const resultMap = new Map<string, { name: string; params: string[]; label: string; statePaths: string[][] }>();
 
-    const collectFromState = (stateNode: any) => {
+    const collectFromState = (stateNode: any, currentPath: string[]) => {
       for (let i = 0; i < stateNode.namedChildCount; i++) {
         const child = stateNode.namedChild(i);
         if (child?.type !== "transition") continue;
@@ -679,7 +678,6 @@ export class SymbolIndex {
           for (let j = 0; j < paramList.namedChildCount; j++) {
             const param = paramList.namedChild(j);
             if (param?.type === "param") {
-              // param = optional("final") type_name optional("[]") name
               const typeName = param.namedChildren.find(
                 (c: any) => c.type === "type_name",
               );
@@ -688,9 +686,11 @@ export class SymbolIndex {
           }
         }
         const label = `${name}(${params.join(", ")})`;
-        if (!seen.has(label)) {
-          seen.add(label);
-          results.push({ name, params, label });
+        const existing = resultMap.get(label);
+        if (existing) {
+          existing.statePaths.push([...currentPath]);
+        } else {
+          resultMap.set(label, { name, params, label, statePaths: [[...currentPath]] });
         }
       }
     };
@@ -722,11 +722,17 @@ export class SymbolIndex {
 
     if (!statePath || statePath.length === 0) {
       // Aggregate across all states in the SM
-      const walkStates = (node: any) => {
-        if (node.type === "state") collectFromState(node);
-        for (let i = 0; i < node.childCount; i++) walkStates(node.child(i));
+      const walkStates = (node: any, pathSoFar: string[]) => {
+        if (node.type === "state") {
+          const name = node.childForFieldName("name")?.text;
+          const p = name ? [...pathSoFar, name] : pathSoFar;
+          collectFromState(node, p);
+          for (let i = 0; i < node.childCount; i++) walkStates(node.child(i), p);
+        } else {
+          for (let i = 0; i < node.childCount; i++) walkStates(node.child(i), pathSoFar);
+        }
       };
-      walkStates(smNode);
+      walkStates(smNode, []);
     } else {
       // Walk to the specific state by path
       let current = smNode;
@@ -742,10 +748,10 @@ export class SymbolIndex {
         }
         if (!found) return [];
       }
-      collectFromState(current);
+      collectFromState(current, [...statePath]);
     }
 
-    return results;
+    return [...resultMap.values()];
   }
 
   /**
