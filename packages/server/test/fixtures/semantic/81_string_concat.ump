@@ -1,0 +1,10 @@
+class /*@sc_class*/DAL {
+  // String concat field initializer from real corpus
+  protected static final String SQL = "SELECT * FROM " +
+    "ACTUALRUNS WHERE RUNID = ?";
+
+  // Simple string still works
+  lazy String label = "hello";
+
+  name;
+}

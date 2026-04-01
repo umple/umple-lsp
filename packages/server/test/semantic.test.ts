@@ -2862,6 +2862,16 @@ const TEST_CASES: TestCase[] = [
       { type: "symbol_count", fixture: "80_varargs.ump", name: "foo", kind: "method", expect: 1 },
     ],
   },
+
+  // 81: String concatenation in field initializer
+  {
+    name: "81 string_concat: string concat initializer parses clean",
+    fixtures: ["81_string_concat.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "81_string_concat.ump" },
+      { type: "symbol_count", fixture: "81_string_concat.ump", name: "DAL", kind: "class", expect: 1 },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

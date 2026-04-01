@@ -1184,6 +1184,7 @@ module.exports = grammar({
     _value: ($) =>
       choice(
         $.number,
+        $.string_concat,  // "..." + "..." (must be before string_literal)
         $.string_literal,
         $.boolean,
         "null",
@@ -1193,6 +1194,10 @@ module.exports = grammar({
         $.new_expression,
         $.code_block,
       ),
+
+    // String concatenation: "str1" + "str2" + ... (Java-style field initializer tolerance)
+    string_concat: ($) =>
+      seq($.string_literal, repeat1(seq("+", $.string_literal))),
 
     // Method-call initializer: findValidLanguages(), System.lineSeparator(),
     // Optional.empty(), Collections.<String>emptyList()
