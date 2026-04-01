@@ -1,0 +1,14 @@
+class /*@tc_class*/Student {
+  id = "ID123";
+  /*@tc_name*/name = "John";
+
+  test checkSetId {
+    Student s ();
+    assertTrue(s.setId("ID432"));
+  }
+
+  test checkSetName {
+    Student s ();
+    assertTrue(s.setName("Jane"));
+  }
+}

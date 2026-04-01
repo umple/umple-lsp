@@ -2807,6 +2807,16 @@ const TEST_CASES: TestCase[] = [
       { type: "symbol_count", fixture: "75_php_params.ump", name: "normalMethod", kind: "method", expect: 1 },
     ],
   },
+
+  // 76: Test case DSL
+  {
+    name: "76 test_case: basic test blocks parse clean",
+    fixtures: ["76_test_case.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "76_test_case.ump" },
+      { type: "symbol_count", fixture: "76_test_case.ump", name: "Student", kind: "class", expect: 1 },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

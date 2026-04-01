@@ -124,6 +124,7 @@
   "tracecase"
   "suboption"
   "distributable"
+  "test"
   "activate"
   "deactivate"
 ] @keyword

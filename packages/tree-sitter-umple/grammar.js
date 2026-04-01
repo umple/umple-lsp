@@ -138,6 +138,10 @@ module.exports = grammar({
         ";",
       ),
 
+    // Test case: test name { ... }
+    test_case: ($) =>
+      seq("test", field("name", $.identifier), "{", optional($.code_content), "}"),
+
     // Standalone suboption directive: suboption "value";
     suboption_directive: ($) =>
       seq("suboption", $.string_literal, ";"),
@@ -230,6 +234,7 @@ module.exports = grammar({
         $.port_connector,
         $.active_method,
         $.trace_statement,
+        $.test_case,
         $.position_directive,
         $.position_association_directive,
         ";", // bare semicolons are valid in class/mixset bodies
