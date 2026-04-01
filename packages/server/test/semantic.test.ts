@@ -2827,6 +2827,19 @@ const TEST_CASES: TestCase[] = [
       { type: "symbol_count", fixture: "77_generic_test.ump", name: "Student", kind: "class", expect: 1 },
     ],
   },
+
+  // 78: Java-style static final int in interfaces
+  {
+    name: "78 static_final_const: static final int in interfaces parse clean",
+    fixtures: ["78_static_final_const.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "78_static_final_const.ump" },
+      { type: "symbol_count", fixture: "78_static_final_const.ump", name: "IObserver", kind: "interface", expect: 1 },
+      // static final fields are parse-only — NOT indexed as const (compiler treats as extra code)
+      { type: "symbol_count", fixture: "78_static_final_const.ump", name: "ADDED_OBJECT", kind: "const", expect: 0 },
+      { type: "symbol_count", fixture: "78_static_final_const.ump", name: "A", kind: "class", expect: 1 },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

@@ -25,6 +25,7 @@ module.exports = grammar({
     [$.state_machine, $.state],
     [$.event_spec, $.method_declaration],
     [$.constraint, $.guard],
+    [$._java_static_final_field, $.method_signature],
     [$.trace_statement, $.event_spec],
     [$.enumerated_attribute, $.state_machine],
     [$.enumerated_attribute, $.state_machine, $.state],
@@ -286,6 +287,7 @@ module.exports = grammar({
             $.depend_statement,
             $.method_signature,
             $.const_declaration,
+            $._java_static_final_field,
           ),
         ),
         "}",
@@ -757,6 +759,11 @@ module.exports = grammar({
         $._value,
         ";",
       ),
+
+    // Java-style static final field — parse-only, not indexed as const
+    // Compiler treats these as extra code (W1007), not real Umple constants
+    _java_static_final_field: ($) =>
+      seq("static", "final", $.type_name, $.identifier, "=", $._value, ";"),
 
     // Modifier keywords for attributes. `unique` and `lazy` are separate positional
     // slots in the official grammar and live directly in `attribute_declaration`.

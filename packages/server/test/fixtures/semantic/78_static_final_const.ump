@@ -1,0 +1,14 @@
+// Java-style static final — parse-only, not real Umple const
+
+interface /*@sfc_iface*/IObserver {
+  static final int ADDED_OBJECT = 1;
+  static final int REMOVED_OBJECT = 2;
+
+  // Normal interface members still work
+  const Integer MAX = 100;
+  void notify(String msg);
+}
+
+class /*@sfc_class*/A {
+  name;
+}
