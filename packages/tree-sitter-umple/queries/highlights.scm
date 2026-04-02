@@ -110,6 +110,9 @@
   "before"
   "after"
   "around"
+  "custom"
+  "generated"
+  "all"
   "emit"
 ] @keyword.directive
 

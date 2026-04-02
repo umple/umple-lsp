@@ -1,0 +1,13 @@
+class /*@al_class*/A {
+  void /*@al_method*/doSomeThing() {}
+  void /*@al_method2*/methodToDoSomething() {}
+
+  // around + custom operationSource
+  around custom /*@al_around*/doSomeThing() { /* code */ }
+
+  // after + Label: prefix — method target still resolves through the label
+  after Label1:/*@al_labeled*/methodToDoSomething { int y = 0; }
+
+  // before still works (regression)
+  before /*@al_before*/doSomeThing { /* code */ }
+}

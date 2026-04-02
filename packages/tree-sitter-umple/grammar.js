@@ -1041,7 +1041,9 @@ module.exports = grammar({
 
     before_after: ($) =>
       seq(
-        choice("before", "after"),
+        choice("before", "after", "around"),
+        optional(choice("custom", "generated", "all")), // operationSource
+        optional($._code_label), // Label: prefix
         seq(
           $.identifier,
           repeat(seq(token.immediate("*"), optional(token.immediate(/[a-zA-Z0-9_]+/)))),
@@ -1049,6 +1051,10 @@ module.exports = grammar({
         optional(seq("(", optional($.param_list), ")")),
         repeat1($.more_code),
       ),
+
+    // Code label: Label1:  (hidden — identifier consumed with ":", not captured as method)
+    _code_label: ($) =>
+      seq(alias($.identifier, $.code_label_name), ":"),
 
     // =====================
     // EMIT METHODS & TEMPLATE ATTRIBUTES

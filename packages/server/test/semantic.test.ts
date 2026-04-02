@@ -2934,6 +2934,22 @@ const TEST_CASES: TestCase[] = [
       { type: "refs", decl: { name: "s11", kind: "state", container: "T1.sm" }, expectAt: ["dpr_s11", "dpr_ref_s11"] },
     ],
   },
+
+  // 88: around + operationSource + label
+  {
+    name: "88 around_label: around/custom/label forms parse clean with method semantics",
+    fixtures: ["88_around_label.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "88_around_label.ump" },
+      { type: "symbol_count", fixture: "88_around_label.ump", name: "A", kind: "class", expect: 1 },
+      // Method target in around still resolves
+      { type: "goto_def", at: "al_around", expect: [{ at: "al_method" }] },
+      // before regression: method target still resolves
+      { type: "goto_def", at: "al_before", expect: [{ at: "al_method" }] },
+      // Labeled target: method after Label1: still resolves
+      { type: "goto_def", at: "al_labeled", expect: [{ at: "al_method2" }] },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────
