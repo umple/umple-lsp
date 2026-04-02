@@ -3095,6 +3095,18 @@ const TEST_CASES: TestCase[] = [
       { type: "goto_def", at: "sme_level_attr", expect: [{ at: "sme_dimmer" }] },
     ],
   },
+
+  // 101: Attribute keyword tolerance — "active" as attribute name
+  {
+    name: "101 attr_keyword_tolerance: active keyword as attribute name with boolean initializer",
+    fixtures: ["101_attr_value_expr.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "101_attr_value_expr.ump" },
+      { type: "symbol_count", fixture: "101_attr_value_expr.ump", name: "Auction", kind: "class", expect: 1 },
+      // "active" keyword used as attribute name — indexed correctly
+      { type: "symbol_count", fixture: "101_attr_value_expr.ump", name: "active", kind: "attribute", expect: 1 },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

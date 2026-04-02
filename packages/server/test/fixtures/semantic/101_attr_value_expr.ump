@@ -1,0 +1,15 @@
+class /*@ave_class*/Auction {
+  // Negative decimal initializers
+  Double reservePrice = -1.0;
+  Double highestBidPrice = -1.0;
+  Double salePrice = -1.0;
+
+  // Boolean initializers with "active" as attribute name (keyword tolerance)
+  Boolean /*@ave_active*/active = false;
+  Boolean sold = false;
+  Boolean flag = true;
+
+  // Normal initializers
+  Integer count = 5;
+  name;
+}

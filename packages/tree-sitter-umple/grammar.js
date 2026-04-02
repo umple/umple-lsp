@@ -741,7 +741,7 @@ module.exports = grammar({
         optional($.attribute_modifier),
         optional(field("type", $.type_name)),
         optional(seq("[", "]")),
-        field("name", $.identifier),
+        field("name", choice($.identifier, alias("active", $.identifier))),
         choice(
           // Standard form: [= value];
           seq(optional(seq("=", $._value)), ";"),
@@ -1241,13 +1241,13 @@ module.exports = grammar({
     // =====================
     _value: ($) =>
       choice(
-        $.number,
-        $.string_concat,  // "..." + "..." (must be before string_literal)
+        $.number,                              // already supports -1.0 via regex
+        $.string_concat,                      // "..." + "..."
         $.string_literal,
         $.boolean,
         "null",
         $.call_expression,
-        seq($.qualified_name, ".", "class"),  // URL.class
+        seq($.qualified_name, ".", "class"),   // URL.class
         $.qualified_name,
         $.new_expression,
         $.code_block,
