@@ -3129,6 +3129,17 @@ const TEST_CASES: TestCase[] = [
       { type: "symbol_count", fixture: "103_interface_const_no_value.ump", name: "I1", kind: "const", expect: 1 },
     ],
   },
+
+  // 104: Parenthesized attribute value expressions
+  {
+    name: "104 paren_attr_value: parenthesized comparison initializers parse clean",
+    fixtures: ["104_paren_attr_value.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "104_paren_attr_value.ump" },
+      { type: "symbol_count", fixture: "104_paren_attr_value.ump", name: "Detector", kind: "class", expect: 1 },
+      { type: "symbol_count", fixture: "104_paren_attr_value.ump", name: "emergencyDetected", kind: "attribute", expect: 1 },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

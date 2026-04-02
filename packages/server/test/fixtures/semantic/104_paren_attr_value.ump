@@ -1,0 +1,11 @@
+class /*@pav_class*/Detector {
+  // Parenthesized comparison expression initializer
+  Boolean /*@pav_attr*/emergencyDetected = (getDistance() == DangerZone.GetSize());
+  Boolean earlyWarning = (getDistance() < EarlyWarningZone.GetSize());
+
+  // Plain initializers still work
+  Integer count = 5;
+  Boolean flag = true;
+  String label = "hello";
+  name;
+}

@@ -744,7 +744,7 @@ module.exports = grammar({
         field("name", choice($.identifier, alias("active", $.identifier))),
         choice(
           // Standard form: [= value];
-          seq(optional(seq("=", $._value)), ";"),
+          seq(optional(seq("=", $._attribute_value)), ";"),
           // Derived attribute form: = [LangTag] { expression } [LangTag { expr }]* (no semicolon)
           seq("=", repeat1($.more_code)),
         ),
@@ -1251,6 +1251,19 @@ module.exports = grammar({
         $.new_expression,
         $.code_block,
       ),
+
+    // Attribute-local value: everything _value accepts plus raw opaque parenthesized content
+    // Matches official grammar's [**value] raw slot for attribute initializers only
+    _attribute_value: ($) =>
+      choice(
+        $._value,
+        // Raw parenthesized expression: (anything with balanced parens)
+        // Only in attribute context — does NOT widen global _value
+        $.raw_paren_value,
+      ),
+
+    raw_paren_value: ($) =>
+      seq("(", repeat(choice(/[^();]+/, seq("(", repeat(/[^()]+/), ")"))), ")"),
 
     // String concatenation: "str1" + "str2" + ... (Java-style field initializer tolerance)
     string_concat: ($) =>
