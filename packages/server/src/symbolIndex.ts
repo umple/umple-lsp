@@ -415,6 +415,9 @@ export class SymbolIndex {
       if (node.type === "use_statement") {
         const pathNodes = node.childrenForFieldName("path");
         for (const pathNode of pathNodes) {
+          // Skip quoted string use paths — they are mixset references, not file imports
+          if (pathNode.type === "string_literal" ||
+              pathNode.namedChildCount > 0 && pathNode.namedChild(0)?.type === "string_literal") continue;
           usePaths.push(pathNode.text);
         }
       } else {
@@ -462,6 +465,9 @@ export class SymbolIndex {
       if (node.type === "use_statement") {
         const pathNodes = node.childrenForFieldName("path");
         for (const pathNode of pathNodes) {
+          // Skip quoted string use paths — they are mixset references, not file imports
+          if (pathNode.type === "string_literal" ||
+              pathNode.namedChildCount > 0 && pathNode.namedChild(0)?.type === "string_literal") continue;
           useStatements.push({
             path: pathNode.text,
             line: node.startPosition.row,

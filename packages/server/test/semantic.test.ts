@@ -3021,6 +3021,16 @@ const TEST_CASES: TestCase[] = [
       { type: "symbol_count", fixture: "94_named_filter.ump", name: "Cube", kind: "class", expect: 1 },
     ],
   },
+
+  // 95: Quoted string use statement
+  {
+    name: "95 use_quoted_string: use with quoted string parses clean",
+    fixtures: ["95_use_quoted_string.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "95_use_quoted_string.ump" },
+      { type: "symbol_count", fixture: "95_use_quoted_string.ump", name: "A", kind: "class", expect: 1 },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

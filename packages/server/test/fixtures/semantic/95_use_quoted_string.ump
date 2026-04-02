@@ -1,0 +1,7 @@
+class /*@uqs_class*/A { name; }
+
+// Quoted string use statement (compiler W1513)
+use "alskdjalskdj";
+
+// Normal use still works
+use SomeFile.ump

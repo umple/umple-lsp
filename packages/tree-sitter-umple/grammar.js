@@ -115,7 +115,7 @@ module.exports = grammar({
         ),
       ),
 
-    use_path: ($) => /[a-zA-Z0-9_.\/:\-][a-zA-Z0-9_.\/:\-]*/,
+    use_path: ($) => choice(/[a-zA-Z0-9_.\/:\-][a-zA-Z0-9_.\/:\-]*/, $.string_literal),
 
     generate_statement: ($) =>
       seq(
