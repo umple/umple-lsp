@@ -3107,6 +3107,28 @@ const TEST_CASES: TestCase[] = [
       { type: "symbol_count", fixture: "101_attr_value_expr.ump", name: "active", kind: "attribute", expect: 1 },
     ],
   },
+
+  // 102: Multiple attribute modifiers (internal const)
+  {
+    name: "102 multi_modifier: internal const int parses clean",
+    fixtures: ["102_multi_modifier.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "102_multi_modifier.ump" },
+      { type: "symbol_count", fixture: "102_multi_modifier.ump", name: "A", kind: "class", expect: 1 },
+      { type: "symbol_count", fixture: "102_multi_modifier.ump", name: "NO_TOKEN_STATE", kind: "attribute", expect: 1 },
+    ],
+  },
+
+  // 103: Interface const without initializer
+  {
+    name: "103 interface_const_no_value: uninitialized interface consts parse clean",
+    fixtures: ["103_interface_const_no_value.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "103_interface_const_no_value.ump" },
+      { type: "symbol_count", fixture: "103_interface_const_no_value.ump", name: "ConstInterface", kind: "interface", expect: 1 },
+      { type: "symbol_count", fixture: "103_interface_const_no_value.ump", name: "I1", kind: "const", expect: 1 },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

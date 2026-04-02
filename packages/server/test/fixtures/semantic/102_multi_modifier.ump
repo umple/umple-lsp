@@ -1,0 +1,12 @@
+class /*@mm_class*/A {
+  // Multiple attribute modifiers (internal + const)
+  internal const int NO_TOKEN_STATE = 0;
+  internal const int NORMAL_TOKEN_STATE = 1;
+
+  // Single modifier still works
+  const Integer MAX = 100;
+  internal String label = "hello";
+
+  // No modifier
+  name;
+}

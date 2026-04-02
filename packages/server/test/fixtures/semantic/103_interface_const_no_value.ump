@@ -1,0 +1,11 @@
+interface /*@icnv_iface*/ConstInterface {
+  // Uninitialized consts (compiler W035)
+  const int /*@icnv_i1*/I1;
+  const Integer I2;
+  const boolean B1;
+  const Boolean B2;
+  const String S;
+
+  // Initialized const still works
+  const Integer MAX = 100;
+}

@@ -738,7 +738,7 @@ module.exports = grammar({
         optional("lazy"),
         optional("static"),
         optional("final"),
-        optional($.attribute_modifier),
+        repeat($.attribute_modifier),
         optional(field("type", $.type_name)),
         optional(seq("[", "]")),
         field("name", choice($.identifier, alias("active", $.identifier))),
@@ -768,8 +768,7 @@ module.exports = grammar({
         choice("const", "constant"), // "constant" is deprecated (W901)
         optional(field("type", $.type_name)),
         field("name", $.identifier),
-        "=",
-        $._value,
+        optional(seq("=", $._value)), // value optional for interface consts (W035)
         ";",
       ),
 
