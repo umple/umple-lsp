@@ -1,0 +1,8 @@
+trait /*@mit_trait*/Comparable {
+  Boolean isEqual(Object object);
+
+  mixset Numerical {
+    Boolean isGreaterThan(Object object);
+    Boolean isLessThan(Object object);
+  }
+}

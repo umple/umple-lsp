@@ -3066,6 +3066,21 @@ const TEST_CASES: TestCase[] = [
       { type: "symbol_count", fixture: "98_untyped_param.ump", name: "createBulk", kind: "method", expect: 1 },
     ],
   },
+
+  // 99: Mixset with method signatures inside trait
+  {
+    name: "99 mixset_in_trait: method signatures in mixset inside trait parse clean",
+    fixtures: ["99_mixset_in_trait.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "99_mixset_in_trait.ump" },
+      { type: "symbol_count", fixture: "99_mixset_in_trait.ump", name: "Comparable", kind: "trait", expect: 1 },
+      { type: "symbol_count", fixture: "99_mixset_in_trait.ump", name: "Numerical", kind: "mixset", expect: 1 },
+      { type: "symbol_count", fixture: "99_mixset_in_trait.ump", name: "isEqual", kind: "method", expect: 1 },
+      // Mixset-body signatures are parse-only — NOT indexed
+      { type: "symbol_count", fixture: "99_mixset_in_trait.ump", name: "isGreaterThan", kind: "method", expect: 0 },
+      { type: "symbol_count", fixture: "99_mixset_in_trait.ump", name: "isLessThan", kind: "method", expect: 0 },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

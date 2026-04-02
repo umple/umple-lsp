@@ -433,7 +433,10 @@ module.exports = grammar({
           repeat(choice(
             $._definition,
             $._class_content,
-            // State-level content (mixset bodies are context-free in real Umple)
+            // Trait-level content — aliased to avoid indexing as normal methods
+            alias($.trait_method_signature, $.mixset_method_signature),
+            alias($.method_signature, $.mixset_method_signature),
+            // State-level content
             $.transition,
             $.entry_exit_action,
             $.do_activity,
