@@ -1,0 +1,15 @@
+class /*@wc_class*/A {
+  lastName;
+  cityOfBirth;
+  void /*@wc_method*/getName() {}
+
+  // Wildcard + exclusion (parse-only for patterns)
+  before get*,!getCityOfBirth {
+    if (true) {}
+  }
+
+  // Plain method in same construct still works
+  before /*@wc_plain*/getName {
+    /* code */
+  }
+}

@@ -2950,6 +2950,18 @@ const TEST_CASES: TestCase[] = [
       { type: "goto_def", at: "al_labeled", expect: [{ at: "al_method2" }] },
     ],
   },
+
+  // 89: Wildcard/exclusion selectors — parse-only for patterns
+  {
+    name: "89 wildcard_exclusion: wildcard/exclusion ops parse clean, plain method still resolves",
+    fixtures: ["89_wildcard_exclusion.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "89_wildcard_exclusion.ump" },
+      { type: "symbol_count", fixture: "89_wildcard_exclusion.ump", name: "A", kind: "class", expect: 1 },
+      // Plain method target still resolves (not affected by wildcard patterns)
+      { type: "goto_def", at: "wc_plain", expect: [{ at: "wc_method" }] },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

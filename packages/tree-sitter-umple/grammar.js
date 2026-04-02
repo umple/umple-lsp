@@ -1044,13 +1044,24 @@ module.exports = grammar({
         choice("before", "after", "around"),
         optional(choice("custom", "generated", "all")), // operationSource
         optional($._code_label), // Label: prefix
-        seq(
-          $.identifier,
-          repeat(seq(token.immediate("*"), optional(token.immediate(/[a-zA-Z0-9_]+/)))),
-        ),
-        optional(seq("(", optional($.param_list), ")")),
+        $._injection_op,
+        repeat(seq(",", $._injection_op)),
         repeat1($.more_code),
       ),
+
+    // Injection operation target: plain identifier, wildcard (get*), or exclusion (!getName)
+    _injection_op: ($) => choice(
+      // Plain method name (with optional params) — keeps existing method semantics
+      seq($.identifier, optional(seq("(", optional($.param_list), ")"))),
+      // Wildcard/exclusion — parse-only, NOT captured as method ref
+      $.injection_pattern,
+    ),
+
+    // Wildcard/exclusion patterns: get*, !getCityOfBirth, !getAttr*
+    injection_pattern: ($) => choice(
+      seq(optional("!"), $.identifier, token.immediate("*"), optional(token.immediate(/[a-zA-Z0-9_]+/))),
+      seq("!", $.identifier),
+    ),
 
     // Code label: Label1:  (hidden — identifier consumed with ":", not captured as method)
     _code_label: ($) =>
