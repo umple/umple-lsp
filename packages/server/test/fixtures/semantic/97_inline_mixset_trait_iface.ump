@@ -1,0 +1,15 @@
+// Inline mixset trait and interface forms
+
+mixset M1 class /*@imti_class*/A {
+  name;
+}
+
+mixset M1 trait B {
+  y;
+}
+
+mixset M1 interface C {
+  void method();
+}
+
+use M1;

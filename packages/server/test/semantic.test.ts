@@ -3041,6 +3041,18 @@ const TEST_CASES: TestCase[] = [
       { type: "symbol_count", fixture: "96_decimal_position.ump", name: "A", kind: "class", expect: 1 },
     ],
   },
+
+  // 97: Inline mixset trait and interface
+  {
+    name: "97 inline_mixset_trait_iface: mixset name trait/interface {} parses clean",
+    fixtures: ["97_inline_mixset_trait_iface.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "97_inline_mixset_trait_iface.ump" },
+      { type: "symbol_count", fixture: "97_inline_mixset_trait_iface.ump", name: "A", kind: "class", expect: 1 },
+      { type: "symbol_count", fixture: "97_inline_mixset_trait_iface.ump", name: "B", kind: "trait", expect: 1 },
+      { type: "symbol_count", fixture: "97_inline_mixset_trait_iface.ump", name: "C", kind: "interface", expect: 1 },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

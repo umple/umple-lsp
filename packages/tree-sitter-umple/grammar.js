@@ -444,8 +444,8 @@ module.exports = grammar({
           )),
           "}",
         ),
-        // Inline class form: mixset name class Name { ... }
-        seq("mixset", field("name", $.identifier), $.class_definition),
+        // Inline definition form: mixset name class/trait/interface Name { ... }
+        seq("mixset", field("name", $.identifier), choice($.class_definition, $.trait_definition, $.interface_definition)),
       ),
 
     // =====================
