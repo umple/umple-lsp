@@ -1,0 +1,10 @@
+trait T1 {
+  /*@wer_sm1*/sm1 {
+    s1 { e0 -> s1; e1(Integer x) -> s1; }
+  }
+}
+
+class /*@wer_class*/C1 {
+  isA T1</*@wer_exact_sm1*/sm1.e1(Integer) as event1,
+    *.e0() as event0>;
+}

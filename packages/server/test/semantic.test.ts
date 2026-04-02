@@ -2990,6 +2990,27 @@ const TEST_CASES: TestCase[] = [
       { type: "goto_def", at: "acl_target", expect: [{ at: "acl_method" }] },
     ],
   },
+
+  // 92: Wildcard event rename in trait SM operations
+  {
+    name: "92 wildcard_event_rename: *.e0() as event0 parses clean",
+    fixtures: ["92_wildcard_event_rename.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "92_wildcard_event_rename.ump" },
+      { type: "symbol_count", fixture: "92_wildcard_event_rename.ump", name: "C1", kind: "class", expect: 1 },
+      // Nearby exact trait-SM goto-def still works
+      { type: "goto_def", at: "wer_exact_sm1", expect: [{ at: "wer_sm1" }] },
+    ],
+  },
+
+  // 93: Negative — bare *() without .identifier rejected
+  {
+    name: "93 wildcard_negative: bare *() as event0 produces parse error",
+    fixtures: ["93_wildcard_negative.ump"],
+    assertions: [
+      { type: "parse_has_error", fixture: "93_wildcard_negative.ump" },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

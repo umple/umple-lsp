@@ -1191,7 +1191,6 @@ module.exports = grammar({
         ),
         // Phase 2: event with params + required rename (no prefix)
         // Only 1-2 segment paths: sm.e1(Integer) as event1, player.stop() as end
-        // Deeper paths like sm.s1.e1() are compiler-rejected without prefix
         seq(
           $.identifier,
           optional(seq(token.immediate("."), alias(token.immediate(/[a-zA-Z_][a-zA-Z0-9_]*/), $.identifier))),
@@ -1199,7 +1198,16 @@ module.exports = grammar({
           optional($.type_list),
           ")",
           "as",
-          optional(choice("public", "private", "protected")), // visibility for method rename
+          optional(choice("public", "private", "protected")),
+          $.identifier,
+        ),
+        // Wildcard event rename: *.e0() as event0 (parse-only, requires .identifier after *)
+        seq(
+          "*",
+          ".",
+          $.identifier,
+          "(", optional($.type_list), ")",
+          "as",
           $.identifier,
         ),
       ),
