@@ -1,0 +1,15 @@
+// Top-level aspect with wildcard class targets and operation lists
+
+after {*} set* { /* code */ }
+
+after {Student1} setName,/*@tw_testfunc*/testFunction { /* code */ }
+
+class /*@tw_class*/Student1 {
+  void setName() {}
+  void /*@tw_testfunc_decl*/testFunction() {}
+  name;
+}
+
+class Student2 {
+  void /*@tw_testfunc_s2*/testFunction() {}
+}

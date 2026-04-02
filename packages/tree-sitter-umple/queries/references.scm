@@ -97,7 +97,7 @@
 ; =====================
 ; before/after/around { ClassName } — target must be a class
 (toplevel_code_injection target: (identifier) @reference.class)
-; before/after/around { ClassName } operation() — method reference
+; before/after/around { ClassName } operation — method reference
 (toplevel_code_injection operation: (identifier) @reference.method)
 
 ; before/after method hook — method name reference

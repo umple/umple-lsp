@@ -2962,6 +2962,22 @@ const TEST_CASES: TestCase[] = [
       { type: "goto_def", at: "wc_plain", expect: [{ at: "wc_method" }] },
     ],
   },
+
+  // 90: Top-level wildcard class targets + operation lists
+  {
+    name: "90 toplevel_wildcard: wildcard class targets and op lists parse clean",
+    fixtures: ["90_toplevel_wildcard.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "90_toplevel_wildcard.ump" },
+      { type: "symbol_count", fixture: "90_toplevel_wildcard.ump", name: "Student1", kind: "class", expect: 1 },
+      // Later exact op in comma list resolves to method declaration
+      { type: "goto_def", at: "tw_testfunc", expect: [{ at: "tw_testfunc_decl" }] },
+      // Later exact op refs scoped to target class
+      { type: "refs", decl: { name: "testFunction", kind: "method", container: "Student1" }, expectAt: ["tw_testfunc_decl", "tw_testfunc"] },
+      // Cross-class exclusion: Student2.testFunction must NOT include the top-level use
+      { type: "refs_exclude", decl: { name: "testFunction", kind: "method", container: "Student2" }, excludeAt: ["tw_testfunc"] },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

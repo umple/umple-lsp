@@ -291,12 +291,12 @@ function resolveEnclosingScopeFromNode(
 
   if (!enclosingClass && targetKind === "method") {
     const parent = node.parent;
-    if (
-      parent?.type === "toplevel_code_injection" &&
-      parent.childForFieldName("operation")?.id === node.id
-    ) {
-      const targetNode = parent.childForFieldName("target");
-      if (targetNode) return targetNode.text;
+    if (parent?.type === "toplevel_code_injection") {
+      const ops = parent.childrenForFieldName?.("operation") ?? [];
+      if (ops.some((op: { id: number }) => op.id === node.id)) {
+        const targetNode = parent.childForFieldName("target");
+        if (targetNode) return targetNode.text;
+      }
     }
   }
 

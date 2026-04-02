@@ -1110,16 +1110,24 @@ module.exports = grammar({
       seq(
         field("timing", choice("before", "after", "around")),
         "{",
-        field("target", $.identifier),
-        repeat(seq(",", field("target", $.identifier))),
+        $._class_target,
+        repeat(seq(",", $._class_target)),
         "}",
         optional(field("operation_source", choice("custom", "generated", "all"))),
-        field("operation", $.identifier),
-        optional(seq("(", optional($.param_list), ")")),
+        optional($._code_label),
+        field("operation", $._injection_op),
+        repeat(seq(",", field("operation", $._injection_op))),
         "{",
         optional($.code_content),
         "}",
       ),
+
+    // Class target in top-level injection: exact name, *, or Prefix*
+    _class_target: ($) => choice(
+      field("target", $.identifier),
+      "*",
+      seq($.identifier, token.immediate("*")),
+    ),
 
     // top ClassName [LangTag] { code } — top-level extra code for a class
     toplevel_extra_code: ($) =>

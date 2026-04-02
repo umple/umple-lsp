@@ -374,15 +374,19 @@ export function analyzeToken(
     context = { type: "referenced_sm" };
   }
 
-  // toplevel_code_injection operation: "before { Counter } increment()"
+  // toplevel_code_injection operation: "before { Counter } increment(),testFunc"
+  // Check all operation fields (not just first) for comma-separated op lists
   if (
     node.type === "identifier" &&
-    parent?.type === "toplevel_code_injection" &&
-    parent.childForFieldName("operation")?.id === node.id
+    parent?.type === "toplevel_code_injection"
   ) {
-    const targetNode = parent.childForFieldName("target");
-    if (targetNode) {
-      context = { type: "toplevel_injection", targetClass: targetNode.text };
+    const ops = parent.childrenForFieldName?.("operation") ?? [];
+    const isOp = ops.some((op: { id: number }) => op.id === node.id);
+    if (isOp) {
+      const targetNode = parent.childForFieldName("target");
+      if (targetNode) {
+        context = { type: "toplevel_injection", targetClass: targetNode.text };
+      }
     }
   }
 
