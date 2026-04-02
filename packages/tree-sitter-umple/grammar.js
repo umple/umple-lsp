@@ -1039,6 +1039,8 @@ module.exports = grammar({
       seq(optional("final"), $.type_name, "...", field("name", $.identifier)),
       // PHP-style param: $name (no type, $ immediately before identifier)
       seq("$", field("name", alias(token.immediate(/[a-zA-Z_][a-zA-Z0-9_]*/), $.identifier))),
+      // Untyped param: bare identifier (Java-like tolerance, parse-only)
+      field("name", $.identifier),
     ),
 
     before_after: ($) =>

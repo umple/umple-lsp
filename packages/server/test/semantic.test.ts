@@ -3053,6 +3053,19 @@ const TEST_CASES: TestCase[] = [
       { type: "symbol_count", fixture: "97_inline_mixset_trait_iface.ump", name: "C", kind: "interface", expect: 1 },
     ],
   },
+
+  // 98: Untyped parameter tolerance
+  {
+    name: "98 untyped_param: bare identifier param parses clean",
+    fixtures: ["98_untyped_param.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "98_untyped_param.ump" },
+      { type: "symbol_count", fixture: "98_untyped_param.ump", name: "A", kind: "class", expect: 1 },
+      { type: "symbol_count", fixture: "98_untyped_param.ump", name: "createWarehouse", kind: "method", expect: 1 },
+      // Mixed typed/untyped param list still indexes method
+      { type: "symbol_count", fixture: "98_untyped_param.ump", name: "createBulk", kind: "method", expect: 1 },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────
