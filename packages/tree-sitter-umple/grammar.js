@@ -153,7 +153,7 @@ module.exports = grammar({
 
     // Standalone suboption directive: suboption "value";
     suboption_directive: ($) =>
-      seq("suboption", $.string_literal, ";"),
+      prec.right(seq("suboption", $.string_literal, optional(";"))),
 
     // Distributable directive: distributable [N] (forced|on|off);
     distributable_directive: ($) =>

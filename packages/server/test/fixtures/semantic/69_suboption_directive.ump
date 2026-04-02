@@ -2,6 +2,9 @@
 suboption "genJson";
 suboption "reqSortID";
 
+// Without semicolon (valid inside mixset blocks)
+suboption "gvseparator=1.5"
+
 // Existing generate --suboption must still work
 generate Java --suboption "genJson";
 
