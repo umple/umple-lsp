@@ -1,0 +1,5 @@
+class /*@dp_class*/A {
+  position 24 232 109 41.453125;
+  position 0 0 100 135.75;
+  name;
+}

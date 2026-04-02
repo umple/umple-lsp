@@ -3031,6 +3031,16 @@ const TEST_CASES: TestCase[] = [
       { type: "symbol_count", fixture: "95_use_quoted_string.ump", name: "A", kind: "class", expect: 1 },
     ],
   },
+
+  // 96: Decimal literals in position metadata
+  {
+    name: "96 decimal_position: decimal values in position directives parse clean",
+    fixtures: ["96_decimal_position.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "96_decimal_position.ump" },
+      { type: "symbol_count", fixture: "96_decimal_position.ump", name: "A", kind: "class", expect: 1 },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

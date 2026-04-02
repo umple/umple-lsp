@@ -596,7 +596,9 @@ module.exports = grammar({
     // These are layout metadata (not model semantics) — parsed to avoid ERROR nodes
     // but not indexed, referenced, or offered in completion.
     position_directive: ($) =>
-      seq("position", $.integer_literal, $.integer_literal, $.integer_literal, $.integer_literal, ";"),
+      seq("position", $._position_number, $._position_number, $._position_number, $._position_number, ";"),
+
+    _position_number: ($) => choice($.integer_literal, /\d+\.\d+/),
 
     position_association_directive: ($) =>
       seq(
