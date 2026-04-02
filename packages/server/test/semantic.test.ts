@@ -3081,6 +3081,20 @@ const TEST_CASES: TestCase[] = [
       { type: "symbol_count", fixture: "99_mixset_in_trait.ump", name: "isLessThan", kind: "method", expect: 0 },
     ],
   },
+
+  // 100: State machine extensions — entry[guard]->State, +/- transitions, trace level
+  {
+    name: "100 sm_extensions: entry guard transition, prefixed transitions, trace level",
+    fixtures: ["100_sm_extensions.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "100_sm_extensions.ump" },
+      { type: "symbol_count", fixture: "100_sm_extensions.ump", name: "Light", kind: "class", expect: 1 },
+      // Prefixed transition target still resolves
+      { type: "goto_def", at: "sme_prefix_target", expect: [{ at: "sme_off" }] },
+      // Trace level postfix — traced entity still resolves
+      { type: "goto_def", at: "sme_level_attr", expect: [{ at: "sme_dimmer" }] },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

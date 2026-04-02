@@ -56,6 +56,8 @@ module.exports = grammar({
     [$.active_method, $.more_code],
     [$.new_expression, $.attribute_declaration],
     [$._java_method_modifiers],
+    [$.entry_exit_action, $.transition],
+    [$.event_spec, $.entry_exit_action],
   ],
 
   rules: {
@@ -512,6 +514,7 @@ module.exports = grammar({
           "all", "finest", "fine", "config", "warning", "severe",
         )),
         seq("for", $.integer_literal),
+        seq("level", $.integer_literal),
       ),
 
     // =====================
@@ -878,6 +881,7 @@ module.exports = grammar({
 
     transition: ($) =>
       seq(
+        optional(choice("+", "-")), // optional add/remove prefix
         optional($._transition_header),
         choice(
           seq($.action_code, "->"), // pre-arrow only:  e [g] / { code } -> T;
@@ -894,9 +898,11 @@ module.exports = grammar({
         seq(
           choice(
             $.identifier,
-            // activate/deactivate are valid event names but also trace keywords
+            // activate/deactivate/entry/exit are valid event names but also keywords
             alias("activate", $.identifier),
             alias("deactivate", $.identifier),
+            alias("entry", $.identifier),
+            alias("exit", $.identifier),
           ),
           optional(seq("(", optional($.param_list), ")")),
         ),

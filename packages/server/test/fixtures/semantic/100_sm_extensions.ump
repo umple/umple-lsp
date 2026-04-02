@@ -1,0 +1,24 @@
+class /*@sme_class*/Light {
+  Integer /*@sme_dimmer*/dimmer;
+
+  bulb {
+    /*@sme_off*/Off {
+      flip -> On;
+    }
+    On {
+      // Prefixed transition — target state still resolves
+      + flip -> /*@sme_prefix_target*/Off;
+      - stay -> On;
+    }
+    Dimmed {
+      // Entry event with guard as transition
+      entry[dimmer > 99] -> On;
+      // Entry action with guard still works (ambiguity resolved)
+      entry[dimmer > 10] / { dimmer = 0; }
+      flipSwitch -> Off;
+    }
+  }
+
+  // Trace with level postfix — traced entity still resolves
+  trace /*@sme_level_attr*/dimmer level 1;
+}
