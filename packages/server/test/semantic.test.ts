@@ -3011,6 +3011,16 @@ const TEST_CASES: TestCase[] = [
       { type: "parse_has_error", fixture: "93_wildcard_negative.ump" },
     ],
   },
+
+  // 94: Named filter with alphanumeric IDs
+  {
+    name: "94 named_filter: alphanumeric filter names like 7a parse clean",
+    fixtures: ["94_named_filter.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "94_named_filter.ump" },
+      { type: "symbol_count", fixture: "94_named_filter.ump", name: "Cube", kind: "class", expect: 1 },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

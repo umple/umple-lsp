@@ -1281,7 +1281,7 @@ module.exports = grammar({
         "}",
       ),
 
-    filter_name: ($) => choice($.identifier, $.integer_literal),
+    filter_name: ($) => choice($.identifier, $.integer_literal, /[0-9]+[a-zA-Z_][a-zA-Z0-9_]*/),
 
     filter_statement: ($) =>
       choice(

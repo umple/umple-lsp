@@ -1,0 +1,12 @@
+class Cube {}
+class Connector {}
+
+// Named filters with alphanumeric IDs
+filter 7 {include Connector;}
+filter 7a {include Cube;}
+
+// Plain integer filter still works
+filter 1 {include Cube;}
+
+// Identifier filter still works
+filter myFilter {include Connector;}
