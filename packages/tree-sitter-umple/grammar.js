@@ -1063,9 +1063,13 @@ module.exports = grammar({
       seq("!", $.identifier),
     ),
 
-    // Code label: Label1:  (hidden — identifier consumed with ":", not captured as method)
+    // Code label: Label1: or Label1-Label2: (hidden — not captured as method)
     _code_label: ($) =>
-      seq(alias($.identifier, $.code_label_name), ":"),
+      seq(
+        alias($.identifier, $.code_label_name),
+        repeat(seq("-", alias($.identifier, $.code_label_name))),
+        ":",
+      ),
 
     // =====================
     // EMIT METHODS & TEMPLATE ATTRIBUTES

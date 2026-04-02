@@ -1,0 +1,10 @@
+class AroundClass {
+  static void /*@acl_method*/doSomeThing() {
+    boolean flag = false;
+  }
+}
+
+// Full combo: top-level around + class target + custom + compound label + method
+around {AroundClass} custom Label1-Label2:/*@acl_target*/doSomeThing() {
+  /* code */
+}

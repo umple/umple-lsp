@@ -2978,6 +2978,18 @@ const TEST_CASES: TestCase[] = [
       { type: "refs_exclude", decl: { name: "testFunction", kind: "method", container: "Student2" }, excludeAt: ["tw_testfunc"] },
     ],
   },
+
+  // 91: Full combo top-level around with compound label
+  {
+    name: "91 around_compound_label: full combo around with compound label parses clean",
+    fixtures: ["91_around_compound_label.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "91_around_compound_label.ump" },
+      { type: "symbol_count", fixture: "91_around_compound_label.ump", name: "AroundClass", kind: "class", expect: 1 },
+      // Method target through compound label resolves
+      { type: "goto_def", at: "acl_target", expect: [{ at: "acl_method" }] },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────
