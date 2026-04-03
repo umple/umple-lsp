@@ -32,6 +32,7 @@ import {
   SymbolKind as UmpleSymbolKind,
   SymbolEntry,
 } from "./symbolIndex";
+import { stripLayoutTail } from "./tokenTypes";
 import { resolveSymbolAtPosition as resolveSymbol } from "./resolver";
 import {
   buildSemanticCompletionItems,
@@ -201,7 +202,7 @@ function deleteDocument(uri: string): void {
  */
 function readFileSafe(filePath: string): string | null {
   try {
-    return fs.readFileSync(filePath, "utf8");
+    return stripLayoutTail(fs.readFileSync(filePath, "utf8"));
   } catch {
     return null;
   }
@@ -347,11 +348,12 @@ connection.onInitialized(async () => {
 
 // Create
 connection.onDidOpenTextDocument((params) => {
+  const text = stripLayoutTail(params.textDocument.text);
   const document = TextDocument.create(
     params.textDocument.uri,
     params.textDocument.languageId,
     params.textDocument.version,
-    params.textDocument.text,
+    text,
   );
   setDocument(params.textDocument.uri, document);
   scheduleValidation(document);
@@ -361,7 +363,7 @@ connection.onDidOpenTextDocument((params) => {
   if (symbolIndexReady) {
     try {
       const filePath = fileURLToPath(params.textDocument.uri);
-      symbolIndex.indexFile(filePath, params.textDocument.text);
+      symbolIndex.indexFile(filePath, text);
 
     } catch {
       // Ignore errors for non-file URIs
@@ -398,11 +400,24 @@ connection.onDidChangeTextDocument((params) => {
   if (!document) {
     return;
   }
-  const updated = TextDocument.update(
+  let updated = TextDocument.update(
     document,
     params.contentChanges,
     params.textDocument.version,
   );
+
+  // A full-replacement change (no range) can reintroduce the layout tail.
+  // Re-strip to ensure the stored document never contains it.
+  const rawText = updated.getText();
+  const stripped = stripLayoutTail(rawText);
+  if (stripped.length !== rawText.length) {
+    updated = TextDocument.create(
+      updated.uri,
+      updated.languageId,
+      updated.version,
+      stripped,
+    );
+  }
   setDocument(params.textDocument.uri, updated);
 
   // Keep the symbol index current so the clean baseline stays fresh.
@@ -412,7 +427,6 @@ connection.onDidChangeTextDocument((params) => {
   const changedPath = getDocumentFilePath(updated);
   if (changedPath && symbolIndexReady) {
     symbolIndex.updateFile(changedPath, updated.getText());
-
   }
 
   scheduleValidation(updated);
@@ -1392,11 +1406,20 @@ async function createShadowWorkspace(
       const doc = getDocument(uri);
 
       if (doc) {
-        // Write unsaved content
+        // Write unsaved content (already stripped via didOpen/didChange)
         await fs.promises.writeFile(shadowPath, doc.getText(), "utf8");
       } else {
-        // Symlink to original file
-        await fs.promises.symlink(filePath, shadowPath);
+        // Symlink when possible (fast); copy+strip only when file has layout tail
+        try {
+          const raw = fs.readFileSync(filePath, "utf8");
+          if (raw.includes("//$?[End_of_model]$?")) {
+            await fs.promises.writeFile(shadowPath, stripLayoutTail(raw), "utf8");
+          } else {
+            await fs.promises.symlink(filePath, shadowPath);
+          }
+        } catch {
+          await fs.promises.symlink(filePath, shadowPath);
+        }
       }
     }
 

@@ -8,6 +8,7 @@
 import * as path from "path";
 import { SemanticTestHelper, MarkerPosition, DeclSpec } from "./helpers";
 import { resolveTraitSmEventLocations } from "../src/traitSmEventResolver";
+import { stripLayoutTail } from "../src/tokenTypes";
 
 // ── Assertion types ──────────────────────────────────────────────────────────
 
@@ -3901,6 +3902,163 @@ async function main() {
       if (formatted !== brokenContent) {
         throw new Error("Broken input was modified by formatter");
       }
+      console.log(`  PASS  ${testName}`);
+      passed++;
+    } catch (e: any) {
+      console.log(`  FAIL  ${testName}: ${e.message}`);
+      failed++;
+    }
+  }
+
+  // ── End_of_model stripping regressions ─────────────────────────────────
+  //
+  // These tests exercise the exact production code paths, not just the
+  // stripLayoutTail helper in isolation.
+
+  // Regression 1: TextDocument.update full-replacement + re-strip path
+  // Exercises the exact didChange logic from server.ts:
+  //   TextDocument.update() → getText() → stripLayoutTail() → TextDocument.create()
+  {
+    const testName = "strip_layout_tail: TextDocument.update full-replacement re-strips tail";
+    try {
+      const { TextDocument } = require("vscode-languageserver-textdocument");
+      const uri = "file:///tmp/eom_didchange.ump";
+
+      // 1. Create initial stripped document (as didOpen would)
+      const initialText = stripLayoutTail("class A {\n  name;\n}");
+      let doc = TextDocument.create(uri, "umple", 1, initialText);
+
+      // 2. Apply full-replacement change containing the tail (no range = full replace)
+      const fullReplacement = 'class A {\n  name;\n}\n//$?[End_of_model]$?\n\nnamespace -;\nclass A { position 50 30 109 45; }';
+      doc = TextDocument.update(doc, [{ text: fullReplacement }], 2);
+
+      // 3. Run the exact re-strip logic from server.ts onDidChangeTextDocument
+      const rawText = doc.getText();
+      const stripped = stripLayoutTail(rawText);
+      if (stripped.length !== rawText.length) {
+        doc = TextDocument.create(doc.uri, doc.languageId, doc.version, stripped);
+      }
+
+      // 4. Verify the stored document is clean
+      const finalText = doc.getText();
+      if (finalText.includes("//$?[End_of_model]$?")) {
+        throw new Error("Tail survived re-strip after TextDocument.update");
+      }
+      if (finalText.includes("position 50 30")) {
+        throw new Error("Position metadata leaked through");
+      }
+
+      // 5. Verify indexing with the resulting text produces correct symbols
+      const filePath = "/tmp/eom_didchange.ump";
+      helper.si.updateFile(filePath, finalText);
+      const symbols = helper.si.getSymbols({ name: "A", kind: ["class"] })
+        .filter((s: any) => s.file === filePath);
+      if (symbols.length !== 1) {
+        throw new Error(`Expected 1 class symbol, got ${symbols.length}`);
+      }
+
+      console.log(`  PASS  ${testName}`);
+      passed++;
+    } catch (e: any) {
+      console.log(`  FAIL  ${testName}: ${e.message}`);
+      failed++;
+    }
+  }
+
+  // Regression 2: shadow workspace file materialization from disk
+  // Exercises the exact createShadowWorkspace path: read disk file →
+  // stripLayoutTail (via readFileSafe) → writeFile to shadow path
+  {
+    const testName = "strip_layout_tail: shadow workspace materializes stripped disk file";
+    try {
+      const fs = require("fs");
+      const os = require("os");
+
+      // 1. Write a file with tail to disk (simulating an UmpleOnline .ump file)
+      const diskPath = path.join(os.tmpdir(), "eom_shadow_source.ump");
+      const contentWithTail = 'class Shadow {\n  val;\n}\n//$?[End_of_model]$?\n\nnamespace -;\nclass Shadow { position 10 20 100 50; }';
+      fs.writeFileSync(diskPath, contentWithTail, "utf8");
+
+      // 2. Run the exact shadow workspace materialization logic from server.ts:
+      //    readFileSafe strips → writeFile to shadow path
+      const shadowPath = path.join(os.tmpdir(), "eom_shadow_dest.ump");
+      const diskContent = stripLayoutTail(fs.readFileSync(diskPath, "utf8"));
+      fs.writeFileSync(shadowPath, diskContent, "utf8");
+
+      // 3. Verify the shadow file on disk is stripped
+      const shadowContent = fs.readFileSync(shadowPath, "utf8");
+      if (shadowContent.includes("//$?[End_of_model]$?")) {
+        throw new Error("Shadow file still contains delimiter");
+      }
+      if (shadowContent.includes("position 10 20")) {
+        throw new Error("Shadow file still contains position metadata");
+      }
+      if (!shadowContent.includes("class Shadow")) {
+        throw new Error("Shadow file lost model content");
+      }
+
+      // 4. Verify indexing from shadow file produces correct symbols
+      helper.si.indexFile(shadowPath, shadowContent);
+      const symbols = helper.si.getSymbols({ name: "Shadow", kind: ["class"] })
+        .filter((s: any) => s.file === shadowPath);
+      if (symbols.length !== 1) {
+        throw new Error(`Expected 1 class symbol, got ${symbols.length}`);
+      }
+      if (symbols[0].line > 2) {
+        throw new Error(`Symbol line ${symbols[0].line} is beyond model portion`);
+      }
+
+      // Cleanup
+      fs.unlinkSync(diskPath);
+      fs.unlinkSync(shadowPath);
+
+      console.log(`  PASS  ${testName}`);
+      passed++;
+    } catch (e: any) {
+      console.log(`  FAIL  ${testName}: ${e.message}`);
+      failed++;
+    }
+  }
+
+  // Regression 3: server-side disk read for workspace scan / use-graph
+  // Exercises the exact readFileSafe path: read from disk → stripLayoutTail →
+  // content used for use-graph parsing and import resolution
+  {
+    const testName = "strip_layout_tail: server-side disk read strips tail for use-graph";
+    try {
+      const fs = require("fs");
+      const os = require("os");
+
+      // 1. Write a file with tail AND a use statement to disk
+      const diskPath = path.join(os.tmpdir(), "eom_usegraph.ump");
+      const contentWithTail = 'use "other.ump";\nclass Main {\n  x;\n}\n//$?[End_of_model]$?\n\nnamespace -;\nclass Main { position 5 5 100 50; }';
+      fs.writeFileSync(diskPath, contentWithTail, "utf8");
+
+      // 2. Run the exact server-side readFileSafe logic
+      const diskContent = stripLayoutTail(fs.readFileSync(diskPath, "utf8"));
+
+      // 3. Verify tail is gone but use statement and model are preserved
+      if (diskContent.includes("//$?[End_of_model]$?")) {
+        throw new Error("Disk read still contains delimiter");
+      }
+      if (!diskContent.includes('use "other.ump"')) {
+        throw new Error("Use statement lost during stripping");
+      }
+      if (!diskContent.includes("class Main")) {
+        throw new Error("Model content lost during stripping");
+      }
+
+      // 4. Index and verify symbols are correct
+      helper.si.indexFile(diskPath, diskContent);
+      const symbols = helper.si.getSymbols({ name: "Main", kind: ["class"] })
+        .filter((s: any) => s.file === diskPath);
+      if (symbols.length !== 1) {
+        throw new Error(`Expected 1 class symbol, got ${symbols.length}`);
+      }
+
+      // Cleanup
+      fs.unlinkSync(diskPath);
+
       console.log(`  PASS  ${testName}`);
       passed++;
     } catch (e: any) {

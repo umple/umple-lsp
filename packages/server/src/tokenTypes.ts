@@ -65,6 +65,17 @@ export interface StateDefinitionRef {
   definitionPath: string[];
 }
 
+/**
+ * Strip the UmpleOnline layout tail (position metadata) that follows the
+ * `//$?[End_of_model]$?` delimiter. The editor only shows the model portion;
+ * returning LSP positions from the tail causes out-of-range errors in clients.
+ */
+const END_OF_MODEL_DELIMITER = "//$?[End_of_model]$?";
+export function stripLayoutTail(text: string): string {
+  const idx = text.indexOf(END_OF_MODEL_DELIMITER);
+  return idx === -1 ? text : text.substring(0, idx);
+}
+
 /** Full token result from getTokenAtPosition. */
 export interface TokenResult {
   word: string;

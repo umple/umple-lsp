@@ -21,7 +21,7 @@ export type { SymbolKind, LookupContext, DottedStateRef, StateDefinitionRef, Tok
 export type { SymbolEntry, UseStatementWithPosition, ReferenceLocation } from "./symbolTypes";
 import type { SymbolKind, TokenResult } from "./tokenTypes";
 import type { SymbolEntry, ReferenceLocation, UseStatementWithPosition } from "./symbolTypes";
-import { SYMBOL_KINDS_LONGEST_FIRST } from "./tokenTypes";
+import { SYMBOL_KINDS_LONGEST_FIRST, stripLayoutTail } from "./tokenTypes";
 import { resolveEnclosingScope, resolveStatePath, stripSmPrefix } from "./treeUtils";
 import { analyzeToken } from "./tokenAnalysis";
 import { analyzeCompletion } from "./completionAnalysis";
@@ -837,7 +837,7 @@ export class SymbolIndex {
 
   private readFileSafe(filePath: string): string | null {
     try {
-      return fs.readFileSync(filePath, "utf-8");
+      return stripLayoutTail(fs.readFileSync(filePath, "utf-8"));
     } catch {
       return null;
     }
