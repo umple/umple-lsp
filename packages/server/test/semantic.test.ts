@@ -4067,6 +4067,40 @@ async function main() {
     }
   }
 
+  // ── use_path completion scope regression ───────────────────────────────
+  // When content has no trailing newline, source_file and use_statement
+  // have the same byte size. The scope resolver must pick the inner
+  // (more specific) use_statement capture, not source_file's scope.none.
+  {
+    const testName = "use_path_completion: no-newline content detects use_path scope";
+    try {
+      const file = "/tmp/use_path_no_newline.ump";
+      const content = "use Unt"; // no trailing newline — exact UmpleOnline case
+      helper.si.indexFile(file, content);
+      const info = helper.si.getCompletionInfo(content, 0, 7);
+      if (info.symbolKinds !== "use_path") {
+        throw new Error(`Expected symbolKinds "use_path", got ${JSON.stringify(info.symbolKinds)}`);
+      }
+      if (info.prefix !== "Unt") {
+        throw new Error(`Expected prefix "Unt", got ${JSON.stringify(info.prefix)}`);
+      }
+
+      // Also verify the trailing-newline variant works (parity with VS Code)
+      const contentNewline = "use Unt\n";
+      helper.si.indexFile(file, contentNewline);
+      const info2 = helper.si.getCompletionInfo(contentNewline, 0, 7);
+      if (info2.symbolKinds !== "use_path") {
+        throw new Error(`With newline: expected "use_path", got ${JSON.stringify(info2.symbolKinds)}`);
+      }
+
+      console.log(`  PASS  ${testName}`);
+      passed++;
+    } catch (e: any) {
+      console.log(`  FAIL  ${testName}: ${e.message}`);
+      failed++;
+    }
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }

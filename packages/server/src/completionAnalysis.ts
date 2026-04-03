@@ -568,7 +568,7 @@ function resolveCompletionScope(
 
     if (startOk && endOk) {
       const size = node.endIndex - node.startIndex;
-      if (!best || size < best.size) {
+      if (!best || size <= best.size) {
         best = { name: capture.name, size };
       }
     }
