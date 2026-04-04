@@ -1410,7 +1410,7 @@ export class SymbolIndex {
   /**
    * Fully remove a file from the index (symbols, imports, isA).
    */
-  private removeFile(filePath: string): void {
+  removeFile(filePath: string): void {
     this.removeFileSymbols(filePath);
     this.files.delete(filePath);
     this.importGraph.removeEdges(filePath);

@@ -55,6 +55,7 @@ const documents = new Map<string, TextDocument>();
 const pendingValidations = new Map<string, NodeJS.Timeout>();
 let workspaceRoots: string[] = [];
 
+
 // ── Workspace use-graph: per-root readiness tracking ────────────────────────
 
 type RootScanState = "idle" | "scanning" | "ready";
@@ -450,6 +451,16 @@ connection.onDidCloseTextDocument((params) => {
     inFlightValidations.delete(normalizedUri);
   }
   connection.sendDiagnostics({ uri: params.textDocument.uri, diagnostics: [] });
+
+  // If the file no longer exists on disk, purge its indexed state.
+  try {
+    const closedPath = fileURLToPath(params.textDocument.uri);
+    if (!fs.existsSync(closedPath)) {
+      symbolIndex.removeFile(path.normalize(closedPath));
+    }
+  } catch {
+    // non-file URI
+  }
 });
 
 // ── File watcher: keep workspace use-graph fresh for unopened files ──────────
@@ -465,12 +476,14 @@ connection.onDidChangeWatchedFiles((params) => {
       continue;
     }
 
-    // Skip files that are open in the editor — their edges are managed by didOpen/didChange
+    // Skip files that are open in the editor — their content is managed by didOpen/didChange.
+    // Deletion of open files is also skipped: the buffer is still the source of truth
+    // and the user may save it to recreate the file. Cleanup happens on didClose.
     if (getDocument(change.uri)) continue;
 
     if (change.type === FileChangeType.Deleted) {
-      // File deleted — remove its import graph edges
-      symbolIndex.removeImportEdges(filePath);
+      // File deleted — remove all indexed state (symbols, tree, isA, SM reuse, edges)
+      symbolIndex.removeFile(filePath);
     } else {
       // Created or Changed — update use-graph edges from disk content
       const content = readFileSafe(filePath);
@@ -1511,22 +1524,25 @@ function collectReachableFilesRecursive(
     if (visited.has(normalizedPath)) {
       continue; // Already visited, skip to avoid cycles
     }
+
+    // Only add to reachable set if the file actually exists on disk
+    if (!fs.existsSync(resolvedPath)) {
+      continue;
+    }
     visited.add(normalizedPath);
 
     // Recursively process this file's use statements
-    if (fs.existsSync(resolvedPath)) {
-      try {
-        const fileContent = fs.readFileSync(resolvedPath, "utf8");
-        const fileDir = path.dirname(resolvedPath);
-        collectReachableFilesRecursive(
-          resolvedPath,
-          fileContent,
-          fileDir,
-          visited,
-        );
-      } catch {
-        // Ignore read errors
-      }
+    try {
+      const fileContent = fs.readFileSync(resolvedPath, "utf8");
+      const fileDir = path.dirname(resolvedPath);
+      collectReachableFilesRecursive(
+        resolvedPath,
+        fileContent,
+        fileDir,
+        visited,
+      );
+    } catch {
+      // Ignore read errors
     }
   }
 }

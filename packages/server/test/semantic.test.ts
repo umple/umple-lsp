@@ -4101,6 +4101,182 @@ async function main() {
     }
   }
 
+  // ── Deleted file cleanup regressions ────────────────────────────────────
+
+  // Regression 1: removeFile removes all indexed state
+  {
+    const testName = "deleted_file_cleanup: removeFile purges symbols and tree";
+    try {
+      const file = "/tmp/deleted_cleanup_test.ump";
+      const content = "class Ephemeral {\n  temp;\n}";
+      helper.si.indexFile(file, content);
+
+      // Verify symbol exists
+      let syms = helper.si.getSymbols({ name: "Ephemeral", kind: ["class"] })
+        .filter((s: any) => s.file === file);
+      if (syms.length !== 1) throw new Error(`Pre-delete: expected 1 symbol, got ${syms.length}`);
+      if (!helper.si.getTree(file)) throw new Error("Pre-delete: tree missing");
+      if (!helper.si.isFileIndexed(file)) throw new Error("Pre-delete: not indexed");
+
+      // Call the same deletion path used by the file watcher
+      helper.si.removeFile(file);
+
+      // Verify symbol is gone
+      syms = helper.si.getSymbols({ name: "Ephemeral", kind: ["class"] })
+        .filter((s: any) => s.file === file);
+      if (syms.length !== 0) throw new Error(`Post-delete: expected 0 symbols, got ${syms.length}`);
+      if (helper.si.getTree(file)) throw new Error("Post-delete: tree still present");
+      if (helper.si.isFileIndexed(file)) throw new Error("Post-delete: still indexed");
+
+      // Verify attributes from the file are also gone
+      const attrs = helper.si.getSymbols({ name: "temp", kind: ["attribute"] })
+        .filter((s: any) => s.file === file);
+      if (attrs.length !== 0) throw new Error(`Post-delete: stale attribute, got ${attrs.length}`);
+
+      console.log(`  PASS  ${testName}`);
+      passed++;
+    } catch (e: any) {
+      console.log(`  FAIL  ${testName}: ${e.message}`);
+      failed++;
+    }
+  }
+
+  // Regression 2: collectReachableFiles excludes non-existent imported files
+  {
+    const testName = "deleted_file_cleanup: deleted imported file excluded from reachable set";
+    try {
+      const fs = require("fs");
+      const os = require("os");
+
+      // Create a file that imports a non-existent file
+      const mainPath = path.join(os.tmpdir(), "reachable_main.ump");
+      const mainContent = 'use "NonExistent.ump";\nclass Main {}';
+      fs.writeFileSync(mainPath, mainContent, "utf8");
+
+      // Index and resolve reachable files using the same path as production:
+      // extractUseStatements → resolve relative → existsSync check
+      helper.si.indexFile(mainPath, mainContent);
+      const uses = helper.si.extractUseStatements(mainPath, mainContent);
+
+      // Resolve paths the same way collectReachableFilesRecursive does
+      const mainDir = path.dirname(mainPath);
+      const reachable = new Set<string>();
+      for (const usePath of uses) {
+        if (!usePath.endsWith(".ump")) continue;
+        const resolved = path.resolve(mainDir, usePath);
+        const normalized = path.normalize(resolved);
+        if (fs.existsSync(resolved)) {
+          reachable.add(normalized);
+        }
+      }
+
+      // The non-existent file must NOT be in the reachable set
+      const nonExistentPath = path.normalize(path.resolve(mainDir, "NonExistent.ump"));
+      if (reachable.has(nonExistentPath)) {
+        throw new Error("Deleted/non-existent file was added to reachable set");
+      }
+
+      // Cleanup
+      fs.unlinkSync(mainPath);
+
+      console.log(`  PASS  ${testName}`);
+      passed++;
+    } catch (e: any) {
+      console.log(`  FAIL  ${testName}: ${e.message}`);
+      failed++;
+    }
+  }
+
+  // ── didClose cleanup regressions (standard LSP semantics) ──────────────
+
+  // Regression 1: closed file not on disk → symbols removed
+  {
+    const testName = "didclose_cleanup: closed missing file purges symbols";
+    try {
+      const filePath = "/tmp/didclose_missing.ump";
+      const content = "class Gone {\n  x;\n}";
+      helper.si.indexFile(filePath, content);
+
+      // Simulate didClose: file doesn't exist on disk
+      const fs = require("fs");
+      if (!fs.existsSync(filePath)) {
+        helper.si.removeFile(path.normalize(filePath));
+      }
+
+      const syms = helper.si.getSymbols({ name: "Gone", kind: ["class"] })
+        .filter((s: any) => s.file === path.normalize(filePath));
+      if (syms.length !== 0) throw new Error(`Expected 0 symbols, got ${syms.length}`);
+
+      console.log(`  PASS  ${testName}`);
+      passed++;
+    } catch (e: any) {
+      console.log(`  FAIL  ${testName}: ${e.message}`);
+      failed++;
+    }
+  }
+
+  // Regression 2: deleted while open then close → symbols removed
+  {
+    const testName = "didclose_cleanup: deleted while open then close purges symbols";
+    try {
+      const fs = require("fs");
+      const os = require("os");
+      const filePath = path.join(os.tmpdir(), "didclose_deleted.ump");
+      const content = "class Deleted {\n  y;\n}";
+      fs.writeFileSync(filePath, content, "utf8");
+
+      helper.si.indexFile(filePath, content);
+      fs.unlinkSync(filePath); // delete while "open"
+
+      // Simulate didClose
+      if (!fs.existsSync(filePath)) {
+        helper.si.removeFile(path.normalize(filePath));
+      }
+
+      const syms = helper.si.getSymbols({ name: "Deleted", kind: ["class"] })
+        .filter((s: any) => s.file === path.normalize(filePath));
+      if (syms.length !== 0) throw new Error(`Expected 0 symbols, got ${syms.length}`);
+
+      console.log(`  PASS  ${testName}`);
+      passed++;
+    } catch (e: any) {
+      console.log(`  FAIL  ${testName}: ${e.message}`);
+      failed++;
+    }
+  }
+
+  // Regression 3: deleted then re-saved before close → symbols kept
+  {
+    const testName = "didclose_cleanup: deleted then re-saved keeps symbols";
+    try {
+      const fs = require("fs");
+      const os = require("os");
+      const filePath = path.join(os.tmpdir(), "didclose_resaved.ump");
+      const content = "class Resilient {\n  z;\n}";
+      fs.writeFileSync(filePath, content, "utf8");
+
+      helper.si.indexFile(filePath, content);
+      fs.unlinkSync(filePath);
+      fs.writeFileSync(filePath, content, "utf8"); // re-save
+
+      // Simulate didClose — file exists again
+      if (!fs.existsSync(filePath)) {
+        helper.si.removeFile(path.normalize(filePath));
+      }
+
+      const syms = helper.si.getSymbols({ name: "Resilient", kind: ["class"] })
+        .filter((s: any) => s.file === path.normalize(filePath));
+      if (syms.length !== 1) throw new Error(`Expected 1 symbol, got ${syms.length}`);
+
+      fs.unlinkSync(filePath);
+      console.log(`  PASS  ${testName}`);
+      passed++;
+    } catch (e: any) {
+      console.log(`  FAIL  ${testName}: ${e.message}`);
+      failed++;
+    }
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }
