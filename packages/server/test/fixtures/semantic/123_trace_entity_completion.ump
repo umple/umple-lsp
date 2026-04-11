@@ -1,0 +1,13 @@
+class TraceTest {
+  Integer x;
+  String name;
+  void doWork() {}
+  status {
+    S1 {
+      go [/*@guard_boundary*/x > 0] -> S2;
+    }
+    S2 {}
+  }
+  trace /*@trace_primary*/x;
+  trace x record /*@trace_record*/name;
+}

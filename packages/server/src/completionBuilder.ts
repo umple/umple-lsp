@@ -431,6 +431,28 @@ export function buildSemanticCompletionItems(
     }));
   }
 
+  // Trace entity scope: scoped attrs/methods only, no raw keywords.
+  if (symbolKinds === "trace_attribute_method" && info.enclosingClass) {
+    const trItems: CompletionItem[] = [];
+    const trSeen = new Set<string>();
+    for (const kind of ["attribute", "method"] as SymbolKind[]) {
+      const symbols = symbolIndex
+        .getSymbols({ container: info.enclosingClass, kind, inherited: true })
+        .filter((s) => reachableFiles.has(path.normalize(s.file)));
+      for (const sym of symbols) {
+        if (!trSeen.has(sym.name)) {
+          trSeen.add(sym.name);
+          trItems.push({
+            label: sym.name,
+            kind: symbolKindToCompletionKind(kind),
+            detail: kind,
+          });
+        }
+      }
+    }
+    return trItems;
+  }
+
   // Guard scope: scoped attrs/methods + boolean literals only, no raw keywords.
   if (symbolKinds === "guard_attribute_method" && info.enclosingClass) {
     const gItems: CompletionItem[] = [];

@@ -3882,6 +3882,50 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 123: Trace entity completion — attrs/methods only, no raw keywords
+  {
+    name: "123 trace_entity_completion: trace entity returns attrs/methods only",
+    fixtures: ["123_trace_entity_completion.ump"],
+    assertions: [
+      // Primary trace entity scope
+      {
+        type: "completion_kinds",
+        at: "trace_primary",
+        expect: "trace_attribute_method",
+      },
+      // Record entity scope
+      {
+        type: "completion_kinds",
+        at: "trace_record",
+        expect: "trace_attribute_method",
+      },
+      // Must include scoped attrs/methods
+      {
+        type: "completion_includes",
+        at: "trace_primary",
+        expect: ["x", "name", "doWork"],
+      },
+      // Must NOT include ERROR
+      {
+        type: "completion_excludes",
+        at: "trace_primary",
+        expect: ["ERROR"],
+      },
+      // Must NOT include junk keywords
+      {
+        type: "completion_excludes",
+        at: "trace_primary",
+        expect: ["default", "test", "generic", "suboption", "distributable", "forced", "on", "off"],
+      },
+      // Boundary: guard must still be guard_attribute_method
+      {
+        type: "completion_kinds",
+        at: "guard_boundary",
+        expect: "guard_attribute_method",
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────
