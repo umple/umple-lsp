@@ -1,0 +1,10 @@
+class Student {}
+class Course {}
+associationClass Enrollment {
+  /*@assoc_blank*/
+  * Student;
+  * Course;
+}
+class BoundaryClass {
+  /*@class_boundary*/
+}

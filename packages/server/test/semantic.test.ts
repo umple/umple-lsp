@@ -3446,6 +3446,72 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 114: Association-class-body completion — curated keywords, no raw lookahead
+  {
+    name: "114 assoc_class_body_completion: blank assoc-class-body returns curated keywords",
+    fixtures: ["114_assoc_class_body_completion.ump"],
+    assertions: [
+      // Scope must be assoc_class_body
+      {
+        type: "completion_kinds",
+        at: "assoc_blank",
+        expect: "assoc_class_body",
+      },
+      // Must include class-body construct starters (shares _class_content)
+      {
+        type: "completion_includes",
+        at: "assoc_blank",
+        expect: [
+          "isA", "before", "after", "around",
+          "trace", "tracecase", "depend", "key",
+          "immutable", "unique", "lazy", "const",
+        ],
+      },
+      // Must include built-in types
+      {
+        type: "completion_includes",
+        at: "assoc_blank",
+        expect: ["Integer", "String"],
+      },
+      // Must include reachable type symbols
+      {
+        type: "completion_includes",
+        at: "assoc_blank",
+        expect: ["Student", "Course", "Enrollment"],
+      },
+      // Must NOT include ERROR
+      {
+        type: "completion_excludes",
+        at: "assoc_blank",
+        expect: ["ERROR"],
+      },
+      // Must NOT include top-level starters
+      {
+        type: "completion_excludes",
+        at: "assoc_blank",
+        expect: ["namespace", "use", "generate", "suboption", "tracer", "distributable"],
+      },
+      // Must NOT include generator targets or sub-keywords
+      {
+        type: "completion_excludes",
+        at: "assoc_blank",
+        expect: ["Java", "Php", "forced", "on", "off"],
+      },
+      // Must NOT include SM-internal constructs
+      {
+        type: "completion_excludes",
+        at: "assoc_blank",
+        expect: ["entry", "exit", "do"],
+      },
+      // Boundary: class-body blank must still be class_body
+      {
+        type: "completion_kinds",
+        at: "class_boundary",
+        expect: "class_body",
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

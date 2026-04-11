@@ -41,7 +41,7 @@
 (class_definition) @scope.class_body
 (trait_definition) @scope.trait_body
 (interface_definition) @scope.interface_body
-(association_class_definition) @scope.class_interface_trait_enum
+(association_class_definition) @scope.assoc_class_body
 (isa_declaration) @scope.class_interface_trait
 
 ; =====================

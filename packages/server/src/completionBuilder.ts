@@ -316,6 +316,38 @@ export function buildSemanticCompletionItems(
     return ibItems;
   }
 
+  // Association-class-body scope: same as class body (shares _class_content).
+  if (symbolKinds === "assoc_class_body") {
+    const abItems: CompletionItem[] = [];
+    const abSeen = new Set<string>();
+    for (const kw of CLASS_BODY_KEYWORDS) {
+      abSeen.add(kw);
+      abItems.push({ label: kw, kind: CompletionItemKind.Keyword });
+    }
+    for (const typ of BUILTIN_TYPES) {
+      if (!abSeen.has(typ)) {
+        abSeen.add(typ);
+        abItems.push({ label: typ, kind: CompletionItemKind.TypeParameter, detail: "type" });
+      }
+    }
+    for (const symKind of ["class", "interface", "trait", "enum"] as SymbolKind[]) {
+      const symbols = symbolIndex
+        .getSymbols({ kind: symKind })
+        .filter((s) => reachableFiles.has(path.normalize(s.file)));
+      for (const sym of symbols) {
+        if (!abSeen.has(sym.name)) {
+          abSeen.add(sym.name);
+          abItems.push({
+            label: sym.name,
+            kind: symbolKindToCompletionKind(symKind),
+            detail: symKind,
+          });
+        }
+      }
+    }
+    return abItems;
+  }
+
   // Trait SM op contexts are symbol-only — no keywords or operators.
   // Handle them first to avoid leaking generic completions on empty results.
   if (
