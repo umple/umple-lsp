@@ -3205,7 +3205,7 @@ const TEST_CASES: TestCase[] = [
       {
         type: "completion_kinds",
         at: "inside_filter",
-        expect: null,
+        expect: "suppress",
       },
       {
         type: "completion_kinds",
@@ -3721,6 +3721,32 @@ const TEST_CASES: TestCase[] = [
         type: "completion_kinds",
         at: "req_blank",
         expect: "suppress",
+      },
+      // Boundary: top-level must still be top_level
+      {
+        type: "completion_kinds",
+        at: "top_boundary",
+        expect: "top_level",
+      },
+    ],
+  },
+
+  // 119: Filter-body completion — suppressed, but include targets still work
+  {
+    name: "119 filter_body_completion: blank filter body suppressed, include targets preserved",
+    fixtures: ["119_filter_body_completion.ump"],
+    assertions: [
+      // Blank filter body must be suppressed
+      {
+        type: "completion_kinds",
+        at: "filter_blank",
+        expect: "suppress",
+      },
+      // Include target must still offer class names
+      {
+        type: "completion_kinds",
+        at: "filter_include",
+        expect: ["class"],
       },
       // Boundary: top-level must still be top_level
       {

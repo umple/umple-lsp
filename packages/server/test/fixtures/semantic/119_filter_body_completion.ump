@@ -1,0 +1,7 @@
+class Student {}
+class Course {}
+filter F {
+  /*@filter_blank*/
+  include /*@filter_include*/Student;
+}
+/*@top_boundary*/
