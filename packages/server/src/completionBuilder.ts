@@ -156,6 +156,30 @@ const STATEMACHINE_BODY_KEYWORDS: string[] = [
   "trace",       // trace statement (state_machine only)
 ];
 
+// ── Curated state-body construct keywords ──────────────────────────────────
+// Derived from grammar's state rule (grammar.js lines 857-879):
+//   transition, entry_exit_action, do_activity, state, standalone_transition,
+//   display_color, mixset_definition, method_declaration, trace_statement, ||, ;
+// Only keyword-led starters are included.
+
+const STATE_BODY_KEYWORDS: string[] = [
+  // Entry/exit/do actions
+  "entry", "exit", "do",
+  // Nested state prefix
+  "final",
+  // Nested definitions
+  "mixset",
+  // Trace
+  "trace", "tracecase",
+  // Activate/deactivate (entry_exit_action forms)
+  "activate", "deactivate",
+  // Display
+  "displayColor", "displayColour",
+  // Method declaration modifiers (method_declaration is valid in state bodies)
+  "public", "private", "protected",
+  "static", "synchronized",
+];
+
 // ── Constraint keyword blocklist ────────────────────────────────────────────
 
 const CONSTRAINT_BLOCKLIST = new Set([
@@ -444,6 +468,40 @@ export function buildSemanticCompletionItems(
       }
     }
     return smItems;
+  }
+
+  // State-body scope: curated keywords + state symbols + built-in types for methods.
+  if (symbolKinds === "state_body") {
+    const sbItems: CompletionItem[] = [];
+    const sbSeen = new Set<string>();
+    for (const kw of STATE_BODY_KEYWORDS) {
+      sbSeen.add(kw);
+      sbItems.push({ label: kw, kind: CompletionItemKind.Keyword });
+    }
+    // Built-in types for method return types
+    for (const typ of BUILTIN_TYPES) {
+      if (!sbSeen.has(typ)) {
+        sbSeen.add(typ);
+        sbItems.push({ label: typ, kind: CompletionItemKind.TypeParameter, detail: "type" });
+      }
+    }
+    // Offer state names from enclosing SM (for nested state references)
+    if (info.enclosingStateMachine) {
+      const states = symbolIndex
+        .getSymbols({ kind: "state", container: info.enclosingStateMachine })
+        .filter((s) => reachableFiles.has(path.normalize(s.file)));
+      for (const sym of states) {
+        if (!sbSeen.has(sym.name)) {
+          sbSeen.add(sym.name);
+          sbItems.push({
+            label: sym.name,
+            kind: symbolKindToCompletionKind("state"),
+            detail: "state",
+          });
+        }
+      }
+    }
+    return sbItems;
   }
 
   // Trait SM op contexts are symbol-only — no keywords or operators.

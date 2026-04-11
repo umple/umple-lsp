@@ -1,0 +1,11 @@
+class StateBodyTest {
+  status {
+    /*@sm_boundary*/
+    Open {
+      /*@state_blank*/
+      go -> Closed;
+    }
+    Closed {}
+  }
+}
+/*@top_boundary*/

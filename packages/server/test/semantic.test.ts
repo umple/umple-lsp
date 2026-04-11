@@ -3638,7 +3638,75 @@ const TEST_CASES: TestCase[] = [
       {
         type: "completion_kinds",
         at: "state_boundary",
-        expect: ["state"],
+        expect: "state_body",
+      },
+    ],
+  },
+
+  // 117: State-body completion — curated keywords + state symbols
+  {
+    name: "117 state_body_completion: blank state-body returns curated keywords",
+    fixtures: ["117_state_body_completion.ump"],
+    assertions: [
+      // Scope must be state_body
+      {
+        type: "completion_kinds",
+        at: "state_blank",
+        expect: "state_body",
+      },
+      // Must include state-body keyword starters
+      {
+        type: "completion_includes",
+        at: "state_blank",
+        expect: ["entry", "exit", "do", "final", "mixset", "trace"],
+      },
+      // Must include display/activate keywords
+      {
+        type: "completion_includes",
+        at: "state_blank",
+        expect: ["displayColor", "displayColour", "activate", "deactivate"],
+      },
+      // Must include built-in types (for method declarations)
+      {
+        type: "completion_includes",
+        at: "state_blank",
+        expect: ["Integer", "String"],
+      },
+      // Must include state names from enclosing SM
+      {
+        type: "completion_includes",
+        at: "state_blank",
+        expect: ["Open", "Closed"],
+      },
+      // Must NOT include ERROR
+      {
+        type: "completion_excludes",
+        at: "state_blank",
+        expect: ["ERROR"],
+      },
+      // Must NOT include top-level starters
+      {
+        type: "completion_excludes",
+        at: "state_blank",
+        expect: ["class", "interface", "namespace", "use", "generate"],
+      },
+      // Must NOT include generator targets or sub-keywords
+      {
+        type: "completion_excludes",
+        at: "state_blank",
+        expect: ["Java", "Php", "forced", "on", "off"],
+      },
+      // Boundary: SM-body must still be statemachine_body
+      {
+        type: "completion_kinds",
+        at: "sm_boundary",
+        expect: "statemachine_body",
+      },
+      // Boundary: top-level must still be top_level
+      {
+        type: "completion_kinds",
+        at: "top_boundary",
+        expect: "top_level",
       },
     ],
   },

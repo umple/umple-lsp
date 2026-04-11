@@ -55,7 +55,7 @@
 ; STATE MACHINE SCOPES (offer state names)
 ; =====================
 (state_machine) @scope.statemachine_body
-(state) @scope.state
+(state) @scope.state_body
 (transition) @scope.state
 
 ; =====================
