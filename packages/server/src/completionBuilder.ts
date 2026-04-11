@@ -143,6 +143,19 @@ const MIXSET_BODY_KEYWORDS: string[] = [
   "entry", "exit", "do",
 ];
 
+// ── Curated statemachine-body construct keywords ───────────────────────────
+// Derived from grammar's statemachine_definition (lines 554-563) and
+// state_machine (lines 847-855).  Statemachine bodies accept state
+// declarations, standalone transitions, mixset blocks, and trace statements.
+// State/transition names are identifier-led, not keyword-led — only
+// keyword-led starters are included here.
+
+const STATEMACHINE_BODY_KEYWORDS: string[] = [
+  "final",       // final state declaration prefix
+  "mixset",      // nested mixset block
+  "trace",       // trace statement (state_machine only)
+];
+
 // ── Constraint keyword blocklist ────────────────────────────────────────────
 
 const CONSTRAINT_BLOCKLIST = new Set([
@@ -404,6 +417,33 @@ export function buildSemanticCompletionItems(
       }
     }
     return mbItems;
+  }
+
+  // Statemachine-body scope: curated keywords + state symbols from enclosing SM.
+  if (symbolKinds === "statemachine_body") {
+    const smItems: CompletionItem[] = [];
+    const smSeen = new Set<string>();
+    for (const kw of STATEMACHINE_BODY_KEYWORDS) {
+      smSeen.add(kw);
+      smItems.push({ label: kw, kind: CompletionItemKind.Keyword });
+    }
+    // Offer existing state names from the enclosing SM
+    if (info.enclosingStateMachine) {
+      const states = symbolIndex
+        .getSymbols({ kind: "state", container: info.enclosingStateMachine })
+        .filter((s) => reachableFiles.has(path.normalize(s.file)));
+      for (const sym of states) {
+        if (!smSeen.has(sym.name)) {
+          smSeen.add(sym.name);
+          smItems.push({
+            label: sym.name,
+            kind: symbolKindToCompletionKind("state"),
+            detail: "state",
+          });
+        }
+      }
+    }
+    return smItems;
   }
 
   // Trait SM op contexts are symbol-only — no keywords or operators.

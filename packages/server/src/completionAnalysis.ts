@@ -69,7 +69,7 @@ export interface CompletionInfo {
   /** Operators the parser expects at this position. */
   operators: string[];
   /** Which symbol kinds to offer, or null for none. */
-  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "trace_state" | "trace_method" | "trace_state_method" | "trace_attribute" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | "top_level" | "class_body" | "trait_body" | "interface_body" | "assoc_class_body" | "mixset_body" | null;
+  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "trace_state" | "trace_method" | "trace_state_method" | "trace_attribute" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | "top_level" | "class_body" | "trait_body" | "interface_body" | "assoc_class_body" | "mixset_body" | "statemachine_body" | null;
   /** True if cursor is at a definition-name position (suppress all). */
   isDefinitionName: boolean;
   /** True if cursor is inside a comment. */
@@ -603,6 +603,7 @@ function resolveCompletionScope(
   if (kindStr === "interface_body") return "interface_body";
   if (kindStr === "assoc_class_body") return "assoc_class_body";
   if (kindStr === "mixset_body") return "mixset_body";
+  if (kindStr === "statemachine_body") return "statemachine_body";
   if (kindStr === "none") return null;
 
   return kindStr.split("_") as SymbolKind[];

@@ -3586,6 +3586,62 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 116: Statemachine-body completion — curated keywords + state symbols
+  {
+    name: "116 statemachine_body_completion: blank SM-body returns curated keywords",
+    fixtures: ["116_statemachine_body_completion.ump"],
+    assertions: [
+      // Scope must be statemachine_body
+      {
+        type: "completion_kinds",
+        at: "sm_blank",
+        expect: "statemachine_body",
+      },
+      // Must include SM-level keyword starters
+      {
+        type: "completion_includes",
+        at: "sm_blank",
+        expect: ["final", "mixset"],
+      },
+      // Must include existing state names from this SM
+      {
+        type: "completion_includes",
+        at: "sm_blank",
+        expect: ["Open", "Closed"],
+      },
+      // Must NOT include ERROR
+      {
+        type: "completion_excludes",
+        at: "sm_blank",
+        expect: ["ERROR"],
+      },
+      // Must NOT include top-level starters
+      {
+        type: "completion_excludes",
+        at: "sm_blank",
+        expect: ["class", "interface", "namespace", "use", "generate"],
+      },
+      // Must NOT include generator targets or sub-keywords
+      {
+        type: "completion_excludes",
+        at: "sm_blank",
+        expect: ["Java", "Php", "forced", "on", "off"],
+      },
+      // Boundary: top-level must still be top_level
+      {
+        type: "completion_kinds",
+        at: "top_boundary",
+        expect: "top_level",
+      },
+      // Boundary: nested state blank must NOT be statemachine_body
+      {
+        type: "completion_kinds",
+        at: "state_boundary",
+        expect: ["state"],
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

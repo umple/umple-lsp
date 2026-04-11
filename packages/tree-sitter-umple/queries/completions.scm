@@ -26,7 +26,7 @@
 ; =====================
 (source_file) @scope.top_level
 (mixset_definition) @scope.mixset_body
-(statemachine_definition) @scope.state
+(statemachine_definition) @scope.statemachine_body
 (requirement_definition) @scope.none
 ; Suppress completions inside require body (opaque content)
 (require_body) @scope.suppress
@@ -54,7 +54,7 @@
 ; =====================
 ; STATE MACHINE SCOPES (offer state names)
 ; =====================
-(state_machine) @scope.state
+(state_machine) @scope.statemachine_body
 (state) @scope.state
 (transition) @scope.state
 

@@ -1,0 +1,10 @@
+class SmBodyTest {
+  status {
+    /*@sm_blank*/
+    Open {
+      /*@state_boundary*/
+    }
+    Closed {}
+  }
+}
+/*@top_boundary*/
