@@ -22,9 +22,9 @@
 (sorted_modifier) @scope.sorted_attribute
 
 ; =====================
-; TOP-LEVEL SCOPES (keywords only)
+; TOP-LEVEL SCOPES
 ; =====================
-(source_file) @scope.none
+(source_file) @scope.top_level
 (mixset_definition) @scope.none
 (statemachine_definition) @scope.state
 (requirement_definition) @scope.none

@@ -18,6 +18,38 @@ import { SymbolIndex, SymbolEntry, SymbolKind, CompletionInfo } from "./symbolIn
 import { BUILTIN_TYPES } from "./keywords";
 import * as path from "path";
 
+// ── Curated top-level construct keywords ───────────────────────────────────
+// Derived from the grammar's _definition rule (grammar.js lines 66-92).
+// Raw parser lookahead is NOT surfaced at this scope.
+
+const TOP_LEVEL_KEYWORDS: string[] = [
+  "namespace",
+  "use",
+  "generate",
+  "class",
+  "interface",
+  "trait",
+  "association",
+  "associationClass",
+  "enum",
+  "external",
+  "statemachine",
+  "mixset",
+  "req",
+  "require",
+  "isFeature",
+  "filter",
+  "strictness",
+  "tracer",
+  "suboption",
+  "distributable",
+  "before",
+  "after",
+  "around",
+  "top",
+  "implementsReq",
+];
+
 // ── Constraint keyword blocklist ────────────────────────────────────────────
 
 const CONSTRAINT_BLOCKLIST = new Set([
@@ -112,6 +144,14 @@ export function buildSemanticCompletionItems(
 ): CompletionItem[] {
   const items: CompletionItem[] = [];
   const seen = new Set<string>();
+
+  // Top-level scope: curated keywords only, no raw lookahead or symbols.
+  if (symbolKinds === "top_level") {
+    return TOP_LEVEL_KEYWORDS.map((kw) => ({
+      label: kw,
+      kind: CompletionItemKind.Keyword,
+    }));
+  }
 
   // Trait SM op contexts are symbol-only — no keywords or operators.
   // Handle them first to avoid leaking generic completions on empty results.

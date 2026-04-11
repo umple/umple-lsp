@@ -1,0 +1,15 @@
+class Existing {}
+/*@top_blank*/
+class AnotherClass {}
+
+require R {
+  /*@inside_require*/
+}
+
+filter F {
+  /*@inside_filter*/
+}
+
+mixset M {
+  /*@inside_mixset*/
+}

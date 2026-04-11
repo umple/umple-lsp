@@ -69,7 +69,7 @@ export interface CompletionInfo {
   /** Operators the parser expects at this position. */
   operators: string[];
   /** Which symbol kinds to offer, or null for none. */
-  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "trace_state" | "trace_method" | "trace_state_method" | "trace_attribute" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | null;
+  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "trace_state" | "trace_method" | "trace_state_method" | "trace_attribute" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | "top_level" | null;
   /** True if cursor is at a definition-name position (suppress all). */
   isDefinitionName: boolean;
   /** True if cursor is inside a comment. */
@@ -178,6 +178,17 @@ export function analyzeCompletion(
 
   // --- Scope query for symbol kinds ---
   let symbolKinds = resolveCompletionScope(completionsQuery, tree, line, column);
+
+  // top_level scope guard: only valid when cursor lands directly on source_file
+  // (between top-level constructs or in an empty file).  If the cursor is inside
+  // a child node (ERROR from partial require, filter body, etc.), the source_file
+  // capture is too broad — downgrade to null so we don't leak curated keywords
+  // into non-top-level positions.
+  if (nodeAtCursor?.type === "source_file") {
+    symbolKinds = "top_level";
+  } else if (symbolKinds === "top_level") {
+    symbolKinds = null;
+  }
 
   // --- before/after method-name completion (position-aware) ---
   const baNode = nodeAtCursor?.type === "identifier" && nodeAtCursor.parent?.type === "before_after"
@@ -586,6 +597,7 @@ function resolveCompletionScope(
   if (kindStr === "guard_attribute_method") return "guard_attribute_method";
   if (kindStr === "trace_attribute_method") return "trace_attribute_method";
   if (kindStr === "sorted_attribute") return "sorted_attribute";
+  if (kindStr === "top_level") return "top_level";
   if (kindStr === "none") return null;
 
   return kindStr.split("_") as SymbolKind[];

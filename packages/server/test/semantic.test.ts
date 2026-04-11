@@ -3141,6 +3141,79 @@ const TEST_CASES: TestCase[] = [
       { type: "symbol_count", fixture: "104_paren_attr_value.ump", name: "emergencyDetected", kind: "attribute", expect: 1 },
     ],
   },
+
+  // 110: Top-level completion — curated construct keywords, no raw lookahead
+  {
+    name: "110 top_level_completion: blank top-level position returns curated keywords",
+    fixtures: ["110_top_level_completion.ump"],
+    assertions: [
+      // Scope must be top_level
+      {
+        type: "completion_kinds",
+        at: "top_blank",
+        expect: "top_level",
+      },
+      // Must include core top-level construct starters
+      {
+        type: "completion_includes",
+        at: "top_blank",
+        expect: [
+          "namespace", "use", "generate", "class", "interface", "trait",
+          "association", "associationClass", "enum", "statemachine", "mixset",
+        ],
+      },
+      // Must include directive starters
+      {
+        type: "completion_includes",
+        at: "top_blank",
+        expect: [
+          "external", "req", "require", "isFeature", "filter",
+          "strictness", "tracer", "suboption", "distributable",
+          "before", "after", "around", "top", "implementsReq",
+        ],
+      },
+      // Must NOT include ERROR
+      {
+        type: "completion_excludes",
+        at: "top_blank",
+        expect: ["ERROR"],
+      },
+      // Must NOT include generate-target leaf keywords
+      {
+        type: "completion_excludes",
+        at: "top_blank",
+        expect: ["Java", "Php", "Json", "Mermaid", "Ruby", "Python"],
+      },
+      // Must NOT include class-body / internal constructs
+      {
+        type: "completion_excludes",
+        at: "top_blank",
+        expect: ["isA", "entry", "exit", "do", "tracecase", "key", "immutable"],
+      },
+      // Must NOT include tracer/distribution sub-keywords
+      {
+        type: "completion_excludes",
+        at: "top_blank",
+        expect: ["forced", "on", "off"],
+      },
+      // Boundary: blank inside require/filter/mixset must NOT be top_level
+      {
+        type: "completion_kinds",
+        at: "inside_require",
+        expect: null,
+      },
+      {
+        type: "completion_kinds",
+        at: "inside_filter",
+        expect: null,
+      },
+      {
+        type: "completion_kinds",
+        at: "inside_mixset",
+        expect: null,
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────
