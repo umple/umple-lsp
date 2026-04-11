@@ -143,6 +143,18 @@ const MIXSET_BODY_KEYWORDS: string[] = [
   "entry", "exit", "do",
 ];
 
+// ── Curated filter-body construct keywords ─────────────────────────────────
+// Derived from grammar's filter_definition (grammar.js lines 1300-1307):
+//   repeat(filter_statement) where filter_statement = filter_value | filter_combined_value
+//   | filter_namespace_stmt | filter_hops
+
+const FILTER_BODY_KEYWORDS: string[] = [
+  "include",
+  "includeFilter",
+  "namespace",
+  "hops",
+];
+
 // ── Curated statemachine-body construct keywords ───────────────────────────
 // Derived from grammar's statemachine_definition (lines 554-563) and
 // state_machine (lines 847-855).  Statemachine bodies accept state
@@ -409,6 +421,14 @@ export function buildSemanticCompletionItems(
       }
     }
     return abItems;
+  }
+
+  // Filter-body scope: curated filter-statement starters only.
+  if (symbolKinds === "filter_body") {
+    return FILTER_BODY_KEYWORDS.map((kw) => ({
+      label: kw,
+      kind: CompletionItemKind.Keyword,
+    }));
   }
 
   // Mixset-body scope: curated keywords + built-in types + type symbols.

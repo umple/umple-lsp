@@ -30,8 +30,8 @@
 (requirement_definition) @scope.suppress
 ; Suppress completions inside require body (opaque content)
 (require_body) @scope.suppress
-; filter blocks: suppress by default (opaque content)…
-(filter_definition) @scope.suppress
+; filter blocks: curated filter-statement starters…
+(filter_definition) @scope.filter_body
 ; …except inside include statements, where class names are valid targets
 (filter_value) @scope.class
 

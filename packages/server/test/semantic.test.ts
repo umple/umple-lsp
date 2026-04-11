@@ -3205,7 +3205,7 @@ const TEST_CASES: TestCase[] = [
       {
         type: "completion_kinds",
         at: "inside_filter",
-        expect: "suppress",
+        expect: "filter_body",
       },
       {
         type: "completion_kinds",
@@ -3733,14 +3733,32 @@ const TEST_CASES: TestCase[] = [
 
   // 119: Filter-body completion — suppressed, but include targets still work
   {
-    name: "119 filter_body_completion: blank filter body suppressed, include targets preserved",
+    name: "119 filter_body_completion: blank filter body returns curated starters, include targets preserved",
     fixtures: ["119_filter_body_completion.ump"],
     assertions: [
-      // Blank filter body must be suppressed
+      // Scope must be filter_body
       {
         type: "completion_kinds",
         at: "filter_blank",
-        expect: "suppress",
+        expect: "filter_body",
+      },
+      // Must include filter-statement starters
+      {
+        type: "completion_includes",
+        at: "filter_blank",
+        expect: ["include", "includeFilter", "namespace", "hops"],
+      },
+      // Must NOT include ERROR
+      {
+        type: "completion_excludes",
+        at: "filter_blank",
+        expect: ["ERROR"],
+      },
+      // Must NOT include top-level junk
+      {
+        type: "completion_excludes",
+        at: "filter_blank",
+        expect: ["class", "use", "generate", "Java"],
       },
       // Include target must still offer class names
       {
