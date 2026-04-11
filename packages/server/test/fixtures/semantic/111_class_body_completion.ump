@@ -1,0 +1,6 @@
+class Parent {}
+class ClassBodyTest {
+  /*@class_blank*/
+  Integer x;
+}
+/*@top_boundary*/

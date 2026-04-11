@@ -1,0 +1,8 @@
+class Existing {}
+trait TraitBodyTest {
+  /*@trait_blank*/
+  Integer x;
+}
+class BoundaryClass {
+  /*@class_boundary*/
+}

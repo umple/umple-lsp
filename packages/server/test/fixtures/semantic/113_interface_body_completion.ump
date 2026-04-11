@@ -1,0 +1,8 @@
+class Existing {}
+interface InterfaceBodyTest {
+  /*@iface_blank*/
+  const Integer MAX = 10;
+}
+trait BoundaryTrait {
+  /*@trait_boundary*/
+}

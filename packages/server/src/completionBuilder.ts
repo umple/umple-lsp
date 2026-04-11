@@ -50,6 +50,73 @@ const TOP_LEVEL_KEYWORDS: string[] = [
   "implementsReq",
 ];
 
+// ── Curated class-body construct keywords ──────────────────────────────────
+// Derived from the grammar's _class_content rule (grammar.js lines 215-251).
+// Raw parser lookahead is NOT surfaced at this scope.
+
+const CLASS_BODY_KEYWORDS: string[] = [
+  // Inheritance
+  "isA",
+  // Code injection
+  "before", "after", "around",
+  // Trace
+  "trace", "tracecase",
+  // Nested definitions
+  "class", "enum", "mixset",
+  // Class-level declarations
+  "abstract", "singleton",
+  // Attribute modifiers
+  "const", "immutable", "unique", "lazy", "settable", "defaulted",
+  "internal", "autounique", "sorted",
+  // Key / depend
+  "key", "depend",
+  // Visibility
+  "public", "private", "protected",
+  // SM qualifiers
+  "queued", "pooled",
+  // Active objects / ports
+  "active", "port", "emit",
+  // Associations
+  "symmetric", "reflexive",
+  // Display
+  "displayColor", "displayColour",
+  // Positioning
+  "position",
+  // Requirements
+  "implementsReq",
+  // Testing
+  "test", "generic",
+];
+
+// ── Curated trait-body construct keywords ───────────────────────────────────
+// Derived from the grammar's _trait_content rule (grammar.js lines 313-314):
+//   _trait_content = choice(_class_content, trait_method_signature, trait_definition)
+// Extends CLASS_BODY_KEYWORDS with trait-specific additions.
+
+const TRAIT_BODY_KEYWORDS: string[] = [
+  ...CLASS_BODY_KEYWORDS,
+  "trait",  // nested trait definitions
+];
+
+// ── Curated interface-body construct keywords ──────────────────────────────
+// Derived from the grammar's interface_definition rule (grammar.js lines 281-296):
+//   isa_declaration, depend_statement, method_signature, const_declaration,
+//   _java_static_final_field
+// Much narrower than class/trait bodies.
+
+const INTERFACE_BODY_KEYWORDS: string[] = [
+  // Inheritance
+  "isA",
+  // Dependencies
+  "depend",
+  // Constants
+  "const", "constant",
+  // Visibility (for method signatures)
+  "public", "private", "protected",
+  // Java interop modifiers (for method_signature and _java_static_final_field)
+  "static", "final", "synchronized",
+];
+
 // ── Constraint keyword blocklist ────────────────────────────────────────────
 
 const CONSTRAINT_BLOCKLIST = new Set([
@@ -151,6 +218,102 @@ export function buildSemanticCompletionItems(
       label: kw,
       kind: CompletionItemKind.Keyword,
     }));
+  }
+
+  // Class-body scope: curated keywords + built-in types + type symbols.
+  if (symbolKinds === "class_body") {
+    const cbItems: CompletionItem[] = [];
+    const cbSeen = new Set<string>();
+    for (const kw of CLASS_BODY_KEYWORDS) {
+      cbSeen.add(kw);
+      cbItems.push({ label: kw, kind: CompletionItemKind.Keyword });
+    }
+    for (const typ of BUILTIN_TYPES) {
+      if (!cbSeen.has(typ)) {
+        cbSeen.add(typ);
+        cbItems.push({ label: typ, kind: CompletionItemKind.TypeParameter, detail: "type" });
+      }
+    }
+    for (const symKind of ["class", "interface", "trait", "enum"] as SymbolKind[]) {
+      const symbols = symbolIndex
+        .getSymbols({ kind: symKind })
+        .filter((s) => reachableFiles.has(path.normalize(s.file)));
+      for (const sym of symbols) {
+        if (!cbSeen.has(sym.name)) {
+          cbSeen.add(sym.name);
+          cbItems.push({
+            label: sym.name,
+            kind: symbolKindToCompletionKind(symKind),
+            detail: symKind,
+          });
+        }
+      }
+    }
+    return cbItems;
+  }
+
+  // Trait-body scope: curated keywords + built-in types + type symbols.
+  if (symbolKinds === "trait_body") {
+    const tbItems: CompletionItem[] = [];
+    const tbSeen = new Set<string>();
+    for (const kw of TRAIT_BODY_KEYWORDS) {
+      tbSeen.add(kw);
+      tbItems.push({ label: kw, kind: CompletionItemKind.Keyword });
+    }
+    for (const typ of BUILTIN_TYPES) {
+      if (!tbSeen.has(typ)) {
+        tbSeen.add(typ);
+        tbItems.push({ label: typ, kind: CompletionItemKind.TypeParameter, detail: "type" });
+      }
+    }
+    for (const symKind of ["class", "interface", "trait", "enum"] as SymbolKind[]) {
+      const symbols = symbolIndex
+        .getSymbols({ kind: symKind })
+        .filter((s) => reachableFiles.has(path.normalize(s.file)));
+      for (const sym of symbols) {
+        if (!tbSeen.has(sym.name)) {
+          tbSeen.add(sym.name);
+          tbItems.push({
+            label: sym.name,
+            kind: symbolKindToCompletionKind(symKind),
+            detail: symKind,
+          });
+        }
+      }
+    }
+    return tbItems;
+  }
+
+  // Interface-body scope: curated keywords + built-in types + type symbols.
+  if (symbolKinds === "interface_body") {
+    const ibItems: CompletionItem[] = [];
+    const ibSeen = new Set<string>();
+    for (const kw of INTERFACE_BODY_KEYWORDS) {
+      ibSeen.add(kw);
+      ibItems.push({ label: kw, kind: CompletionItemKind.Keyword });
+    }
+    for (const typ of BUILTIN_TYPES) {
+      if (!ibSeen.has(typ)) {
+        ibSeen.add(typ);
+        ibItems.push({ label: typ, kind: CompletionItemKind.TypeParameter, detail: "type" });
+      }
+    }
+    for (const symKind of ["class", "interface", "trait", "enum"] as SymbolKind[]) {
+      const symbols = symbolIndex
+        .getSymbols({ kind: symKind })
+        .filter((s) => reachableFiles.has(path.normalize(s.file)));
+      for (const sym of symbols) {
+        if (!ibSeen.has(sym.name)) {
+          ibSeen.add(sym.name);
+          ibItems.push({
+            label: sym.name,
+            kind: symbolKindToCompletionKind(symKind),
+            detail: symKind,
+          });
+        }
+      }
+    }
+    return ibItems;
   }
 
   // Trait SM op contexts are symbol-only — no keywords or operators.

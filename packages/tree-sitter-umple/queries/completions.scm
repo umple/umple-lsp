@@ -38,9 +38,9 @@
 ; =====================
 ; CLASS-LIKE SCOPES (offer type names)
 ; =====================
-(class_definition) @scope.class_interface_trait_enum
-(trait_definition) @scope.class_interface_trait_enum
-(interface_definition) @scope.class_interface_trait_enum
+(class_definition) @scope.class_body
+(trait_definition) @scope.trait_body
+(interface_definition) @scope.interface_body
 (association_class_definition) @scope.class_interface_trait_enum
 (isa_declaration) @scope.class_interface_trait
 

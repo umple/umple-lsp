@@ -3214,6 +3214,238 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 111: Class-body completion — curated construct keywords, no raw lookahead
+  {
+    name: "111 class_body_completion: blank class-body position returns curated keywords",
+    fixtures: ["111_class_body_completion.ump"],
+    assertions: [
+      // Scope must be class_body
+      {
+        type: "completion_kinds",
+        at: "class_blank",
+        expect: "class_body",
+      },
+      // Must include class-body construct starters
+      {
+        type: "completion_includes",
+        at: "class_blank",
+        expect: [
+          "isA", "before", "after", "around",
+          "trace", "tracecase", "enum", "depend", "key",
+          "immutable", "unique", "lazy", "settable", "internal",
+          "defaulted", "autounique", "const",
+        ],
+      },
+      // Must include visibility and modifier keywords
+      {
+        type: "completion_includes",
+        at: "class_blank",
+        expect: ["public", "private", "protected", "abstract", "singleton"],
+      },
+      // Must include built-in types
+      {
+        type: "completion_includes",
+        at: "class_blank",
+        expect: ["Integer", "String", "Boolean", "Double"],
+      },
+      // Must include reachable class/interface/trait/enum symbols
+      {
+        type: "completion_includes",
+        at: "class_blank",
+        expect: ["Parent", "ClassBodyTest"],
+      },
+      // Must NOT include ERROR
+      {
+        type: "completion_excludes",
+        at: "class_blank",
+        expect: ["ERROR"],
+      },
+      // Must NOT include top-level starters
+      {
+        type: "completion_excludes",
+        at: "class_blank",
+        expect: ["namespace", "use", "generate", "suboption", "tracer", "distributable"],
+      },
+      // Must NOT include generate-target leaf keywords
+      {
+        type: "completion_excludes",
+        at: "class_blank",
+        expect: ["Java", "Php", "Json", "Mermaid"],
+      },
+      // Must NOT include SM-internal constructs
+      {
+        type: "completion_excludes",
+        at: "class_blank",
+        expect: ["entry", "exit", "do"],
+      },
+      // Must NOT include tracer/distribution sub-keywords
+      {
+        type: "completion_excludes",
+        at: "class_blank",
+        expect: ["forced", "on", "off"],
+      },
+      // Boundary: top-level blank must still be top_level (not class_body)
+      {
+        type: "completion_kinds",
+        at: "top_boundary",
+        expect: "top_level",
+      },
+    ],
+  },
+
+  // 112: Trait-body completion — curated construct keywords, no raw lookahead
+  {
+    name: "112 trait_body_completion: blank trait-body position returns curated keywords",
+    fixtures: ["112_trait_body_completion.ump"],
+    assertions: [
+      // Scope must be trait_body
+      {
+        type: "completion_kinds",
+        at: "trait_blank",
+        expect: "trait_body",
+      },
+      // Must include class-body starters (trait inherits _class_content)
+      {
+        type: "completion_includes",
+        at: "trait_blank",
+        expect: [
+          "isA", "before", "after", "around",
+          "trace", "tracecase", "enum", "depend", "key",
+          "immutable", "unique", "lazy", "settable", "internal",
+          "defaulted", "autounique", "const",
+        ],
+      },
+      // Must include trait-specific: nested trait keyword
+      {
+        type: "completion_includes",
+        at: "trait_blank",
+        expect: ["trait"],
+      },
+      // Must include built-in types
+      {
+        type: "completion_includes",
+        at: "trait_blank",
+        expect: ["Integer", "String", "Boolean"],
+      },
+      // Must include reachable type symbols
+      {
+        type: "completion_includes",
+        at: "trait_blank",
+        expect: ["Existing", "TraitBodyTest"],
+      },
+      // Must NOT include ERROR
+      {
+        type: "completion_excludes",
+        at: "trait_blank",
+        expect: ["ERROR"],
+      },
+      // Must NOT include top-level starters
+      {
+        type: "completion_excludes",
+        at: "trait_blank",
+        expect: ["namespace", "use", "generate", "suboption", "tracer", "distributable"],
+      },
+      // Must NOT include generate-target leaf keywords
+      {
+        type: "completion_excludes",
+        at: "trait_blank",
+        expect: ["Java", "Php", "Json", "Mermaid"],
+      },
+      // Must NOT include SM-internal constructs
+      {
+        type: "completion_excludes",
+        at: "trait_blank",
+        expect: ["entry", "exit", "do"],
+      },
+      // Must NOT include tracer/distribution sub-keywords
+      {
+        type: "completion_excludes",
+        at: "trait_blank",
+        expect: ["forced", "on", "off"],
+      },
+      // Boundary: class-body blank must still be class_body
+      {
+        type: "completion_kinds",
+        at: "class_boundary",
+        expect: "class_body",
+      },
+    ],
+  },
+
+  // 113: Interface-body completion — curated construct keywords, no raw lookahead
+  {
+    name: "113 interface_body_completion: blank interface-body returns curated keywords",
+    fixtures: ["113_interface_body_completion.ump"],
+    assertions: [
+      // Scope must be interface_body
+      {
+        type: "completion_kinds",
+        at: "iface_blank",
+        expect: "interface_body",
+      },
+      // Must include interface-valid starters
+      {
+        type: "completion_includes",
+        at: "iface_blank",
+        expect: ["isA", "depend", "const", "constant"],
+      },
+      // Must include visibility for method signatures
+      {
+        type: "completion_includes",
+        at: "iface_blank",
+        expect: ["public", "private", "protected"],
+      },
+      // Must include built-in types (for method return types / const types)
+      {
+        type: "completion_includes",
+        at: "iface_blank",
+        expect: ["Integer", "String", "Boolean"],
+      },
+      // Must include reachable type symbols
+      {
+        type: "completion_includes",
+        at: "iface_blank",
+        expect: ["Existing", "InterfaceBodyTest"],
+      },
+      // Must NOT include ERROR
+      {
+        type: "completion_excludes",
+        at: "iface_blank",
+        expect: ["ERROR"],
+      },
+      // Must NOT include top-level starters
+      {
+        type: "completion_excludes",
+        at: "iface_blank",
+        expect: ["namespace", "use", "generate", "suboption", "tracer", "distributable"],
+      },
+      // Must NOT include class/trait-only starters
+      {
+        type: "completion_excludes",
+        at: "iface_blank",
+        expect: ["before", "after", "trace", "tracecase", "key", "immutable", "autounique"],
+      },
+      // Must NOT include SM-internal constructs
+      {
+        type: "completion_excludes",
+        at: "iface_blank",
+        expect: ["entry", "exit", "do"],
+      },
+      // Must NOT include generator targets or sub-keywords
+      {
+        type: "completion_excludes",
+        at: "iface_blank",
+        expect: ["Java", "Php", "forced", "on", "off"],
+      },
+      // Boundary: trait-body blank must still be trait_body
+      {
+        type: "completion_kinds",
+        at: "trait_boundary",
+        expect: "trait_body",
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────
