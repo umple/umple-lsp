@@ -1,0 +1,5 @@
+enum Color {
+  /*@enum_blank*/
+  Red, Green, Blue
+}
+/*@top_boundary*/

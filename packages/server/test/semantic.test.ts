@@ -3756,6 +3756,26 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 120: Enum-body completion — already quiet, pin with regression
+  {
+    name: "120 enum_body_completion: blank enum body is quiet (no raw keywords)",
+    fixtures: ["120_enum_body_completion.ump"],
+    assertions: [
+      // Enum body is already quiet (null scope, 0 keywords)
+      {
+        type: "completion_kinds",
+        at: "enum_blank",
+        expect: null,
+      },
+      // Boundary: top-level must still be top_level
+      {
+        type: "completion_kinds",
+        at: "top_boundary",
+        expect: "top_level",
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────
