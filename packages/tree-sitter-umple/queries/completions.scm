@@ -56,7 +56,7 @@
 ; =====================
 (state_machine) @scope.statemachine_body
 (state) @scope.state_body
-(transition) @scope.state
+(transition) @scope.transition_target
 
 ; =====================
 ; FINE-GRAINED CLASS MEMBER SCOPES

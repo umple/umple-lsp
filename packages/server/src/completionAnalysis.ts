@@ -69,7 +69,7 @@ export interface CompletionInfo {
   /** Operators the parser expects at this position. */
   operators: string[];
   /** Which symbol kinds to offer, or null for none. */
-  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "trace_state" | "trace_method" | "trace_state_method" | "trace_attribute" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | "top_level" | "class_body" | "trait_body" | "interface_body" | "assoc_class_body" | "mixset_body" | "statemachine_body" | "state_body" | "filter_body" | null;
+  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "trace_state" | "trace_method" | "trace_state_method" | "trace_attribute" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | "top_level" | "class_body" | "trait_body" | "interface_body" | "assoc_class_body" | "mixset_body" | "statemachine_body" | "state_body" | "filter_body" | "transition_target" | null;
   /** True if cursor is at a definition-name position (suppress all). */
   isDefinitionName: boolean;
   /** True if cursor is inside a comment. */
@@ -279,7 +279,7 @@ export function analyzeCompletion(
     let n: SyntaxNode | null = prevLeaf.parent;
     while (n) {
       if (n.type === "state_machine" || n.type === "statemachine_definition") {
-        symbolKinds = ["state"];
+        symbolKinds = "transition_target";
         break;
       }
       if (n.type === "class_definition" || n.type === "source_file") break;
@@ -606,6 +606,7 @@ function resolveCompletionScope(
   if (kindStr === "statemachine_body") return "statemachine_body";
   if (kindStr === "state_body") return "state_body";
   if (kindStr === "filter_body") return "filter_body";
+  if (kindStr === "transition_target") return "transition_target";
   if (kindStr === "none") return null;
 
   return kindStr.split("_") as SymbolKind[];

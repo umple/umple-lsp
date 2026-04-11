@@ -431,6 +431,43 @@ export function buildSemanticCompletionItems(
     }));
   }
 
+  // Transition-target scope: state symbols only, no keywords.
+  if (symbolKinds === "transition_target") {
+    const ttItems: CompletionItem[] = [];
+    const ttSeen = new Set<string>();
+    if (info.enclosingStateMachine) {
+      if (info.dottedStatePrefix) {
+        const childNames = symbolIndex.getChildStateNames(
+          info.dottedStatePrefix,
+          info.enclosingStateMachine,
+          reachableFiles,
+        );
+        for (const name of childNames) {
+          ttItems.push({
+            label: name,
+            kind: symbolKindToCompletionKind("state"),
+            detail: "state",
+          });
+        }
+      } else {
+        const states = symbolIndex
+          .getSymbols({ kind: "state", container: info.enclosingStateMachine })
+          .filter((s) => reachableFiles.has(path.normalize(s.file)));
+        for (const sym of states) {
+          if (!ttSeen.has(sym.name)) {
+            ttSeen.add(sym.name);
+            ttItems.push({
+              label: sym.name,
+              kind: symbolKindToCompletionKind("state"),
+              detail: "state",
+            });
+          }
+        }
+      }
+    }
+    return ttItems;
+  }
+
   // Mixset-body scope: curated keywords + built-in types + type symbols.
   if (symbolKinds === "mixset_body") {
     const mbItems: CompletionItem[] = [];

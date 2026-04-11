@@ -856,7 +856,7 @@ const TEST_CASES: TestCase[] = [
       {
         type: "completion_kinds",
         at: "arrow_empty",
-        expect: ["state"],
+        expect: "transition_target",
       },
       {
         type: "completion_kinds",
@@ -3791,6 +3791,44 @@ const TEST_CASES: TestCase[] = [
         type: "completion_kinds",
         at: "top_boundary",
         expect: "top_level",
+      },
+    ],
+  },
+
+  // 121: Transition-target completion — state symbols only, no raw lookahead
+  {
+    name: "121 transition_target_completion: after -> returns state symbols only",
+    fixtures: ["121_transition_target_completion.ump"],
+    assertions: [
+      // Scope must be transition_target
+      {
+        type: "completion_kinds",
+        at: "arrow_target",
+        expect: "transition_target",
+      },
+      // Must include state names from enclosing SM
+      {
+        type: "completion_includes",
+        at: "arrow_target",
+        expect: ["Open", "Closed"],
+      },
+      // Must NOT include ERROR
+      {
+        type: "completion_excludes",
+        at: "arrow_target",
+        expect: ["ERROR"],
+      },
+      // Must NOT include top-level/generator junk
+      {
+        type: "completion_excludes",
+        at: "arrow_target",
+        expect: ["namespace", "use", "generate", "Java", "Php", "class"],
+      },
+      // Boundary: SM-body blank must still be statemachine_body
+      {
+        type: "completion_kinds",
+        at: "sm_boundary",
+        expect: "statemachine_body",
       },
     ],
   },

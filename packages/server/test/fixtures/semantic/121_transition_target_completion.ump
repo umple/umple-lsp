@@ -1,0 +1,9 @@
+class TransTargetTest {
+  status {
+    /*@sm_boundary*/
+    Open {
+      go -> /*@arrow_target*/Closed;
+    }
+    Closed {}
+  }
+}
