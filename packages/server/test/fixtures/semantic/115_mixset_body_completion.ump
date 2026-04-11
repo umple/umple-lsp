@@ -1,0 +1,8 @@
+class Existing {}
+mixset Feature1 {
+  /*@mixset_blank*/
+}
+/*@top_boundary*/
+class BoundaryClass {
+  /*@class_boundary*/
+}

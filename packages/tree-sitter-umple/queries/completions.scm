@@ -25,7 +25,7 @@
 ; TOP-LEVEL SCOPES
 ; =====================
 (source_file) @scope.top_level
-(mixset_definition) @scope.none
+(mixset_definition) @scope.mixset_body
 (statemachine_definition) @scope.state
 (requirement_definition) @scope.none
 ; Suppress completions inside require body (opaque content)

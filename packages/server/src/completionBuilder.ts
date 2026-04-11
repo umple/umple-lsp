@@ -117,6 +117,32 @@ const INTERFACE_BODY_KEYWORDS: string[] = [
   "static", "final", "synchronized",
 ];
 
+// ── Curated mixset-body construct keywords ─────────────────────────────────
+// Derived from grammar's mixset_definition block form (grammar.js lines 428-451):
+//   choice(_definition, _class_content, method_signature aliases,
+//          transition, entry_exit_action, do_activity, state, standalone_transition,
+//          display_color, "||")
+// Union of top-level + class-body + state-level keyword starters.
+
+const MIXSET_BODY_KEYWORDS: string[] = [
+  // From TOP_LEVEL_KEYWORDS (valid _definition starters)
+  "namespace", "use", "generate", "class", "interface", "trait",
+  "association", "associationClass", "enum", "external", "statemachine",
+  "mixset", "req", "require", "isFeature", "filter", "strictness",
+  "tracer", "suboption", "distributable", "before", "after", "around",
+  "top", "implementsReq",
+  // From CLASS_BODY_KEYWORDS (valid _class_content starters, excluding duplicates)
+  "isA", "trace", "tracecase", "abstract", "singleton",
+  "const", "immutable", "unique", "lazy", "settable", "defaulted",
+  "internal", "autounique", "sorted", "key", "depend",
+  "public", "private", "protected", "queued", "pooled",
+  "active", "port", "emit", "symmetric", "reflexive",
+  "displayColor", "displayColour", "position",
+  "test", "generic", "static", "synchronized",
+  // State-level starters (entry_exit_action, do_activity)
+  "entry", "exit", "do",
+];
+
 // ── Constraint keyword blocklist ────────────────────────────────────────────
 
 const CONSTRAINT_BLOCKLIST = new Set([
@@ -346,6 +372,38 @@ export function buildSemanticCompletionItems(
       }
     }
     return abItems;
+  }
+
+  // Mixset-body scope: curated keywords + built-in types + type symbols.
+  if (symbolKinds === "mixset_body") {
+    const mbItems: CompletionItem[] = [];
+    const mbSeen = new Set<string>();
+    for (const kw of MIXSET_BODY_KEYWORDS) {
+      mbSeen.add(kw);
+      mbItems.push({ label: kw, kind: CompletionItemKind.Keyword });
+    }
+    for (const typ of BUILTIN_TYPES) {
+      if (!mbSeen.has(typ)) {
+        mbSeen.add(typ);
+        mbItems.push({ label: typ, kind: CompletionItemKind.TypeParameter, detail: "type" });
+      }
+    }
+    for (const symKind of ["class", "interface", "trait", "enum"] as SymbolKind[]) {
+      const symbols = symbolIndex
+        .getSymbols({ kind: symKind })
+        .filter((s) => reachableFiles.has(path.normalize(s.file)));
+      for (const sym of symbols) {
+        if (!mbSeen.has(sym.name)) {
+          mbSeen.add(sym.name);
+          mbItems.push({
+            label: sym.name,
+            kind: symbolKindToCompletionKind(symKind),
+            detail: symKind,
+          });
+        }
+      }
+    }
+    return mbItems;
   }
 
   // Trait SM op contexts are symbol-only — no keywords or operators.

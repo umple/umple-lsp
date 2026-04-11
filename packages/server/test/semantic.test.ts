@@ -3210,7 +3210,7 @@ const TEST_CASES: TestCase[] = [
       {
         type: "completion_kinds",
         at: "inside_mixset",
-        expect: null,
+        expect: "mixset_body",
       },
     ],
   },
@@ -3505,6 +3505,80 @@ const TEST_CASES: TestCase[] = [
         expect: ["entry", "exit", "do"],
       },
       // Boundary: class-body blank must still be class_body
+      {
+        type: "completion_kinds",
+        at: "class_boundary",
+        expect: "class_body",
+      },
+    ],
+  },
+
+  // 115: Mixset-body completion — curated keywords, no raw lookahead
+  {
+    name: "115 mixset_body_completion: blank mixset-body returns curated keywords",
+    fixtures: ["115_mixset_body_completion.ump"],
+    assertions: [
+      // Scope must be mixset_body
+      {
+        type: "completion_kinds",
+        at: "mixset_blank",
+        expect: "mixset_body",
+      },
+      // Must include top-level starters valid inside mixset
+      {
+        type: "completion_includes",
+        at: "mixset_blank",
+        expect: [
+          "class", "interface", "trait", "enum", "association",
+          "associationClass", "statemachine", "mixset", "namespace", "use",
+        ],
+      },
+      // Must include class-body starters valid inside mixset
+      {
+        type: "completion_includes",
+        at: "mixset_blank",
+        expect: [
+          "isA", "before", "after", "around", "trace", "tracecase",
+          "depend", "key", "immutable",
+        ],
+      },
+      // Must include state-level starters valid inside mixset
+      {
+        type: "completion_includes",
+        at: "mixset_blank",
+        expect: ["entry", "exit", "do"],
+      },
+      // Must include built-in types
+      {
+        type: "completion_includes",
+        at: "mixset_blank",
+        expect: ["Integer", "String"],
+      },
+      // Must NOT include ERROR
+      {
+        type: "completion_excludes",
+        at: "mixset_blank",
+        expect: ["ERROR"],
+      },
+      // Must NOT include generator-target leaves
+      {
+        type: "completion_excludes",
+        at: "mixset_blank",
+        expect: ["Java", "Php", "Json", "Mermaid"],
+      },
+      // Must NOT include tracer/distribution sub-keywords
+      {
+        type: "completion_excludes",
+        at: "mixset_blank",
+        expect: ["forced", "on", "off"],
+      },
+      // Boundary: top-level must still be top_level
+      {
+        type: "completion_kinds",
+        at: "top_boundary",
+        expect: "top_level",
+      },
+      // Boundary: class-body must still be class_body
       {
         type: "completion_kinds",
         at: "class_boundary",
