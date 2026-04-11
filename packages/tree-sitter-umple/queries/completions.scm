@@ -27,7 +27,7 @@
 (source_file) @scope.top_level
 (mixset_definition) @scope.mixset_body
 (statemachine_definition) @scope.statemachine_body
-(requirement_definition) @scope.none
+(requirement_definition) @scope.suppress
 ; Suppress completions inside require body (opaque content)
 (require_body) @scope.suppress
 ; filter blocks: no symbol completions by default…

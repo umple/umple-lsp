@@ -1,0 +1,5 @@
+req R1 {
+  /*@req_blank*/
+  some requirement text
+}
+/*@top_boundary*/

@@ -3710,6 +3710,26 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 118: Requirement-body completion — suppressed (opaque content)
+  {
+    name: "118 requirement_body_completion: blank req body is suppressed",
+    fixtures: ["118_requirement_body_completion.ump"],
+    assertions: [
+      // Scope must be suppress (requirement body is opaque)
+      {
+        type: "completion_kinds",
+        at: "req_blank",
+        expect: "suppress",
+      },
+      // Boundary: top-level must still be top_level
+      {
+        type: "completion_kinds",
+        at: "top_boundary",
+        expect: "top_level",
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────
