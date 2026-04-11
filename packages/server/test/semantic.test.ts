@@ -3832,6 +3832,56 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 122: Guard completion — attrs/methods + true/false only, no raw keywords
+  {
+    name: "122 guard_completion: guard returns attrs/methods + boolean literals only",
+    fixtures: ["122_guard_completion.ump"],
+    assertions: [
+      // Guard start scope
+      {
+        type: "completion_kinds",
+        at: "guard_start",
+        expect: "guard_attribute_method",
+      },
+      // After operator scope
+      {
+        type: "completion_kinds",
+        at: "guard_after_op",
+        expect: "guard_attribute_method",
+      },
+      // Must include scoped attrs/methods
+      {
+        type: "completion_includes",
+        at: "guard_start",
+        expect: ["x", "flag", "check"],
+      },
+      // Must include boolean literals
+      {
+        type: "completion_includes",
+        at: "guard_start",
+        expect: ["true", "false"],
+      },
+      // Must NOT include ERROR
+      {
+        type: "completion_excludes",
+        at: "guard_start",
+        expect: ["ERROR"],
+      },
+      // Must NOT include junk keywords
+      {
+        type: "completion_excludes",
+        at: "guard_start",
+        expect: ["default", "test", "generic", "suboption", "distributable", "forced", "on", "off"],
+      },
+      // Boundary: transition target must still be transition_target
+      {
+        type: "completion_kinds",
+        at: "transition_boundary",
+        expect: "transition_target",
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

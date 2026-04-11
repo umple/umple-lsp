@@ -1,0 +1,11 @@
+class GuardTest {
+  Integer x;
+  Boolean flag;
+  void check() {}
+  status {
+    S1 {
+      go [/*@guard_start*/x > /*@guard_after_op*/0] -> /*@transition_boundary*/S2;
+    }
+    S2 {}
+  }
+}
