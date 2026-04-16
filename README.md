@@ -81,8 +81,8 @@ The table below shows the LSP's support for Umple language features, based on th
 
 | Editor | Repo | Auto-installs server? |
 |--------|------|-----------------------|
-| VS Code | [umple.vscode](https://github.com/umple/umple.vscode) | Yes |
-| Zed | [umple.zed](https://github.com/umple/umple.zed) | Yes |
+| VS Code | [umple.vscode](https://github.com/umple/umple.vscode) ([Marketplace](https://marketplace.visualstudio.com/items?itemName=digized.umple)) | Yes |
+| Zed | [umple.zed](https://github.com/umple/umple.zed) ([Zed Extensions](https://zed.dev/extensions?query=umple)) | Yes |
 | Neovim | [umple.nvim](https://github.com/umple/umple.nvim) | Yes |
 | IntelliJ / JetBrains | [Setup guide](editors/intellij/) (LSP4IJ + npm) | No (`npm install -g`) |
 | BBEdit | [Setup guide](editors/bbedit/) (plist + npm) | No (`npm install -g`) |
