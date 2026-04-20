@@ -2,6 +2,7 @@ import { execFile } from "child_process";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import * as zlib from "zlib";
 import { fileURLToPath, pathToFileURL } from "url";
 import {
   CompletionItem,
@@ -221,6 +222,68 @@ function findFile(candidates: string[]): string | undefined {
   return undefined;
 }
 
+/**
+ * Read the `Version:` field from a jar's META-INF/MANIFEST.MF without spawning
+ * an external unzip process. Parses the central directory and inflates the
+ * manifest entry directly. Returns undefined if anything goes wrong — this is
+ * best-effort diagnostic logging, not a load-bearing check.
+ */
+function readJarManifestVersion(jarPath: string): string | undefined {
+  try {
+    const buf = fs.readFileSync(jarPath);
+    const EOCD_SIG = 0x06054b50;
+    const CD_SIG = 0x02014b50;
+    const maxScan = Math.max(0, buf.length - 0xffff - 22);
+    for (let i = buf.length - 22; i >= maxScan; i--) {
+      if (buf.readUInt32LE(i) !== EOCD_SIG) continue;
+      const cdOffset = buf.readUInt32LE(i + 16);
+      const cdSize = buf.readUInt32LE(i + 12);
+      let p = cdOffset;
+      const end = cdOffset + cdSize;
+      while (p < end) {
+        if (buf.readUInt32LE(p) !== CD_SIG) break;
+        const method = buf.readUInt16LE(p + 10);
+        const compSize = buf.readUInt32LE(p + 20);
+        const nameLen = buf.readUInt16LE(p + 28);
+        const extraLen = buf.readUInt16LE(p + 30);
+        const commentLen = buf.readUInt16LE(p + 32);
+        const localOffset = buf.readUInt32LE(p + 42);
+        const name = buf.slice(p + 46, p + 46 + nameLen).toString("utf8");
+        if (name === "META-INF/MANIFEST.MF") {
+          const lfhNameLen = buf.readUInt16LE(localOffset + 26);
+          const lfhExtraLen = buf.readUInt16LE(localOffset + 28);
+          const dataStart = localOffset + 30 + lfhNameLen + lfhExtraLen;
+          const raw = buf.slice(dataStart, dataStart + compSize);
+          const content =
+            method === 0
+              ? raw.toString("utf8")
+              : method === 8
+                ? zlib.inflateRawSync(raw).toString("utf8")
+                : "";
+          const m = content.match(/^Version:\s*(\S+)/m);
+          return m ? m[1] : undefined;
+        }
+        p += 46 + nameLen + extraLen + commentLen;
+      }
+      return undefined;
+    }
+  } catch {
+    // Ignore — diagnostics logging is best-effort
+  }
+  return undefined;
+}
+
+function readServerVersion(): string {
+  try {
+    const pkg = JSON.parse(
+      fs.readFileSync(path.resolve(__dirname, "..", "package.json"), "utf8"),
+    );
+    return typeof pkg.version === "string" ? pkg.version : "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
 let umpleSyncJarPath: string | undefined;
 let umpleSyncTimeoutMs = 30000;
 let jarWarningShown = false;
@@ -269,6 +332,10 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
     params.capabilities?.workspace?.didChangeWatchedFiles?.dynamicRegistration === true;
 
   return {
+    serverInfo: {
+      name: "umple-lsp",
+      version: readServerVersion(),
+    },
     capabilities: {
       textDocumentSync: TextDocumentSyncKind.Incremental,
       completionProvider: {
@@ -288,7 +355,17 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
 });
 
 connection.onInitialized(async () => {
-  connection.console.info("Umple language server initialized.");
+  const serverVersion = readServerVersion();
+  const jarVersion =
+    umpleSyncJarPath && fs.existsSync(umpleSyncJarPath)
+      ? readJarManifestVersion(umpleSyncJarPath)
+      : undefined;
+  const jarInfo = umpleSyncJarPath
+    ? `umplesync.jar ${jarVersion ?? "(version unknown)"} at ${umpleSyncJarPath}`
+    : "umplesync.jar not found (diagnostics disabled)";
+  connection.console.info(
+    `Umple language server ${serverVersion} initialized. ${jarInfo}.`,
+  );
 
   // Initialize tree-sitter symbol index for fast go-to-definition
   treeSitterWasmPath =
