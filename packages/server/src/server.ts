@@ -51,6 +51,34 @@ import {
   reindentEmbeddedCode,
 } from "./formatter";
 
+// Handle CLI flags before opening the LSP connection. Editor integrations
+// always spawn the server with `--stdio` and never pass these flags, so the
+// only callers that hit this branch are humans running the binary directly
+// to check what version they have installed.
+{
+  const cliArgs = process.argv.slice(2);
+  if (cliArgs.includes("-v") || cliArgs.includes("--version")) {
+    process.stdout.write(`${readServerVersion()}\n`);
+    process.exit(0);
+  }
+  if (cliArgs.includes("-h") || cliArgs.includes("--help")) {
+    process.stdout.write(
+      [
+        "Usage: umple-lsp-server [--stdio]",
+        "",
+        "Options:",
+        "  -v, --version   Print server version and exit",
+        "  -h, --help      Print this help and exit",
+        "      --stdio     Speak LSP over stdin/stdout (how editors invoke it)",
+        "",
+        "The server is normally launched by an editor extension, not manually.",
+        "See https://github.com/umple/umple-lsp for editor integrations.",
+      ].join("\n") + "\n",
+    );
+    process.exit(0);
+  }
+}
+
 const connection = createConnection(ProposedFeatures.all);
 const documents = new Map<string, TextDocument>();
 const pendingValidations = new Map<string, NodeJS.Timeout>();
