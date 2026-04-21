@@ -1,0 +1,31 @@
+// Phase D — requirement decomposition: implementsReq X; req Y { ... }
+// attaches X as an implemented requirement of Y (the compiler's semantics for
+// hierarchical requirement refinement).
+//
+// Negative boundary cases verify the reference resolution isn't fooled by
+// neighboring `req` declarations and that find-refs doesn't cross-pollute.
+
+req /*@def_high*/HighLevel text {
+  The system shall do X.
+}
+
+// Decomposition: Detailed is a refinement of HighLevel.
+implementsReq /*@ref_high_decomp*/HighLevel;
+req /*@def_detailed*/Detailed text {
+  The system shall do X when condition Y is met.
+}
+
+// Negative boundary A: Another req immediately follows Detailed with no
+// intervening implementsReq. OtherReq must not spuriously pick up HighLevel,
+// and goto-def/refs on HighLevel must resolve to the single declaration above.
+req /*@def_other*/OtherReq text {
+  Unrelated requirement.
+}
+
+// Negative boundary B: A fresh implementsReq before a plain class must still
+// go to HighLevel, not to Detailed or OtherReq (no name ambiguity), and the
+// enum that follows must not be treated as related.
+implementsReq /*@ref_high_class*/HighLevel;
+class Pin { value; }
+
+enum /*@def_enum_state*/State { A, B }

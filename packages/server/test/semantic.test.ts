@@ -3963,11 +3963,16 @@ const TEST_CASES: TestCase[] = [
         at: "def_us1",
         expectContains: ["US1", "userStory", "customer", "password is forgotten", "reset my password", "regain access"],
       },
-      // Hover on lowercase alias stores raw "userstory" (no normalization in Phase B)
+      // Hover on lowercase `userstory` alias normalizes to `userStory` (Phase D)
       {
         type: "hover_output",
         at: "def_us2",
-        expectContains: ["US2", "userstory", "admin"],
+        expectContains: ["US2", "userStory", "admin"],
+      },
+      {
+        type: "hover_excludes",
+        at: "def_us2",
+        expect: ["userstory"], // raw alias must not leak through
       },
       // Hover on useCase with steps shows who but steps are separate symbols
       {
@@ -3975,11 +3980,16 @@ const TEST_CASES: TestCase[] = [
         at: "def_uc1",
         expectContains: ["UC1", "useCase", "salesPerson"],
       },
-      // Hover on lowercase useCase alias stores raw "usecase"
+      // Hover on lowercase `usecase` alias normalizes to `useCase` (Phase D)
       {
         type: "hover_output",
         at: "def_uc2",
-        expectContains: ["UC2", "usecase"],
+        expectContains: ["UC2", "useCase"],
+      },
+      {
+        type: "hover_excludes",
+        at: "def_uc2",
+        expect: ["usecase"],
       },
       // Hover on plain req (no language) shows just the id
       {
@@ -4136,6 +4146,62 @@ const TEST_CASES: TestCase[] = [
       { type: "completion_kinds",    at: "bare_assocblk", expect: ["requirement"] },
       { type: "completion_includes", at: "bare_assocblk", expect: ["R1", "R2", "R3"] },
       { type: "completion_excludes", at: "bare_assocblk", expect: ["class", "trait", "namespace"] },
+    ],
+  },
+
+  // 127: Phase D — requirement decomposition + negative boundaries. Closes out
+  // the issue-2098 LSP catchup. Alias normalization is exercised in test 124.
+  {
+    name: "127 req_decomposition: implementsReq before a following req attaches correctly and does not leak",
+    fixtures: ["127_req_decomposition.ump"],
+    assertions: [
+      // Parse must remain clean with decomposition patterns intermixed with neighbors.
+      { type: "parse_clean", fixture: "127_req_decomposition.ump" },
+
+      // Both reqs and the unrelated neighbors are indexed.
+      { type: "symbol_count", fixture: "127_req_decomposition.ump", name: "HighLevel", kind: "requirement", expect: 1 },
+      { type: "symbol_count", fixture: "127_req_decomposition.ump", name: "Detailed",  kind: "requirement", expect: 1 },
+      { type: "symbol_count", fixture: "127_req_decomposition.ump", name: "OtherReq",  kind: "requirement", expect: 1 },
+      { type: "symbol_count", fixture: "127_req_decomposition.ump", name: "Pin",       kind: "class",       expect: 1 },
+      { type: "symbol_count", fixture: "127_req_decomposition.ump", name: "State",     kind: "enum",        expect: 1 },
+
+      // Goto-def from each implementsReq HighLevel — must resolve to the
+      // single HighLevel declaration, not be confused by neighboring reqs.
+      { type: "goto_def", at: "ref_high_decomp", expect: [{ at: "def_high" }] },
+      { type: "goto_def", at: "ref_high_class",  expect: [{ at: "def_high" }] },
+
+      // find-refs on HighLevel: declaration + both implementsReq uses.
+      // OtherReq / Detailed / Pin / State must NOT appear as HighLevel refs.
+      {
+        type: "refs",
+        decl: { name: "HighLevel", kind: "requirement", container: "HighLevel" },
+        expectAt: ["def_high", "ref_high_decomp", "ref_high_class"],
+      },
+      {
+        type: "refs_exclude",
+        decl: { name: "HighLevel", kind: "requirement", container: "HighLevel" },
+        excludeAt: ["def_detailed", "def_other", "def_enum_state"],
+      },
+
+      // find-refs on Detailed: declaration only. No implementsReq references
+      // Detailed, so the result is just the definition.
+      {
+        type: "refs",
+        decl: { name: "Detailed", kind: "requirement", container: "Detailed" },
+        expectAt: ["def_detailed"],
+      },
+      // find-refs on OtherReq: declaration only — proves no spurious pick-up
+      // of neighboring implementsReq HighLevel that precedes it.
+      {
+        type: "refs",
+        decl: { name: "OtherReq", kind: "requirement", container: "OtherReq" },
+        expectAt: ["def_other"],
+      },
+
+      // Hover on HighLevel declaration identifies the requirement.
+      { type: "hover_output", at: "def_high",     expectContains: ["HighLevel"] },
+      { type: "hover_output", at: "def_detailed", expectContains: ["Detailed"] },
+      { type: "hover_output", at: "def_other",    expectContains: ["OtherReq"] },
     ],
   },
 ];

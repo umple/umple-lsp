@@ -1302,8 +1302,11 @@ export class SymbolIndex {
 
   /**
    * Populate structured metadata on a requirement symbol entry.
-   * - reqLanguage stores the raw parsed language string. Canonicalization
-   *   (userstory → userStory, usecase → useCase) is deferred to Phase D.
+   * - reqLanguage is canonicalized at the metadata/presentation layer to match
+   *   compiler semantics: `userstory` → `userStory`, `usecase` → `useCase`.
+   *   The grammar still accepts both aliases (Phase A preserves raw tokens);
+   *   the normalization happens here so all downstream consumers (hover,
+   *   outline, queries) see one canonical form.
    * - reqWho / reqWhen / reqWhat / reqWhy are populated from the trimmed text
    *   inside each tag's body (only when the tag has a body — bare tags stay as
    *   residual text per compiler semantics).
@@ -1316,7 +1319,12 @@ export class SymbolIndex {
 
     const languageNode = defNode.childForFieldName("language");
     if (languageNode) {
-      entry.reqLanguage = languageNode.text.trim();
+      const raw = languageNode.text.trim();
+      entry.reqLanguage = raw === "userstory"
+        ? "userStory"
+        : raw === "usecase"
+          ? "useCase"
+          : raw;
     }
 
     const bodyNode = defNode.childForFieldName("body");
