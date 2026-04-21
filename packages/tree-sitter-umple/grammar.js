@@ -58,6 +58,8 @@ module.exports = grammar({
     [$._java_method_modifiers],
     [$.entry_exit_action, $.transition],
     [$.event_spec, $.entry_exit_action],
+    [$.req_user_step],
+    [$.req_system_response],
   ],
 
   rules: {
@@ -368,32 +370,149 @@ module.exports = grammar({
     // Requirement ids can start with digits and contain hyphens: 001dealing, L01-LicenseTypes
     req_id: ($) => /[a-zA-Z0-9][a-zA-Z0-9_-]*/,
 
+    // Structured forms (userStory / useCase) match the language keyword as a
+    // literal, so keyword extraction (via `word: $.identifier`) promotes them
+    // over the generic `req_language` rule. Plain form is the fallback for any
+    // other language (or no language at all) and keeps its body opaque.
     requirement_definition: ($) =>
       seq(
         "req",
         field("name", choice($.identifier, $.req_id)),
+        choice(
+          $._req_user_story_tail,
+          $._req_use_case_tail,
+          $._req_plain_tail,
+        ),
+      ),
+
+    _req_user_story_tail: ($) =>
+      seq(
+        field("language", alias(choice("userStory", "userstory"), $.req_language)),
+        "{",
+        optional(field("body", $.req_user_story_body)),
+        "}",
+      ),
+
+    _req_use_case_tail: ($) =>
+      seq(
+        field("language", alias(choice("useCase", "usecase"), $.req_language)),
+        "{",
+        optional(field("body", $.req_use_case_body)),
+        "}",
+      ),
+
+    _req_plain_tail: ($) =>
+      seq(
         optional(field("language", $.req_language)),
         "{",
         optional(field("content", $.req_content)),
         "}",
       ),
 
-    // Requirement language is a single token before "{". Verified compiler-valid
-    // forms include bare identifiers, dotted/dashed names, and quoted one-token
-    // names. Multi-word quoted strings are intentionally not accepted here.
+    // Requirement language for the plain form. Bare identifiers come through
+    // `$.identifier` so keyword extraction takes precedence; dotted/hyphenated
+    // and quoted forms use explicit tokens so they remain valid plain languages.
     req_language: ($) =>
-      token(
+      choice(
+        $.identifier,
+        token(/[A-Za-z0-9_]+[.\-][A-Za-z0-9_.\-]*/),
+        token(seq('"', /[^"\s{}]+/, '"')),
+        token(seq("'", /[^'\s{}]+/, "'")),
+      ),
+
+    // Plain-form body stays intentionally opaque. Only brace-tolerant so that
+    // compiler-valid nested text does not break indexing.
+    req_content: ($) =>
+      repeat1(choice(/[^\{\}]+/, seq("{", optional($.req_content), "}"))),
+
+    // Structured userStory body: who/when/what/why tags plus opaque free text.
+    // Tags and steps are tolerant of missing bodies — a bare `who` or
+    // `userStep` parses as an incomplete structural node rather than an ERROR.
+    // The indexer distinguishes complete (with body) from incomplete (without)
+    // when promoting tags/steps to symbols; the compiler treats incomplete
+    // variants as residual text. Tree-sitter's LALR cannot do the 2-token
+    // lookahead the compiler's line-by-line regex uses, so we accept the
+    // over-structural parse and let semantics live above the tree.
+    req_user_story_body: ($) =>
+      repeat1(
         choice(
-          /[A-Za-z0-9_.-]+/,
-          seq('"', /[^"\s{}]+/, '"'),
-          seq("'", /[^'\s{}]+/, "'"),
+          $.req_who_tag,
+          $.req_when_tag,
+          $.req_what_tag,
+          $.req_why_tag,
+          $.req_free_text_word,
+          $.req_free_text_punct,
         ),
       ),
 
-    // Requirement content remains intentionally opaque. This only makes the body
-    // brace-tolerant so compiler-valid nested text does not break indexing.
-    req_content: ($) =>
-      repeat1(choice(/[^\{\}]+/, seq("{", optional($.req_content), "}"))),
+    // Structured useCase body: userStoryTags + userStep / systemResponse + free text.
+    req_use_case_body: ($) =>
+      repeat1(
+        choice(
+          $.req_who_tag,
+          $.req_when_tag,
+          $.req_what_tag,
+          $.req_why_tag,
+          $.req_user_step,
+          $.req_system_response,
+          $.req_free_text_word,
+          $.req_free_text_punct,
+        ),
+      ),
+
+    // Tag body is optional so `who` alone at the end of a structured body still
+    // parses structurally (no ERROR). Indexer consults whether `body` is
+    // present to decide if this is a real tag or residual text.
+    req_who_tag:  ($) => seq("who",  optional($._req_tag_body)),
+    req_when_tag: ($) => seq("when", optional($._req_tag_body)),
+    req_what_tag: ($) => seq("what", optional($._req_tag_body)),
+    req_why_tag:  ($) => seq("why",  optional($._req_tag_body)),
+
+    _req_tag_body: ($) => seq("{", optional($.req_tag_content), "}"),
+
+    // Step id and body are each optional so `userStep`, `userStep 1`, and the
+    // full `userStep 1 { ... }` all parse structurally.
+    req_user_step: ($) =>
+      seq(
+        "userStep",
+        optional(
+          seq(
+            field("id", $.req_step_id),
+            optional($._req_tag_body),
+          ),
+        ),
+      ),
+
+    req_system_response: ($) =>
+      seq(
+        "systemResponse",
+        optional(
+          seq(
+            field("id", $.req_step_id),
+            optional($._req_tag_body),
+          ),
+        ),
+      ),
+
+    // Step ids can be numeric or alphanumeric: 1, 1a, step-one. Identifier-
+    // shaped ids reuse $.identifier. Digit-leading ids get a dedicated token.
+    req_step_id: ($) => choice(
+      $.identifier,
+      alias($._req_step_id_digit, $.identifier),
+    ),
+    _req_step_id_digit: ($) => token(/[0-9][A-Za-z0-9_\-]*/),
+
+    // Body inside any structured tag — opaque, brace-balanced.
+    req_tag_content: ($) =>
+      repeat1(choice(/[^\{\}]+/, seq("{", optional($.req_tag_content), "}"))),
+
+    // Opaque residual text inside a structured body.
+    //   req_free_text_word  — identifier-shaped runs. Tag/step keywords bypass
+    //                         this via keyword extraction.
+    //   req_free_text_punct — non-identifier, non-brace runs (punctuation,
+    //                         numbers not attached to a step, quoted strings).
+    req_free_text_word: ($) => $.identifier,
+    req_free_text_punct: ($) => token(prec(-1, /[^\sa-zA-Z_{}][^\s{}]*/)),
 
     // =====================
     // REQUIRE STATEMENT & IS_FEATURE
