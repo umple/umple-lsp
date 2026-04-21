@@ -1,0 +1,57 @@
+// Phase C1 — implementsReq legal across all contexts enumerated in compiler
+// issue #2098. Grammar parse coverage only; traceability/goto-def wired in C2.
+
+req R1 text { Top-level contexts }
+req R2 text { Inside association block }
+req R3 text { Inside state machine }
+req R4 text { Inside state }
+req R5 text { Inside top-level statemachine }
+
+// Top-level: implementsReq before trait / interface / enum / top-level
+// association / top-level statemachine / another req / a class (existing).
+implementsReq R1;
+trait T { name; }
+
+implementsReq R1;
+interface IX { void doSomething(); }
+
+implementsReq R1;
+enum Color { RED, GREEN, BLUE }
+
+class Student {}
+class Course {}
+implementsReq R1;
+association { * Student -- * Course; }
+
+implementsReq R1;
+statemachine TopSM {
+  implementsReq R5;
+  On { -> Off; }
+  Off {}
+}
+
+implementsReq R1;
+req Detailed text { The system shall do X when Y }
+
+// Inside association block: implementsReq attaches to the next association_member.
+class Dept {}
+association {
+  implementsReq R2;
+  * Student -- * Course;
+  * Course -- 1 Dept;
+}
+
+// Inside class-local state machine body: implementsReq at SM root and inside a state.
+class /*@def_x*/X {
+  status {
+    implementsReq R3;
+    state1 {
+      implementsReq R4;
+      entry / { doSomething(); }
+      do { keepDoing(); }
+      e -> state2;
+      substate1 { }
+    }
+    state2 { e -> state1; }
+  }
+}

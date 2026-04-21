@@ -4031,6 +4031,31 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 125: Phase C1 — implementsReq grammar coverage across all issue-2098 contexts.
+  // Traceability (goto-def, refs, completion) is Phase C2 and lives in a separate
+  // test; this case exercises parse correctness only.
+  {
+    name: "125 implementsreq_contexts: grammar accepts implementsReq in every compiler-permitted context",
+    fixtures: ["125_implementsreq_contexts.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "125_implementsreq_contexts.ump" },
+      // Requirements (R1..R5, Detailed) all indexed
+      { type: "symbol_count", fixture: "125_implementsreq_contexts.ump", name: "R1", kind: "requirement", expect: 1 },
+      { type: "symbol_count", fixture: "125_implementsreq_contexts.ump", name: "R2", kind: "requirement", expect: 1 },
+      { type: "symbol_count", fixture: "125_implementsreq_contexts.ump", name: "R3", kind: "requirement", expect: 1 },
+      { type: "symbol_count", fixture: "125_implementsreq_contexts.ump", name: "R4", kind: "requirement", expect: 1 },
+      { type: "symbol_count", fixture: "125_implementsreq_contexts.ump", name: "R5", kind: "requirement", expect: 1 },
+      { type: "symbol_count", fixture: "125_implementsreq_contexts.ump", name: "Detailed", kind: "requirement", expect: 1 },
+      // Neighboring entity types still indexed (grammar expansion must not have
+      // broken trait / interface / enum / association / statemachine / class).
+      { type: "symbol_count", fixture: "125_implementsreq_contexts.ump", name: "T",  kind: "trait", expect: 1 },
+      { type: "symbol_count", fixture: "125_implementsreq_contexts.ump", name: "IX", kind: "interface", expect: 1 },
+      { type: "symbol_count", fixture: "125_implementsreq_contexts.ump", name: "Color", kind: "enum", expect: 1 },
+      { type: "symbol_count", fixture: "125_implementsreq_contexts.ump", name: "TopSM", kind: "statemachine", expect: 1 },
+      { type: "symbol_count", fixture: "125_implementsreq_contexts.ump", name: "X", kind: "class", expect: 1 },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

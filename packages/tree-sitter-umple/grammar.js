@@ -677,7 +677,14 @@ module.exports = grammar({
         optional("pooled"),
         field("name", $.identifier),
         "{",
-        repeat(choice($.state, $.standalone_transition, $.mixset_definition)),
+        repeat(
+          choice(
+            $.state,
+            $.standalone_transition,
+            $.mixset_definition,
+            $.req_implementation,
+          ),
+        ),
         "}",
       ),
 
@@ -941,7 +948,7 @@ module.exports = grammar({
         "association",
         optional(field("name", $.identifier)),
         "{",
-        repeat($.association_member),
+        repeat(choice($.association_member, $.req_implementation)),
         "}",
       ),
 
@@ -969,7 +976,15 @@ module.exports = grammar({
         optional("pooled"),
         field("name", $.identifier),
         "{",
-        repeat(choice($.state, $.standalone_transition, $.mixset_definition, $.trace_statement)),
+        repeat(
+          choice(
+            $.state,
+            $.standalone_transition,
+            $.mixset_definition,
+            $.trace_statement,
+            $.req_implementation,
+          ),
+        ),
         "}",
       ),
 
@@ -990,6 +1005,7 @@ module.exports = grammar({
             $.mixset_definition,
             $.method_declaration,
             $.trace_statement,
+            $.req_implementation,
             "||",
             ";", // bare semicolons allowed in state bodies
           ),
