@@ -1,0 +1,35 @@
+// Phase C2 — empty-slot completion after `implementsReq` and after a trailing
+// comma. Requirement declarations live in a separate clean file 126_reqs.ump
+// so the cold-open recovery filter doesn't drop them when this file has
+// parse errors (intentional — the bare-slot probes have no identifier).
+
+use "126_reqs.ump";
+
+// Bare first slot at top level.
+implementsReq /*@bare_top*/
+
+class Downstream {}
+
+// Bare second slot after a comma at top level.
+implementsReq R1,/*@bare_top_comma*/
+
+class Downstream2 {}
+
+// Bare slot inside a state body (C1 new context).
+class Probe {
+  status {
+    S1 {
+      implementsReq /*@bare_state*/
+      e -> S2;
+    }
+    S2 {}
+  }
+}
+
+// Bare slot inside an association block (C1 new context).
+class A1 {}
+class A2 {}
+association {
+  implementsReq /*@bare_assocblk*/
+  * A1 -- * A2;
+}

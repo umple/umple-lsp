@@ -4032,28 +4032,110 @@ const TEST_CASES: TestCase[] = [
     ],
   },
 
-  // 125: Phase C1 — implementsReq grammar coverage across all issue-2098 contexts.
-  // Traceability (goto-def, refs, completion) is Phase C2 and lives in a separate
-  // test; this case exercises parse correctness only.
+  // 125: Phase C1 + C2 — implementsReq grammar coverage across all issue-2098
+  // contexts, plus traceability (goto-def, find-refs, completion) assertions
+  // that prove the grammar expansion wired through to existing LSP features.
   {
-    name: "125 implementsreq_contexts: grammar accepts implementsReq in every compiler-permitted context",
+    name: "125 implementsreq_contexts: grammar + traceability for implementsReq in every compiler-permitted context",
     fixtures: ["125_implementsreq_contexts.ump"],
     assertions: [
+      // ── Grammar / parse ────────────────────────────────────────────────────
       { type: "parse_clean", fixture: "125_implementsreq_contexts.ump" },
-      // Requirements (R1..R5, Detailed) all indexed
+
+      // ── Indexing: requirements (R1..R5, Detailed) all present ─────────────
       { type: "symbol_count", fixture: "125_implementsreq_contexts.ump", name: "R1", kind: "requirement", expect: 1 },
       { type: "symbol_count", fixture: "125_implementsreq_contexts.ump", name: "R2", kind: "requirement", expect: 1 },
       { type: "symbol_count", fixture: "125_implementsreq_contexts.ump", name: "R3", kind: "requirement", expect: 1 },
       { type: "symbol_count", fixture: "125_implementsreq_contexts.ump", name: "R4", kind: "requirement", expect: 1 },
       { type: "symbol_count", fixture: "125_implementsreq_contexts.ump", name: "R5", kind: "requirement", expect: 1 },
       { type: "symbol_count", fixture: "125_implementsreq_contexts.ump", name: "Detailed", kind: "requirement", expect: 1 },
-      // Neighboring entity types still indexed (grammar expansion must not have
-      // broken trait / interface / enum / association / statemachine / class).
-      { type: "symbol_count", fixture: "125_implementsreq_contexts.ump", name: "T",  kind: "trait", expect: 1 },
-      { type: "symbol_count", fixture: "125_implementsreq_contexts.ump", name: "IX", kind: "interface", expect: 1 },
-      { type: "symbol_count", fixture: "125_implementsreq_contexts.ump", name: "Color", kind: "enum", expect: 1 },
+
+      // ── Indexing: neighbors unchanged (no regression from grammar work) ───
+      { type: "symbol_count", fixture: "125_implementsreq_contexts.ump", name: "T",     kind: "trait",        expect: 1 },
+      { type: "symbol_count", fixture: "125_implementsreq_contexts.ump", name: "IX",    kind: "interface",    expect: 1 },
+      { type: "symbol_count", fixture: "125_implementsreq_contexts.ump", name: "Color", kind: "enum",         expect: 1 },
       { type: "symbol_count", fixture: "125_implementsreq_contexts.ump", name: "TopSM", kind: "statemachine", expect: 1 },
-      { type: "symbol_count", fixture: "125_implementsreq_contexts.ump", name: "X", kind: "class", expect: 1 },
+      { type: "symbol_count", fixture: "125_implementsreq_contexts.ump", name: "X",     kind: "class",        expect: 1 },
+
+      // ── Goto-def: every new context resolves implementsReq → req ──────────
+      // Top-level (pre-existing, pinned here for completeness)
+      { type: "goto_def", at: "use_r1_trait", expect: [{ at: "def_r1" }] },
+      { type: "goto_def", at: "use_r1_iface", expect: [{ at: "def_r1" }] },
+      { type: "goto_def", at: "use_r1_enum",  expect: [{ at: "def_r1" }] },
+      { type: "goto_def", at: "use_r1_assoc", expect: [{ at: "def_r1" }] },
+      { type: "goto_def", at: "use_r1_sm",    expect: [{ at: "def_r1" }] },
+      { type: "goto_def", at: "use_r1_req",   expect: [{ at: "def_r1" }] },
+      // Phase C1's new contexts
+      { type: "goto_def", at: "use_r5_sm",       expect: [{ at: "def_r5" }] }, // inside statemachine_definition body
+      { type: "goto_def", at: "use_r2_assocblk", expect: [{ at: "def_r2" }] }, // inside association { } block
+      { type: "goto_def", at: "use_r3_smbody",   expect: [{ at: "def_r3" }] }, // inside class-local SM body
+      { type: "goto_def", at: "use_r4_state",    expect: [{ at: "def_r4" }] }, // inside state body
+
+      // ── Find-refs: req → every implementsReq site across all contexts ─────
+      {
+        type: "refs",
+        decl: { name: "R1", kind: "requirement", container: "R1" },
+        expectAt: ["def_r1", "use_r1_trait", "use_r1_iface", "use_r1_enum",
+                   "use_r1_assoc", "use_r1_sm", "use_r1_req", "complete_top"],
+      },
+      {
+        type: "refs",
+        decl: { name: "R2", kind: "requirement", container: "R2" },
+        expectAt: ["def_r2", "use_r2_assocblk"],
+      },
+      {
+        type: "refs",
+        decl: { name: "R3", kind: "requirement", container: "R3" },
+        expectAt: ["def_r3", "use_r3_smbody"],
+      },
+      {
+        type: "refs",
+        decl: { name: "R4", kind: "requirement", container: "R4" },
+        expectAt: ["def_r4", "use_r4_state"],
+      },
+      {
+        type: "refs",
+        decl: { name: "R5", kind: "requirement", container: "R5" },
+        expectAt: ["def_r5", "use_r5_sm"],
+      },
+
+      // ── Completion: implementsReq position surfaces requirement-kind scope ─
+      { type: "completion_kinds", at: "complete_top", expect: ["requirement"] },
+      { type: "completion_includes", at: "complete_top", expect: ["R1", "R2", "R3", "R4", "R5", "Detailed"] },
+      { type: "completion_excludes", at: "complete_top", expect: ["class", "trait", "interface", "association", "statemachine", "enum"] },
+    ],
+  },
+
+  // 126: Phase C2 — empty-slot completion after `implementsReq` and after a
+  // trailing comma. These positions don't form a valid req_implementation, so
+  // tree-sitter's scope query misses them. A `prevLeaf`-based fallback in
+  // completionAnalysis.ts detects the slot and forces the requirement scope.
+  //
+  // No parse_clean — fixture deliberately contains incomplete req_implementation
+  // statements to exercise the zero-identifier recovery path.
+  {
+    name: "126 implementsreq_empty_slot: bare slot after implementsReq or comma offers requirement-kind scope",
+    fixtures: ["126_implementsreq_empty_slot.ump", "126_reqs.ump"],
+    assertions: [
+      // Bare first slot at top level
+      { type: "completion_kinds",    at: "bare_top", expect: ["requirement"] },
+      { type: "completion_includes", at: "bare_top", expect: ["R1", "R2", "R3"] },
+      { type: "completion_excludes", at: "bare_top", expect: ["class", "trait", "interface", "namespace", "use", "generate"] },
+
+      // Bare second slot after a comma at top level
+      { type: "completion_kinds",    at: "bare_top_comma", expect: ["requirement"] },
+      { type: "completion_includes", at: "bare_top_comma", expect: ["R1", "R2", "R3"] },
+      { type: "completion_excludes", at: "bare_top_comma", expect: ["class", "trait", "interface", "namespace"] },
+
+      // Bare slot inside a state body (C1 new context)
+      { type: "completion_kinds",    at: "bare_state", expect: ["requirement"] },
+      { type: "completion_includes", at: "bare_state", expect: ["R1", "R2", "R3"] },
+      { type: "completion_excludes", at: "bare_state", expect: ["class", "trait", "entry", "exit", "do"] },
+
+      // Bare slot inside an association block (C1 new context)
+      { type: "completion_kinds",    at: "bare_assocblk", expect: ["requirement"] },
+      { type: "completion_includes", at: "bare_assocblk", expect: ["R1", "R2", "R3"] },
+      { type: "completion_excludes", at: "bare_assocblk", expect: ["class", "trait", "namespace"] },
     ],
   },
 ];

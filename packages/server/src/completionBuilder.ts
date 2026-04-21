@@ -694,6 +694,28 @@ export function buildSemanticCompletionItems(
     return items;
   }
 
+  // implementsReq scope — symbol-only, no keywords/operators. The req_implementation
+  // grammar rule only permits `implementsReq <id>(, <id>)* ;`, so surfacing class /
+  // trait / interface keywords here is wrong. Offer known requirement ids only.
+  if (Array.isArray(symbolKinds) && symbolKinds.length === 1 && symbolKinds[0] === "requirement") {
+    const reqItems: CompletionItem[] = [];
+    const reqSeen = new Set<string>();
+    const reqs = symbolIndex
+      .getSymbols({ kind: "requirement" })
+      .filter((s) => reachableFiles.has(path.normalize(s.file)));
+    for (const sym of reqs) {
+      if (!reqSeen.has(sym.name)) {
+        reqSeen.add(sym.name);
+        reqItems.push({
+          label: sym.name,
+          kind: symbolKindToCompletionKind("requirement"),
+          detail: "requirement",
+        });
+      }
+    }
+    return reqItems;
+  }
+
   // 1. Keywords from LookaheadIterator (filtered in constraint contexts)
   let keywords = info.keywords;
   if (

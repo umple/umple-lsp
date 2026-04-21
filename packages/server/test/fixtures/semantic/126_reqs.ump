@@ -1,0 +1,4 @@
+// Clean requirement declarations imported by 126_implementsreq_empty_slot.ump.
+req R1 text { first }
+req R2 text { second }
+req R3 text { third }

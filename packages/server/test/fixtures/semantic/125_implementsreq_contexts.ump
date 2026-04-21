@@ -1,52 +1,53 @@
-// Phase C1 — implementsReq legal across all contexts enumerated in compiler
-// issue #2098. Grammar parse coverage only; traceability/goto-def wired in C2.
+// Phase C1+C2 — implementsReq legal across every context enumerated in
+// compiler issue #2098. Markers pin goto-def, find-refs, and completion
+// assertions in semantic.test.ts.
 
-req R1 text { Top-level contexts }
-req R2 text { Inside association block }
-req R3 text { Inside state machine }
-req R4 text { Inside state }
-req R5 text { Inside top-level statemachine }
+req /*@def_r1*/R1 text { Top-level contexts }
+req /*@def_r2*/R2 text { Inside association block }
+req /*@def_r3*/R3 text { Inside state machine }
+req /*@def_r4*/R4 text { Inside state }
+req /*@def_r5*/R5 text { Inside top-level statemachine }
 
 // Top-level: implementsReq before trait / interface / enum / top-level
 // association / top-level statemachine / another req / a class (existing).
-implementsReq R1;
+implementsReq /*@use_r1_trait*/R1;
 trait T { name; }
 
-implementsReq R1;
+implementsReq /*@use_r1_iface*/R1;
 interface IX { void doSomething(); }
 
-implementsReq R1;
+implementsReq /*@use_r1_enum*/R1;
 enum Color { RED, GREEN, BLUE }
 
 class Student {}
 class Course {}
-implementsReq R1;
+implementsReq /*@use_r1_assoc*/R1;
 association { * Student -- * Course; }
 
-implementsReq R1;
+implementsReq /*@use_r1_sm*/R1;
 statemachine TopSM {
-  implementsReq R5;
+  implementsReq /*@use_r5_sm*/R5;
   On { -> Off; }
   Off {}
 }
 
-implementsReq R1;
+implementsReq /*@use_r1_req*/R1;
 req Detailed text { The system shall do X when Y }
 
 // Inside association block: implementsReq attaches to the next association_member.
 class Dept {}
 association {
-  implementsReq R2;
+  implementsReq /*@use_r2_assocblk*/R2;
   * Student -- * Course;
   * Course -- 1 Dept;
 }
 
 // Inside class-local state machine body: implementsReq at SM root and inside a state.
-class /*@def_x*/X {
+class X {
   status {
-    implementsReq R3;
+    implementsReq /*@use_r3_smbody*/R3;
     state1 {
-      implementsReq R4;
+      implementsReq /*@use_r4_state*/R4;
       entry / { doSomething(); }
       do { keepDoing(); }
       e -> state2;
@@ -55,3 +56,6 @@ class /*@def_x*/X {
     state2 { e -> state1; }
   }
 }
+
+// Completion probe — cursor inside implementsReq X; should see requirement scope.
+implementsReq /*@complete_top*/R1;

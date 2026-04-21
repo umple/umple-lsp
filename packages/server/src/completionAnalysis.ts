@@ -287,6 +287,36 @@ export function analyzeCompletion(
     }
   }
 
+  // --- implementsReq empty-slot completion ---
+  // Tree-sitter can't form a `req_implementation` until it sees the identifier,
+  // so the completions.scm scope query misses these positions:
+  //   `implementsReq |`            (bare first slot)
+  //   `implementsReq R1, |`        (bare second slot after comma)
+  // Use the previous leaf to detect them. `implementsReq` itself is a direct
+  // match; for the comma case we require the comma to be inside a partial
+  // req_implementation (either parsed or in ERROR recovery).
+  if (prevLeaf?.type === "implementsReq") {
+    symbolKinds = ["requirement"];
+  } else if (prevLeaf?.type === ",") {
+    let n: SyntaxNode | null = prevLeaf.parent;
+    while (n) {
+      if (n.type === "req_implementation") { symbolKinds = ["requirement"]; break; }
+      if (n.type === "ERROR") {
+        // Look for a sibling `implementsReq` keyword anywhere in this ERROR
+        // recovery region — that's the signature of a partial req_implementation.
+        for (let i = 0; i < n.childCount; i++) {
+          if (n.child(i)?.type === "implementsReq") {
+            symbolKinds = ["requirement"];
+            break;
+          }
+        }
+        if (symbolKinds && Array.isArray(symbolKinds) && symbolKinds[0] === "requirement") break;
+      }
+      if (n.type === "class_definition" || n.type === "source_file") break;
+      n = n.parent;
+    }
+  }
+
   // --- Trait SM operation suppression: "as" and guard positions ---
   // After "as" inside trait-SM context → suppress (new name position, not a reference)
   if (prevLeaf?.type === "as" && isInsideTraitSmOpContext(prevLeaf)) {
