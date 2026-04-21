@@ -1,0 +1,42 @@
+req /*@def_us1*/US1 userStory {
+  who { customer }
+  when { password is forgotten }
+  what { reset my password }
+  why { regain access to my account }
+}
+
+req /*@def_us2*/US2 userstory {
+  who { admin }
+}
+
+req /*@def_uc1*/UC1 useCase {
+  who { salesPerson }
+  userStep /*@def_step1*/1 { select product }
+  systemResponse /*@def_step2*/1 { display price }
+  userStep /*@def_step3*/2 { enter quantity }
+  systemResponse /*@def_step4*/2 { update total }
+}
+
+req /*@def_uc2*/UC2 usecase {
+  Customer checks out items and the system calculates the total.
+}
+
+req /*@def_plain*/R1 {
+  Plain body with no language keyword — opaque content.
+}
+
+// Negative cases — all must parse clean, none may index.
+req /*@def_us_bare*/US_BARE userStory {
+  who
+  when
+  what
+  why
+}
+
+req /*@def_uc_partial*/UC_PARTIAL useCase {
+  userStep
+  userStep 99
+  systemResponse
+  systemResponse 99
+  who
+}

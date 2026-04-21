@@ -321,5 +321,22 @@ export function resolveSymbolAtPosition(
     }
   }
 
+  // Use-case step definition sites: multiple steps can share the same id
+  // (one userStep + one systemResponse pair per step number). When the cursor
+  // is at a specific step id's position, prefer the exact match by line/col.
+  if (
+    token.kinds?.includes("use_case_step") &&
+    symbols.length > 1
+  ) {
+    const exact = symbols.filter(
+      (s) =>
+        s.file === docPath &&
+        s.line === line &&
+        s.column <= col &&
+        col <= s.endColumn,
+    );
+    if (exact.length > 0) symbols = exact;
+  }
+
   return { token, symbols };
 }

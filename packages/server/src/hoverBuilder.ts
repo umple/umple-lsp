@@ -377,9 +377,27 @@ export function buildHoverMarkdown(
     case "mixset":
       result = "```umple\nmixset " + sym.name + "\n```";
       break;
-    case "requirement":
-      result = "```umple\nrequirement " + sym.name + "\n```";
+    case "requirement": {
+      const header = sym.reqLanguage
+        ? `req ${sym.name} ${sym.reqLanguage}`
+        : `req ${sym.name}`;
+      result = "```umple\n" + header + "\n```";
+      const details: string[] = [];
+      if (sym.reqWho)  details.push(`**Who:** ${sym.reqWho}`);
+      if (sym.reqWhen) details.push(`**When:** ${sym.reqWhen}`);
+      if (sym.reqWhat) details.push(`**What:** ${sym.reqWhat}`);
+      if (sym.reqWhy)  details.push(`**Why:** ${sym.reqWhy}`);
+      if (details.length > 0) result += "\n\n" + details.join("  \n");
       break;
+    }
+    case "use_case_step": {
+      const kindLabel = sym.reqStepKind === "systemResponse"
+        ? "systemResponse"
+        : "userStep";
+      result = "```umple\n" + `${kindLabel} ${sym.name}` + "\n```";
+      if (sym.container) result += `\n\n*in req ${sym.container}*`;
+      break;
+    }
     case "template":
       result = "```umple\ntemplate " + sym.name + "\n```";
       break;

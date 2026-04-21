@@ -25,6 +25,17 @@ export interface SymbolEntry {
   statePath?: string[];
   // True if extracted from a tree with parse errors (cold-open recovery)
   recovered?: boolean;
+  // Structured requirement metadata (populated on kind="requirement" entries).
+  // Compiler normalizes userstory → userStory and usecase → useCase; we do the
+  // same in the indexer so queries can match the canonical form.
+  reqLanguage?: string;
+  reqWho?: string;
+  reqWhen?: string;
+  reqWhat?: string;
+  reqWhy?: string;
+  // Structured use-case step metadata (populated on kind="use_case_step" entries).
+  reqStepKind?: "userStep" | "systemResponse";
+  reqStepId?: string;
 }
 
 export interface UseStatementWithPosition {

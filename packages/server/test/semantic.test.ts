@@ -106,6 +106,7 @@ type Assertion =
   | CompletionExcludesAssertion
   | TokenContextAssertion
   | HoverOutputAssertion
+  | HoverExcludesAssertion
   | DocumentSymbolsAssertion
   | FormatOutputAssertion
   | FormatOutputWithOptionsAssertion
@@ -178,6 +179,12 @@ interface HoverOutputAssertion {
   type: "hover_output";
   at: string;
   expectContains: string[];
+}
+
+interface HoverExcludesAssertion {
+  type: "hover_excludes";
+  at: string;
+  expect: string[];
 }
 
 interface DocumentSymbolsAssertion {
@@ -3926,6 +3933,104 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 124: Structured requirement bodies — userStory/useCase metadata + steps indexing
+  {
+    name: "124 requirement_structured: userStory/useCase metadata + step symbols",
+    fixtures: ["124_requirement_structured.ump"],
+    assertions: [
+      // Parse must be clean across all structured and plain forms (including negatives)
+      {
+        type: "parse_clean",
+        fixture: "124_requirement_structured.ump",
+      },
+      // All seven requirements are indexed (five positive + two negative-holder reqs)
+      { type: "symbol_count", fixture: "124_requirement_structured.ump", name: "US1", kind: "requirement", expect: 1 },
+      { type: "symbol_count", fixture: "124_requirement_structured.ump", name: "US2", kind: "requirement", expect: 1 },
+      { type: "symbol_count", fixture: "124_requirement_structured.ump", name: "UC1", kind: "requirement", expect: 1 },
+      { type: "symbol_count", fixture: "124_requirement_structured.ump", name: "UC2", kind: "requirement", expect: 1 },
+      { type: "symbol_count", fixture: "124_requirement_structured.ump", name: "R1",  kind: "requirement", expect: 1 },
+      { type: "symbol_count", fixture: "124_requirement_structured.ump", name: "US_BARE",    kind: "requirement", expect: 1 },
+      { type: "symbol_count", fixture: "124_requirement_structured.ump", name: "UC_PARTIAL", kind: "requirement", expect: 1 },
+      // Use-case steps: ids "1" and "2" are indexed twice each (userStep + systemResponse pair)
+      { type: "symbol_count", fixture: "124_requirement_structured.ump", name: "1", kind: "use_case_step", expect: 2 },
+      { type: "symbol_count", fixture: "124_requirement_structured.ump", name: "2", kind: "use_case_step", expect: 2 },
+      // NEGATIVE: step id 99 from `userStep 99` / `systemResponse 99` (no body) must NOT index
+      { type: "symbol_count", fixture: "124_requirement_structured.ump", name: "99", kind: "use_case_step", expect: 0 },
+      // Hover on structured userStory shows who/when/what/why summary
+      {
+        type: "hover_output",
+        at: "def_us1",
+        expectContains: ["US1", "userStory", "customer", "password is forgotten", "reset my password", "regain access"],
+      },
+      // Hover on lowercase alias stores raw "userstory" (no normalization in Phase B)
+      {
+        type: "hover_output",
+        at: "def_us2",
+        expectContains: ["US2", "userstory", "admin"],
+      },
+      // Hover on useCase with steps shows who but steps are separate symbols
+      {
+        type: "hover_output",
+        at: "def_uc1",
+        expectContains: ["UC1", "useCase", "salesPerson"],
+      },
+      // Hover on lowercase useCase alias stores raw "usecase"
+      {
+        type: "hover_output",
+        at: "def_uc2",
+        expectContains: ["UC2", "usecase"],
+      },
+      // Hover on plain req (no language) shows just the id
+      {
+        type: "hover_output",
+        at: "def_plain",
+        expectContains: ["R1"],
+      },
+      // Hover on a userStep shows the step kind, id, and enclosing req container
+      {
+        type: "hover_output",
+        at: "def_step1",
+        expectContains: ["userStep", "UC1"],
+      },
+      // Hover on a systemResponse shows the step kind, id, and container
+      {
+        type: "hover_output",
+        at: "def_step2",
+        expectContains: ["systemResponse", "UC1"],
+      },
+      // NEGATIVE: bare who/when/what/why in US_BARE must NOT contribute hover metadata
+      {
+        type: "hover_output",
+        at: "def_us_bare",
+        expectContains: ["US_BARE", "userStory"],
+      },
+      {
+        type: "hover_excludes",
+        at: "def_us_bare",
+        expect: ["**Who:**", "**When:**", "**What:**", "**Why:**"],
+      },
+      // NEGATIVE: bare userStep / systemResponse / who in UC_PARTIAL → no metadata
+      {
+        type: "hover_output",
+        at: "def_uc_partial",
+        expectContains: ["UC_PARTIAL", "useCase"],
+      },
+      {
+        type: "hover_excludes",
+        at: "def_uc_partial",
+        expect: ["**Who:**"],
+      },
+      // Document outline: positive reqs are roots, steps nest under UC1.
+      // UC_PARTIAL is also a root but has no indexed step children.
+      {
+        type: "document_symbols",
+        fixture: "124_requirement_structured.ump",
+        expectRoots: ["US1", "US2", "UC1", "UC2", "R1", "US_BARE", "UC_PARTIAL"],
+        expectChild: { parent: "UC1", child: "1" },
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────
@@ -4534,6 +4639,29 @@ function runAssertion(
         return {
           ok: false,
           message: `hover_output @${assertion.at}: expected "${expected}" in hover, got: ${markdown.substring(0, 200)}`,
+        };
+      }
+    }
+    return { ok: true, message: "" };
+  }
+
+  if (assertion.type === "hover_excludes") {
+    const src = findMarker(assertion.at);
+    if (!src) return { ok: false, message: `marker @${assertion.at} not found` };
+
+    const markdown = helper.hoverAt(src.filePath, src.content, src.pos.line, src.pos.col, reachable);
+    if (!markdown) {
+      return {
+        ok: false,
+        message: `hover_excludes @${assertion.at}: hover returned null`,
+      };
+    }
+
+    for (const unexpected of assertion.expect) {
+      if (markdown.includes(unexpected)) {
+        return {
+          ok: false,
+          message: `hover_excludes @${assertion.at}: did not expect "${unexpected}" in hover, got: ${markdown.substring(0, 200)}`,
         };
       }
     }

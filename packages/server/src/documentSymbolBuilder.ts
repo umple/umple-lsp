@@ -44,6 +44,8 @@ function umpleKindToLspSymbolKind(kind: UmpleSymbolKind): SymbolKind {
       return SymbolKind.Module;
     case "requirement":
       return SymbolKind.String;
+    case "use_case_step":
+      return SymbolKind.Event;
     default:
       return SymbolKind.Variable;
   }

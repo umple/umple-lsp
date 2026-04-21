@@ -110,6 +110,11 @@
 (req_implementation (identifier) @reference.requirement)
 (req_implementation (req_id) @reference.requirement)
 
+; Use-case step ids — hover/goto-def on the step id at its definition site
+; resolves the entry to itself (symbolIndex has these indexed as use_case_step).
+(req_user_step id: (req_step_id (identifier) @reference.use_case_step))
+(req_system_response id: (req_step_id (identifier) @reference.use_case_step))
+
 ; =====================
 ; ASSOCIATION TYPE REFERENCES
 ; =====================

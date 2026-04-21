@@ -19,6 +19,7 @@ export type SymbolKind =
   | "association"
   | "mixset"
   | "requirement"
+  | "use_case_step"
   | "template"
   | "tracecase";
 
@@ -38,6 +39,7 @@ export const SYMBOL_KINDS_LONGEST_FIRST: SymbolKind[] = (
     "association",
     "mixset",
     "requirement",
+    "use_case_step",
     "template",
     "tracecase",
   ] as SymbolKind[]

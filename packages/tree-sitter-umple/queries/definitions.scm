@@ -20,6 +20,12 @@
 (association_definition name: (identifier) @definition.association)
 (requirement_definition name: (identifier) @definition.requirement)
 (requirement_definition name: (req_id) @definition.requirement)
+
+; Use-case step definitions inside a useCase requirement body.
+; Captured node is the identifier inside req_step_id; the extractor inspects
+; the parent req_user_step vs req_system_response to set reqStepKind.
+(req_user_step id: (req_step_id (identifier) @definition.use_case_step))
+(req_system_response id: (req_step_id (identifier) @definition.use_case_step))
 (mixset_definition name: (identifier) @definition.mixset)
 (association_class_definition name: (identifier) @definition.class)
 (statemachine_definition name: (identifier) @definition.statemachine)

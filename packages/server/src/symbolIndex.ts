@@ -1159,12 +1159,31 @@ export class SymbolIndex {
       } else if (kind === "enum_value") {
         // Enum values belong to their enclosing enum
         container = this.resolveEnumContainer(node);
+      } else if (kind === "use_case_step") {
+        // Container is the enclosing requirement's id. Tree shape:
+        //   identifier → req_step_id → req_user_step / req_system_response
+        //              → req_use_case_body → requirement_definition
+        container = this.resolveRequirementContainer(node);
       } else {
         // Top-level symbols (class, interface, trait, enum, etc.) are self-containers
         container = node.text;
       }
 
-      const defNode = node.parent;
+      // For use_case_step, the "definition node" is the enclosing step, not
+      // the req_step_id wrapper — so range queries see the full step extent.
+      let defNode = node.parent;
+      if (kind === "use_case_step") {
+        let walk: SyntaxNode | null = node.parent ?? null;
+        while (walk && walk.type !== "req_user_step" && walk.type !== "req_system_response") {
+          walk = walk.parent;
+        }
+        if (walk) defNode = walk;
+        // Only index complete steps — those with both an id AND a body. Bare
+        // `userStep`, `userStep 1`, bare `systemResponse`, and
+        // `systemResponse 2` parse structurally (no ERROR) but stay
+        // semantically opaque, matching the compiler's line-regex behavior.
+        if (!defNode || !this.stepHasTagBody(defNode)) continue;
+      }
 
       // Skip symbols from malformed subtrees: if the definition node itself
       // has errors, the captured name may be garbage (e.g., "BROKEN" parsed
@@ -1256,9 +1275,110 @@ export class SymbolIndex {
       if (kind === "state") {
         entry.statePath = resolveStatePath(node);
       }
+      if (kind === "requirement") {
+        this.populateRequirementMetadata(entry, defNode);
+      }
+      if (kind === "use_case_step") {
+        this.populateStepMetadata(entry, defNode);
+      }
       symbols.push(entry);
     }
     return symbols;
+  }
+
+  /**
+   * Walk upward from a step identifier node to find the enclosing
+   * requirement_definition's name. Returns the requirement id as the container.
+   */
+  private resolveRequirementContainer(node: SyntaxNode): string | undefined {
+    let walk: SyntaxNode | null = node.parent ?? null;
+    while (walk && walk.type !== "requirement_definition") {
+      walk = walk.parent;
+    }
+    if (!walk) return undefined;
+    const nameNode = walk.childForFieldName("name");
+    return nameNode ? nameNode.text : undefined;
+  }
+
+  /**
+   * Populate structured metadata on a requirement symbol entry.
+   * - reqLanguage stores the raw parsed language string. Canonicalization
+   *   (userstory → userStory, usecase → useCase) is deferred to Phase D.
+   * - reqWho / reqWhen / reqWhat / reqWhy are populated from the trimmed text
+   *   inside each tag's body (only when the tag has a body — bare tags stay as
+   *   residual text per compiler semantics).
+   */
+  private populateRequirementMetadata(
+    entry: SymbolEntry,
+    defNode: SyntaxNode | null | undefined,
+  ): void {
+    if (!defNode) return;
+
+    const languageNode = defNode.childForFieldName("language");
+    if (languageNode) {
+      entry.reqLanguage = languageNode.text.trim();
+    }
+
+    const bodyNode = defNode.childForFieldName("body");
+    if (!bodyNode) return;
+    if (
+      bodyNode.type !== "req_user_story_body" &&
+      bodyNode.type !== "req_use_case_body"
+    ) return;
+
+    for (let i = 0; i < bodyNode.namedChildCount; i++) {
+      const child = bodyNode.namedChild(i);
+      if (!child) continue;
+      const tagText = this.extractTagText(child);
+      if (tagText === undefined) continue;
+      switch (child.type) {
+        case "req_who_tag":  entry.reqWho  = tagText; break;
+        case "req_when_tag": entry.reqWhen = tagText; break;
+        case "req_what_tag": entry.reqWhat = tagText; break;
+        case "req_why_tag":  entry.reqWhy  = tagText; break;
+      }
+    }
+  }
+
+  /**
+   * Return the trimmed text inside a tag's body, or undefined if the tag has
+   * no body (incomplete grammar — treated as residual text by the compiler).
+   */
+  private extractTagText(tagNode: SyntaxNode): string | undefined {
+    for (let i = 0; i < tagNode.namedChildCount; i++) {
+      const child = tagNode.namedChild(i);
+      if (child && child.type === "req_tag_content") {
+        return child.text.trim();
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Populate step-kind and step-id on a use_case_step entry.
+   * defNode is the req_user_step or req_system_response node.
+   */
+  private populateStepMetadata(
+    entry: SymbolEntry,
+    defNode: SyntaxNode | null | undefined,
+  ): void {
+    if (!defNode) return;
+    if (defNode.type === "req_user_step") entry.reqStepKind = "userStep";
+    else if (defNode.type === "req_system_response") entry.reqStepKind = "systemResponse";
+    entry.reqStepId = entry.name;
+  }
+
+  /**
+   * Returns true if a req_user_step / req_system_response node contains a
+   * `req_tag_content` descendant — i.e., the step has real body content.
+   * Bare `userStep`, `userStep 1`, and empty `userStep 1 {}` all return false.
+   */
+  private stepHasTagBody(stepNode: SyntaxNode): boolean {
+    for (let i = 0; i < stepNode.namedChildCount; i++) {
+      const child = stepNode.namedChild(i);
+      if (child && child.type === "req_tag_content") return true;
+    }
+    return false;
   }
 
   // ── Workspace indexing & import graph ──────────────────────────────────
