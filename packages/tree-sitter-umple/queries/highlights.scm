@@ -32,6 +32,12 @@
   "hops"
   "super"
   "sub"
+  "who"
+  "when"
+  "what"
+  "why"
+  "userStep"
+  "systemResponse"
 ] @keyword.directive
 
 (filter_definition
