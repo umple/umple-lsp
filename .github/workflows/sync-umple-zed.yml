@@ -1,0 +1,204 @@
+name: Sync grammar to umple.zed
+
+# Auto-PR grammar / query changes from this repo into the umple.zed
+# extension repo so it stays in sync with umple-lsp's tree-sitter grammar
+# and syntax highlights. Consumes the existing sync-grammar.sh contract
+# in umple.zed unchanged — see
+# https://github.com/umple/umple.zed/blob/master/scripts/sync-grammar.sh
+#
+# What's auto-synced:
+#   - extension.toml   rev    bumped to this repo's HEAD SHA
+#   - languages/umple/highlights.scm copied from queries/highlights.scm
+#
+# What stays manual:
+#   - npm publish of umple-lsp-server  (decoupled per collab topic 040)
+#   - zed-industries/extensions marketplace PR
+#
+# The PR opened here is a manual merge gate so a grammar change that
+# requires new server-side indexer support can sit open until the matching
+# npm version is published. The PR body surfaces the change type from
+# the path filter so a reviewer knows whether to wait for npm.
+#
+# One-time setup:
+#   Create a fine-grained PAT at github.com with Contents + Pull requests
+#   (write) scoped to umple/umple.zed and add it to umple/umple-lsp repo
+#   secrets as UMPLE_ZED_BOT_PAT.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "packages/tree-sitter-umple/grammar.js"
+      - "packages/tree-sitter-umple/src/parser.c"
+      - "packages/tree-sitter-umple/queries/**.scm"
+  workflow_dispatch: {}
+
+concurrency:
+  group: sync-umple-zed
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout umple-lsp (source)
+        uses: actions/checkout@v5
+        with:
+          path: umple-lsp
+          # Full history so github.event.before is guaranteed present for the
+          # `Classify change type` diff, even on multi-commit pushes. Shallow
+          # checkouts silently drop old commits and would make the change-
+          # type classification return `none`, which would undercut the
+          # manual merge-gate the PR body relies on.
+          fetch-depth: 0
+
+      - name: Checkout umple.zed (target)
+        uses: actions/checkout@v5
+        with:
+          repository: umple/umple.zed
+          token: ${{ secrets.UMPLE_ZED_BOT_PAT }}
+          path: umple.zed
+          fetch-depth: 0
+
+      - name: Classify change type
+        id: classify
+        working-directory: umple-lsp
+        run: |
+          set -euo pipefail
+          sha="${{ github.sha }}"
+          before="${{ github.event.before }}"
+          if [[ -z "$before" || "$before" == "0000000000000000000000000000000000000000" ]]; then
+            before="HEAD~1"
+          fi
+          # fetch-depth: 0 above guarantees `before` exists in this checkout.
+          # Run the diff without a silent-degrade guard so any real failure
+          # here fails the workflow loudly rather than producing a misleading
+          # change_type=none that would undercut the PR's merge-gate note.
+          changed=$(git diff --name-only "$before" HEAD -- \
+            'packages/tree-sitter-umple/grammar.js' \
+            'packages/tree-sitter-umple/src/parser.c' \
+            'packages/tree-sitter-umple/queries/')
+          has_grammar=no
+          has_highlights=no
+          echo "$changed" | grep -qE '(grammar\.js|parser\.c)$' && has_grammar=yes || true
+          echo "$changed" | grep -q 'queries/' && has_highlights=yes || true
+          if [[ "$has_grammar" == "yes" && "$has_highlights" == "yes" ]]; then
+            change_type=both
+          elif [[ "$has_grammar" == "yes" ]]; then
+            change_type=grammar
+          elif [[ "$has_highlights" == "yes" ]]; then
+            change_type=highlights
+          else
+            change_type=none
+          fi
+          echo "change_type=$change_type" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${sha:0:7}"     >> "$GITHUB_OUTPUT"
+          echo "full_sha=$sha"            >> "$GITHUB_OUTPUT"
+          echo "changed_paths<<EOF"       >> "$GITHUB_OUTPUT"
+          echo "$changed"                 >> "$GITHUB_OUTPUT"
+          echo "EOF"                      >> "$GITHUB_OUTPUT"
+
+      - name: Run sync-grammar.sh
+        working-directory: umple.zed
+        run: bash scripts/sync-grammar.sh --source ../umple-lsp
+
+      - name: Check for sync diff
+        id: diff
+        working-directory: umple.zed
+        run: |
+          if git diff --quiet; then
+            echo "has_diff=no"  >> "$GITHUB_OUTPUT"
+          else
+            echo "has_diff=yes" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Bump extension.toml patch version
+        if: steps.diff.outputs.has_diff == 'yes'
+        working-directory: umple.zed
+        run: |
+          set -euo pipefail
+          v=$(grep '^version' extension.toml | sed 's/.*"\([0-9.]*\)".*/\1/')
+          IFS=. read -r M m p <<<"$v"
+          new="$M.$m.$((p+1))"
+          sed -i "s/^version = \"$v\"/version = \"$new\"/" extension.toml
+          echo "UMPLE_ZED_OLD_VERSION=$v"   >> "$GITHUB_ENV"
+          echo "UMPLE_ZED_NEW_VERSION=$new" >> "$GITHUB_ENV"
+
+      - name: Commit + push sync branch
+        if: steps.diff.outputs.has_diff == 'yes'
+        working-directory: umple.zed
+        env:
+          GH_TOKEN: ${{ secrets.UMPLE_ZED_BOT_PAT }}
+        run: |
+          set -euo pipefail
+          branch="sync/umple-lsp-master"
+          git config user.name  "umple-sync-bot"
+          git config user.email "umple-sync-bot@users.noreply.github.com"
+          git checkout -B "$branch"
+          git add extension.toml languages/umple/highlights.scm
+          git commit -m "Sync grammar + highlights from umple-lsp@${{ steps.classify.outputs.short_sha }}"
+          git push --force origin "$branch"
+
+      - name: Open or update PR
+        if: steps.diff.outputs.has_diff == 'yes'
+        working-directory: umple.zed
+        env:
+          GH_TOKEN: ${{ secrets.UMPLE_ZED_BOT_PAT }}
+        run: |
+          set -euo pipefail
+          branch="sync/umple-lsp-master"
+          existing=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number' || echo "")
+          change_type="${{ steps.classify.outputs.change_type }}"
+          short_sha="${{ steps.classify.outputs.short_sha }}"
+          full_sha="${{ steps.classify.outputs.full_sha }}"
+          title="Sync from umple-lsp@$short_sha ($change_type, v${UMPLE_ZED_NEW_VERSION})"
+          body_file="$(mktemp)"
+          cat > "$body_file" <<EOF
+          ## Auto-sync from umple-lsp
+
+          **Source:** umple-lsp@$full_sha
+          **Change type:** \`$change_type\` (grammar = \`grammar.js\`/\`parser.c\`, highlights = \`queries/**.scm\`)
+          **Version bump:** ${UMPLE_ZED_OLD_VERSION} → ${UMPLE_ZED_NEW_VERSION}
+
+          ### Changed paths in umple-lsp
+          \`\`\`
+          ${{ steps.classify.outputs.changed_paths }}
+          \`\`\`
+
+          ### Safe to merge?
+
+          - \`highlights\` only — safe to merge now.
+          - \`grammar\` or \`both\` — **wait for an \`umple-lsp-server\` npm
+            publish that includes matching server-side indexer support**
+            before merging, if the new syntax requires it. Check the
+            latest published server with \`npm view umple-lsp-server version\`.
+            If you merge early, editor highlighting may understand new
+            syntax before the LSP does; users will see a temporary
+            feature gap until npm catches up.
+
+          ### Next steps after merge
+
+          1. (Optional) publish \`umple-lsp-server\` to npm if the server
+             changed alongside this grammar.
+          2. Cut a new marketplace release by updating the git submodule
+             pointer and \`extensions.toml\` umple entry version in a fork
+             of \`zed-industries/extensions\`, then opening a PR there.
+             This stays manual by design (topic 040).
+
+          ---
+          Produced by \`.github/workflows/sync-umple-zed.yml\` in umple-lsp.
+          Re-runs on subsequent grammar / highlight pushes force-push onto
+          \`$branch\` to coalesce with this PR instead of stacking new ones.
+          EOF
+
+          if [[ -n "$existing" ]]; then
+            gh pr edit "$existing" --title "$title" --body-file "$body_file"
+            echo "Updated existing PR #$existing"
+          else
+            gh pr create --base master --head "$branch" \
+              --title "$title" --body-file "$body_file"
+          fi
+
+      - name: Report no-op
+        if: steps.diff.outputs.has_diff == 'no'
+        run: echo "umple.zed already in sync with umple-lsp@${{ steps.classify.outputs.short_sha }}; no PR needed."
