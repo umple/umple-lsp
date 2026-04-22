@@ -192,6 +192,21 @@ const STATE_BODY_KEYWORDS: string[] = [
   "static", "synchronized",
 ];
 
+// ── Curated structured req body keyword lists ──────────────────────────────
+// The compiler's userStoryTags rule accepts who/when/what/why.
+// useCase additionally accepts userStep / systemResponse.
+// No symbols are surfaced inside req bodies — only these four/six starters.
+// Tag and step inner text stays on @scope.suppress.
+
+const USER_STORY_BODY_STARTERS: string[] = [
+  "who", "when", "what", "why",
+];
+
+const USE_CASE_BODY_STARTERS: string[] = [
+  "who", "when", "what", "why",
+  "userStep", "systemResponse",
+];
+
 // ── Constraint keyword blocklist ────────────────────────────────────────────
 
 const CONSTRAINT_BLOCKLIST = new Set([
@@ -692,6 +707,22 @@ export function buildSemanticCompletionItems(
       }
     }
     return items;
+  }
+
+  // Structured userStory body — curated tag starters only.
+  if (symbolKinds === "userstory_body") {
+    return USER_STORY_BODY_STARTERS.map((kw) => ({
+      label: kw,
+      kind: CompletionItemKind.Keyword,
+    }));
+  }
+
+  // Structured useCase body — userStoryTags plus useCaseStep starters.
+  if (symbolKinds === "usecase_body") {
+    return USE_CASE_BODY_STARTERS.map((kw) => ({
+      label: kw,
+      kind: CompletionItemKind.Keyword,
+    }));
   }
 
   // implementsReq scope — symbol-only, no keywords/operators. The req_implementation

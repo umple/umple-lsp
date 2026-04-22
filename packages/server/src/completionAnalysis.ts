@@ -69,7 +69,7 @@ export interface CompletionInfo {
   /** Operators the parser expects at this position. */
   operators: string[];
   /** Which symbol kinds to offer, or null for none. */
-  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "trace_state" | "trace_method" | "trace_state_method" | "trace_attribute" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | "top_level" | "class_body" | "trait_body" | "interface_body" | "assoc_class_body" | "mixset_body" | "statemachine_body" | "state_body" | "filter_body" | "transition_target" | null;
+  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "trace_state" | "trace_method" | "trace_state_method" | "trace_attribute" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | "top_level" | "class_body" | "trait_body" | "interface_body" | "assoc_class_body" | "mixset_body" | "statemachine_body" | "state_body" | "filter_body" | "transition_target" | "userstory_body" | "usecase_body" | null;
   /** True if cursor is at a definition-name position (suppress all). */
   isDefinitionName: boolean;
   /** True if cursor is inside a comment. */
@@ -284,6 +284,51 @@ export function analyzeCompletion(
       }
       if (n.type === "class_definition" || n.type === "source_file") break;
       n = n.parent;
+    }
+  }
+
+  // --- Structured req body: slot-ready starter completion ---
+  // The completions.scm query can't distinguish "cursor between tags" (slot-
+  // ready for a new tag/step) from "cursor in the middle of free-text prose"
+  // — both are inside req_user_story_body / req_use_case_body. Default is
+  // suppress; opt in positively only when prevLeaf tells us we're at a true
+  // slot boundary:
+  //   1. prevLeaf is `{` whose parent is the requirement_definition itself —
+  //      empty body, ready for the first tag/step.
+  //   2. prevLeaf is `}` that closed a complete tag or step — ready for the
+  //      next sibling tag/step inside the same structured body.
+  // Prose positions (preceded by free-text word/punct or the opening `{` of a
+  // tag body) stay suppressed.
+  const STRUCTURED_SLOT_CLOSERS = new Set([
+    "req_who_tag", "req_when_tag", "req_what_tag", "req_why_tag",
+    "req_user_step", "req_system_response",
+  ]);
+  const structuredLanguageToScope = (lang: string | undefined) => {
+    if (lang === "userStory" || lang === "userstory") return "userstory_body" as const;
+    if (lang === "useCase"  || lang === "usecase")    return "usecase_body"  as const;
+    return undefined;
+  };
+  if (prevLeaf?.type === "{" && prevLeaf.parent?.type === "requirement_definition") {
+    // Only fire if the body is empty or starts with a tag/step — if it leads
+    // with free text (prose starting after the brace), stay suppressed.
+    const bodyNode = prevLeaf.parent.childForFieldName("body");
+    const firstChild = bodyNode?.namedChild(0);
+    const bodyStartsWithProse =
+      firstChild?.type === "req_free_text_word" ||
+      firstChild?.type === "req_free_text_punct";
+    if (!bodyStartsWithProse) {
+      const langNode = prevLeaf.parent.childForFieldName("language");
+      const scope = structuredLanguageToScope(langNode?.text);
+      if (scope) symbolKinds = scope;
+    }
+  } else if (prevLeaf?.type === "}" && prevLeaf.parent && STRUCTURED_SLOT_CLOSERS.has(prevLeaf.parent.type)) {
+    // Walk up to the enclosing requirement_definition to read the language.
+    let walk: SyntaxNode | null = prevLeaf.parent.parent ?? null;
+    while (walk && walk.type !== "requirement_definition") walk = walk.parent;
+    if (walk) {
+      const langNode = walk.childForFieldName("language");
+      const scope = structuredLanguageToScope(langNode?.text);
+      if (scope) symbolKinds = scope;
     }
   }
 
@@ -637,6 +682,8 @@ function resolveCompletionScope(
   if (kindStr === "state_body") return "state_body";
   if (kindStr === "filter_body") return "filter_body";
   if (kindStr === "transition_target") return "transition_target";
+  if (kindStr === "userstory_body") return "userstory_body";
+  if (kindStr === "usecase_body") return "usecase_body";
   if (kindStr === "none") return null;
 
   return kindStr.split("_") as SymbolKind[];

@@ -4204,6 +4204,67 @@ const TEST_CASES: TestCase[] = [
       { type: "hover_output", at: "def_other",    expectContains: ["OtherReq"] },
     ],
   },
+
+  // 128: Topic 039 / item 1 — structured req body keyword completion.
+  // userStory body offers who/when/what/why; useCase body adds
+  // userStep/systemResponse. Free-text content, tag bodies, step bodies,
+  // and plain req bodies stay quiet.
+  {
+    name: "128 req_body_keyword_completion: structured req body starters + quiet boundaries",
+    fixtures: ["128_req_body_keyword_completion.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "128_req_body_keyword_completion.ump" },
+
+      // Empty userStory body → exactly 4 starters, no junk.
+      { type: "completion_kinds",   at: "us_blank", expect: "userstory_body" },
+      { type: "completion_includes", at: "us_blank", expect: ["who", "when", "what", "why"] },
+      { type: "completion_excludes", at: "us_blank", expect: [
+        "userStep", "systemResponse",
+        "class", "trait", "namespace", "ERROR",
+      ]},
+
+      // Empty useCase body → all 6 starters.
+      { type: "completion_kinds",   at: "uc_blank", expect: "usecase_body" },
+      { type: "completion_includes", at: "uc_blank", expect: [
+        "who", "when", "what", "why", "userStep", "systemResponse",
+      ]},
+      { type: "completion_excludes", at: "uc_blank", expect: [
+        "class", "trait", "namespace", "ERROR",
+      ]},
+
+      // Cursor AFTER an existing tag still offers starters.
+      { type: "completion_kinds",    at: "us_after_tag", expect: "userstory_body" },
+      { type: "completion_includes", at: "us_after_tag", expect: ["who", "when", "what", "why"] },
+
+      // Cursor AFTER an existing step still offers starters.
+      { type: "completion_kinds",    at: "uc_after_step", expect: "usecase_body" },
+      { type: "completion_includes", at: "uc_after_step", expect: [
+        "who", "when", "what", "why", "userStep", "systemResponse",
+      ]},
+
+      // Plain req body remains suppressed (legacy behavior, no regression).
+      { type: "completion_kinds", at: "plain_blank", expect: "suppress" },
+
+      // Inside a tag body → suppressed (free-text content).
+      { type: "completion_kinds", at: "tag_inner", expect: "suppress" },
+
+      // Inside a step body → suppressed.
+      { type: "completion_kinds", at: "step_inner", expect: "suppress" },
+
+      // NEGATIVE: cursor in the middle of free-text prose must NOT offer starters.
+      // Between two words mid-sentence in a useCase body.
+      { type: "completion_kinds", at: "uc_prose_mid", expect: "suppress" },
+      // End of a prose sentence in a useCase body.
+      { type: "completion_kinds", at: "uc_prose_end", expect: "suppress" },
+      // Middle of prose in a userStory body.
+      { type: "completion_kinds", at: "us_prose_mid", expect: "suppress" },
+      // Immediately after `{` when content on the same line is prose.
+      { type: "completion_kinds", at: "uc_prose_start", expect: "suppress" },
+
+      // Boundary: top-level immediately after the last req closes.
+      { type: "completion_kinds", at: "top_boundary", expect: "top_level" },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

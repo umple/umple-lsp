@@ -1,0 +1,43 @@
+// Phase 039 item 1 — structured req body completion scope.
+// Covers userStory / useCase starter offers and confirms free-text /
+// tag-content / plain bodies stay quiet.
+
+req US_BLANK userStory {
+  /*@us_blank*/
+}
+
+req UC_BLANK useCase {
+  /*@uc_blank*/
+}
+
+req US_AFTER_TAG userStory {
+  who { customer }
+  /*@us_after_tag*/
+}
+
+req UC_AFTER_STEP useCase {
+  userStep 1 { select item }
+  /*@uc_after_step*/
+}
+
+req R_PLAIN {
+  /*@plain_blank*/
+}
+
+req US_TAG_INNER userStory {
+  who { /*@tag_inner*/ }
+}
+
+req UC_STEP_INNER useCase {
+  userStep 1 { /*@step_inner*/ }
+}
+
+// Negative: prose inside a structured body must NOT offer starters.
+req UC_PROSE_MID useCase { Customer /*@uc_prose_mid*/checks out the cart }
+
+req UC_PROSE_END useCase { Customer checks out /*@uc_prose_end*/ }
+
+req US_PROSE_MID userStory { As a customer /*@us_prose_mid*/ I want to reset my password }
+
+req UC_PROSE_START useCase { /*@uc_prose_start*/Customer checks out }
+/*@top_boundary*/

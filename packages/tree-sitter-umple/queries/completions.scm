@@ -27,7 +27,17 @@
 (source_file) @scope.top_level
 (mixset_definition) @scope.mixset_body
 (statemachine_definition) @scope.statemachine_body
+; All requirement body positions default to suppress. Structured
+; userStory / useCase starter completion is opt-in via an explicit
+; slot-ready detector in completionAnalysis.ts — see the prevLeaf
+; fallback there. Doing it at the analyzer layer keeps free-text /
+; prose positions quiet (the query can't distinguish "inside prose"
+; from "between tags" just from containment — both are inside the same
+; req_user_story_body / req_use_case_body node).
 (requirement_definition) @scope.suppress
+; Tag body contents (`who { ... }`, `userStep 1 { ... }`, etc.) stay
+; opaque — arbitrary compiler-side text lives here.
+(req_tag_content) @scope.suppress
 ; Suppress completions inside require body (opaque content)
 (require_body) @scope.suppress
 ; filter blocks: curated filter-statement starters…
