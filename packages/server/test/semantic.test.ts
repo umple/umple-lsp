@@ -107,6 +107,8 @@ type Assertion =
   | TokenContextAssertion
   | HoverOutputAssertion
   | HoverExcludesAssertion
+  | RenameEditsAssertion
+  | RenameRejectedAssertion
   | DocumentSymbolsAssertion
   | FormatOutputAssertion
   | FormatOutputWithOptionsAssertion
@@ -185,6 +187,25 @@ interface HoverExcludesAssertion {
   type: "hover_excludes";
   at: string;
   expect: string[];
+}
+
+interface RenameEditsAssertion {
+  type: "rename_edits";
+  at: string;
+  newName: string;
+  // Marker names whose positions must appear in the rename edit set.
+  expectAt: string[];
+  // Optional count check — total edits must equal this number.
+  expectCount?: number;
+}
+
+interface RenameRejectedAssertion {
+  type: "rename_rejected";
+  at: string;
+  newName: string;
+  // Reason the rename pipeline must reject: most often "invalid-name" for
+  // kind-aware validator regressions, but any rename helper status works.
+  reason: "no-symbol" | "not-renameable" | "ambiguous" | "invalid-name";
 }
 
 interface DocumentSymbolsAssertion {
@@ -4265,6 +4286,118 @@ const TEST_CASES: TestCase[] = [
       { type: "completion_kinds", at: "top_boundary", expect: "top_level" },
     ],
   },
+
+  // 129: Phase 039 / item 2 — rename for requirement kind.
+  // Exercises rename on normal / numeric-leading / hyphenated req ids,
+  // decomposition, and updates across every C1 implementsReq context.
+  // Also pins the kind-aware new-name validator that rejects identifier-only
+  // characters for requirement renames.
+  {
+    name: "129 req_rename: requirement kind renameable with req-id validator; updates every implementsReq context",
+    fixtures: ["129_req_rename.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "129_req_rename.ump" },
+
+      // Normal req id: R01 renamed; updates class-body and top-level uses.
+      {
+        type: "rename_edits",
+        at: "def_r01",
+        newName: "R01x",
+        expectAt: ["def_r01", "use_r01_top", "use_r01_class"],
+        expectCount: 3,
+      },
+
+      // Numeric-leading id: 001dealing renamed to 002dealing.
+      {
+        type: "rename_edits",
+        at: "def_numeric",
+        newName: "002dealing",
+        expectAt: ["def_numeric", "use_numeric"],
+        expectCount: 2,
+      },
+
+      // Hyphenated id: L01-LicenseTypes renamed to L02-LicenseTypes.
+      {
+        type: "rename_edits",
+        at: "def_hyphen",
+        newName: "L02-LicenseTypes",
+        expectAt: ["def_hyphen", "use_hyphen"],
+        expectCount: 2,
+      },
+
+      // implementsReq use sites can seed the rename too (same resolution).
+      {
+        type: "rename_edits",
+        at: "use_r01_class",
+        newName: "RAlpha",
+        expectAt: ["def_r01", "use_r01_top", "use_r01_class"],
+        expectCount: 3,
+      },
+
+      // C1 context: rename from a state-machine-body implementsReq site.
+      {
+        type: "rename_edits",
+        at: "use_smr",
+        newName: "R_SM2",
+        expectAt: ["def_smr", "use_smr"],
+        expectCount: 2,
+      },
+
+      // C1 context: rename from a state-body implementsReq site.
+      {
+        type: "rename_edits",
+        at: "use_stater",
+        newName: "R_STATE2",
+        expectAt: ["def_stater", "use_stater"],
+        expectCount: 2,
+      },
+
+      // C1 context: rename from an association-block implementsReq site.
+      {
+        type: "rename_edits",
+        at: "use_assocr",
+        newName: "R_ASSOC2",
+        expectAt: ["def_assocr", "use_assocr"],
+        expectCount: 2,
+      },
+
+      // Decomposition: implementsReq before a following `req` updates correctly.
+      {
+        type: "rename_edits",
+        at: "def_high",
+        newName: "HighLevel2",
+        expectAt: ["def_high", "use_high_decomp"],
+        expectCount: 2,
+      },
+      {
+        type: "rename_edits",
+        at: "use_high_decomp",
+        newName: "HighRenamed",
+        expectAt: ["def_high", "use_high_decomp"],
+        expectCount: 2,
+      },
+
+      // C1 context: rename from an implementsReq inside a top-level
+      // `statemachine_definition` body (statemachine TopSM { implementsReq ...; ... }).
+      {
+        type: "rename_edits",
+        at: "use_topsm",
+        newName: "R_TOPSM2",
+        expectAt: ["def_topsm", "use_topsm"],
+        expectCount: 2,
+      },
+
+      // Invalid new names rejected by the req-specific validator.
+      // Hyphens + digit-leading are LEGAL for req ids, so the usual
+      // identifier rejections don't apply — instead probe rules that even
+      // the req-id regex disallows.
+      { type: "rename_rejected", at: "def_r01", newName: "",              reason: "invalid-name" }, // empty
+      { type: "rename_rejected", at: "def_r01", newName: "-leadingHyphen", reason: "invalid-name" }, // leading hyphen
+      { type: "rename_rejected", at: "def_r01", newName: "has space",      reason: "invalid-name" }, // whitespace
+      { type: "rename_rejected", at: "def_r01", newName: "bad@char",       reason: "invalid-name" }, // @ not allowed
+      { type: "rename_rejected", at: "def_r01", newName: "dot.inside",     reason: "invalid-name" }, // . not allowed
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────
@@ -4898,6 +5031,61 @@ function runAssertion(
           message: `hover_excludes @${assertion.at}: did not expect "${unexpected}" in hover, got: ${markdown.substring(0, 200)}`,
         };
       }
+    }
+    return { ok: true, message: "" };
+  }
+
+  if (assertion.type === "rename_edits") {
+    const src = findMarker(assertion.at);
+    if (!src) return { ok: false, message: `marker @${assertion.at} not found` };
+    const result = helper.renameAt(
+      src.filePath, src.content, src.pos.line, src.pos.col,
+      assertion.newName, reachable,
+    );
+    if (result.status !== "ok") {
+      return {
+        ok: false,
+        message: `rename_edits @${assertion.at} newName="${assertion.newName}": expected status=ok, got ${result.status}`,
+      };
+    }
+    if (assertion.expectCount !== undefined && result.edits.length !== assertion.expectCount) {
+      return {
+        ok: false,
+        message: `rename_edits @${assertion.at}: expected ${assertion.expectCount} edits, got ${result.edits.length}`,
+      };
+    }
+    for (const markerName of assertion.expectAt) {
+      const target = findMarker(markerName);
+      if (!target) {
+        return { ok: false, message: `rename_edits @${assertion.at}: expected marker @${markerName} not found in fixture` };
+      }
+      const hit = result.edits.some((e) =>
+        path.normalize(e.file) === target.filePath &&
+        e.line === target.pos.line &&
+        e.column === target.pos.col,
+      );
+      if (!hit) {
+        return {
+          ok: false,
+          message: `rename_edits @${assertion.at}: expected edit at @${markerName} (${target.pos.line}:${target.pos.col}), got [${result.edits.map(e => e.line + ':' + e.column).join(', ')}]`,
+        };
+      }
+    }
+    return { ok: true, message: "" };
+  }
+
+  if (assertion.type === "rename_rejected") {
+    const src = findMarker(assertion.at);
+    if (!src) return { ok: false, message: `marker @${assertion.at} not found` };
+    const result = helper.renameAt(
+      src.filePath, src.content, src.pos.line, src.pos.col,
+      assertion.newName, reachable,
+    );
+    if (result.status !== assertion.reason) {
+      return {
+        ok: false,
+        message: `rename_rejected @${assertion.at} newName="${assertion.newName}": expected status=${assertion.reason}, got ${result.status}`,
+      };
     }
     return { ok: true, message: "" };
   }

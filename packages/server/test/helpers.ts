@@ -11,6 +11,7 @@ import { SymbolIndex, SymbolEntry, SymbolKind, CompletionInfo } from "../src/sym
 import { resolveSymbolAtPosition } from "../src/resolver";
 import { buildSemanticCompletionItems } from "../src/completionBuilder";
 import { buildHoverMarkdown, buildTraitSmOpHover } from "../src/hoverBuilder";
+import { isRenameableKind, isValidNewName } from "../src/renameValidation";
 import { buildDocumentSymbolTree } from "../src/documentSymbolBuilder";
 import { expandCompactStates, computeIndentEdits, fixTransitionSpacing, fixAssociationSpacing, normalizeTopLevelBlankLines, reindentEmbeddedCode } from "../src/formatter";
 import { checkFormatSafety } from "../src/formatSafetyNet";
@@ -543,5 +544,46 @@ export class SemanticTestHelper {
     reachable: Set<string>,
   ): string[] {
     return this.si.getChildStateNames(parentPath, smContainer, reachable);
+  }
+
+  /**
+   * Simulate the server's rename pipeline (prepareRename + rename) from a
+   * cursor position. Returns:
+   *   - `no-symbol`      — resolver produced nothing
+   *   - `not-renameable` — kind is not in the renameable set
+   *   - `ambiguous`      — multiple symbols, different identities
+   *   - `invalid-name`   — newName failed the kind-aware validator
+   *   - `ok` + edits     — list of ref positions that would be renamed
+   * Uses the production resolver + findReferences, so behavior tracks
+   * server.ts 1:1 without wiring LSP transport.
+   */
+  renameAt(
+    filePath: string,
+    content: string,
+    line: number,
+    col: number,
+    newName: string,
+    reachable: Set<string>,
+  ):
+    | { status: "ok"; edits: RefLocation[] }
+    | { status: "no-symbol" | "not-renameable" | "ambiguous" | "invalid-name" } {
+    const resolved = this.resolve(filePath, content, line, col, reachable);
+    if (!resolved || resolved.symbols.length === 0) return { status: "no-symbol" };
+    const kind = resolved.symbols[0].kind;
+    if (!isRenameableKind(kind)) return { status: "not-renameable" };
+    // Same identity check as server.isUnambiguousRename for the top-level
+    // mergeable kinds we care about here (requirement is same-name = same).
+    const baseName = resolved.symbols[0].name;
+    if (!resolved.symbols.every((s: SymbolEntry) => s.kind === kind && s.name === baseName)) {
+      return { status: "ambiguous" };
+    }
+    if (!isValidNewName(kind, newName)) return { status: "invalid-name" };
+
+    // Run find-references with the resolved declaration set — same pipeline
+    // as refs assertions.
+    const edits = this.si
+      .findReferences(resolved.symbols, reachable, true)
+      .map((r: any) => ({ file: r.file, line: r.line, column: r.column }));
+    return { status: "ok", edits };
   }
 }

@@ -40,6 +40,7 @@ import {
   symbolKindToCompletionKind,
 } from "./completionBuilder";
 import { buildHoverMarkdown, buildTraitSmOpHover } from "./hoverBuilder";
+import { isRenameableKind, isValidNewName } from "./renameValidation";
 import { resolveTraitSmEventLocations } from "./traitSmEventResolver";
 import { buildDocumentSymbolTree } from "./documentSymbolBuilder";
 import {
@@ -866,18 +867,9 @@ connection.onReferences(async (params) => {
 
 // ── Rename ───────────────────────────────────────────────────────────────────
 
-const RENAMEABLE_KINDS = new Set<UmpleSymbolKind>([
-  "class",
-  "interface",
-  "trait",
-  "enum",
-  "mixset",
-  "attribute",
-  "const",
-  "state",
-  "statemachine",
-  "tracecase",
-]);
+// RENAMEABLE_KINDS and the new-name regex live in `renameValidation.ts` so
+// the semantic test harness can exercise the same rules without importing
+// LSP transport types.
 
 function isUnambiguousRename(symbols: SymbolEntry[]): boolean {
   if (symbols.length <= 1) return symbols.length === 1;
@@ -937,7 +929,7 @@ connection.onPrepareRename(async (params) => {
   }
 
   // Kind must be in the renameable set
-  if (!RENAMEABLE_KINDS.has(resolved.symbols[0].kind)) return null;
+  if (!isRenameableKind(resolved.symbols[0].kind)) return null;
 
   // Identity must be unambiguous
   if (!isUnambiguousRename(resolved.symbols)) return null;
@@ -967,10 +959,9 @@ connection.onRenameRequest(async (params) => {
   const docPath = getDocumentFilePath(document);
   if (!docPath) return null;
 
-  // Validate new name is a legal identifier
-  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(params.newName)) return null;
-
-  // 1. Full semantic resolution (same checks as prepareRename)
+  // 1. Full semantic resolution (same checks as prepareRename).
+  //    Do this BEFORE validating the new name so the name rule can be
+  //    kind-aware — req ids use a different regex than normal identifiers.
   const resolved = resolveSymbolAtPosition(
     docPath,
     document.getText(),
@@ -982,8 +973,11 @@ connection.onRenameRequest(async (params) => {
   // Block rename on recovered symbols (cold-open error tolerance)
   if (resolved.symbols.some((s) => s.recovered)) return null;
 
-  if (!RENAMEABLE_KINDS.has(resolved.symbols[0].kind)) return null;
+  if (!isRenameableKind(resolved.symbols[0].kind)) return null;
   if (!isUnambiguousRename(resolved.symbols)) return null;
+
+  // Validate new name against the kind-specific rule.
+  if (!isValidNewName(resolved.symbols[0].kind, params.newName)) return null;
 
   // Check workspace use-graph readiness for the DECLARATION files' roots.
   // Rename must not return partial WorkspaceEdits — if any declaration's

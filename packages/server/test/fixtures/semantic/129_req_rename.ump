@@ -1,0 +1,54 @@
+// Phase 039 item 2 — rename for requirement kind.
+// Covers: normal / numeric-leading / hyphenated req ids, implementsReq uses
+// across the contexts we added in C1 (class body, state body, association
+// block, state machine body, top-level), the decomposition case, and
+// invalid-new-name rejection via the req-specific validator.
+
+req /*@def_r01*/R01 text { Normal req id }
+req /*@def_numeric*/001dealing text { Numeric-leading req id }
+req /*@def_hyphen*/L01-LicenseTypes text { Hyphenated req id }
+req /*@def_high*/HighLevel text { Decomposition target }
+req /*@def_smr*/R_SM text { Req used inside a state machine }
+req /*@def_stater*/R_STATE text { Req used inside a state }
+req /*@def_assocr*/R_ASSOC text { Req used inside an association block }
+
+// Top-level implementsReq uses (pre-existing).
+implementsReq /*@use_r01_top*/R01;
+class /*@def_game*/Game {
+  // Class-body implementsReq use.
+  implementsReq /*@use_r01_class*/R01;
+  // Multi-use and numeric / hyphenated ids.
+  implementsReq /*@use_numeric*/001dealing, /*@use_hyphen*/L01-LicenseTypes;
+}
+
+// State-machine body and state body contexts added in C1.
+class Clock {
+  tick {
+    implementsReq /*@use_smr*/R_SM;
+    On {
+      implementsReq /*@use_stater*/R_STATE;
+      e -> Off;
+    }
+    Off { e -> On; }
+  }
+}
+
+// Association-block context added in C1.
+class A1 {}
+class A2 {}
+association {
+  implementsReq /*@use_assocr*/R_ASSOC;
+  * A1 -- * A2;
+}
+
+// Decomposition: implementsReq attaches HighLevel to the following req.
+implementsReq /*@use_high_decomp*/HighLevel;
+req /*@def_detailed*/Detailed text { Refines HighLevel }
+
+// C1 context: implementsReq inside a top-level `statemachine_definition` body.
+req /*@def_topsm*/R_TOPSM text { Req used inside a top-level statemachine }
+statemachine TopSM {
+  implementsReq /*@use_topsm*/R_TOPSM;
+  On { -> Off; }
+  Off {}
+}
