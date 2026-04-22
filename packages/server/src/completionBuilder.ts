@@ -207,6 +207,17 @@ const USE_CASE_BODY_STARTERS: string[] = [
   "userStep", "systemResponse",
 ];
 
+// Practical right-multiplicity starters for `<mult> -> |` and `<mult> -- |`
+// inside a class-like body. Covers the overwhelming majority of Umple
+// associations without promising to enumerate every legal multiplicity.
+const ASSOCIATION_MULTIPLICITY_STARTERS: string[] = [
+  "1",
+  "*",
+  "0..1",
+  "1..*",
+  "0..*",
+];
+
 // ── Constraint keyword blocklist ────────────────────────────────────────────
 
 const CONSTRAINT_BLOCKLIST = new Set([
@@ -715,6 +726,37 @@ export function buildSemanticCompletionItems(
       label: kw,
       kind: CompletionItemKind.Keyword,
     }));
+  }
+
+  // Partial inline association — right-multiplicity slot after the arrow
+  // (e.g. `1 -> |`). Curated multiplicities only; no class-body junk.
+  if (symbolKinds === "association_multiplicity") {
+    return ASSOCIATION_MULTIPLICITY_STARTERS.map((m) => ({
+      label: m,
+      kind: CompletionItemKind.Value,
+      detail: "multiplicity",
+    }));
+  }
+
+  // Partial inline association — right-type slot after the right multiplicity
+  // (e.g. `1 -> * |`). Offer class symbols only, no keywords.
+  if (symbolKinds === "association_type") {
+    const atItems: CompletionItem[] = [];
+    const atSeen = new Set<string>();
+    const classes = symbolIndex
+      .getSymbols({ kind: "class" })
+      .filter((s) => reachableFiles.has(path.normalize(s.file)));
+    for (const sym of classes) {
+      if (!atSeen.has(sym.name)) {
+        atSeen.add(sym.name);
+        atItems.push({
+          label: sym.name,
+          kind: symbolKindToCompletionKind("class"),
+          detail: "class",
+        });
+      }
+    }
+    return atItems;
   }
 
   // Structured useCase body — userStoryTags plus useCaseStep starters.

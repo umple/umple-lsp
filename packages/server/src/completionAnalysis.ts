@@ -69,7 +69,7 @@ export interface CompletionInfo {
   /** Operators the parser expects at this position. */
   operators: string[];
   /** Which symbol kinds to offer, or null for none. */
-  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "trace_state" | "trace_method" | "trace_state_method" | "trace_attribute" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | "top_level" | "class_body" | "trait_body" | "interface_body" | "assoc_class_body" | "mixset_body" | "statemachine_body" | "state_body" | "filter_body" | "transition_target" | "userstory_body" | "usecase_body" | null;
+  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "trace_state" | "trace_method" | "trace_state_method" | "trace_attribute" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | "top_level" | "class_body" | "trait_body" | "interface_body" | "assoc_class_body" | "mixset_body" | "statemachine_body" | "state_body" | "filter_body" | "transition_target" | "userstory_body" | "usecase_body" | "association_multiplicity" | "association_type" | null;
   /** True if cursor is at a definition-name position (suppress all). */
   isDefinitionName: boolean;
   /** True if cursor is inside a comment. */
@@ -284,6 +284,112 @@ export function analyzeCompletion(
       }
       if (n.type === "class_definition" || n.type === "source_file") break;
       n = n.parent;
+    }
+  }
+
+  // --- Partial inline association completion ---
+  // While the user is mid-typing an association inside a class-like body:
+  //   `1 -> |`       → ERROR wraps (multiplicity)(arrow) — offer a right-
+  //                    multiplicity curated list (1 / * / 0..1 / 1..* / 0..*).
+  //   `1 -> * |`     → ERROR wraps (multiplicity)(arrow)(multiplicity) — offer
+  //                    class symbols for the right_type slot.
+  // Once the user starts typing the type identifier the parser forms a full
+  // `association_inline`, and the existing (association_inline) @scope.* in
+  // completions.scm takes over. This fallback only fires while the partial is
+  // still an ERROR node.
+  //
+  // Detection inspects the ERROR's child shape rather than pattern-matching
+  // on prevLeaf.parent — the arrow may or may not be wrapped in a named
+  // `arrow` node depending on the enclosing rule (class_definition uses
+  // $.arrow, association_definition doesn't), and prevLeaf can land inside a
+  // multiplicity token or on the multiplicity node itself depending on width.
+  {
+    const CLASS_LIKE_ASSOC_CONTAINERS = new Set<string>([
+      "class_definition", "trait_definition", "interface_definition",
+      "association_class_definition", "mixset_definition",
+      "association_definition",
+    ]);
+    const ASSOC_SM_STOPS = new Set<string>([
+      "state_machine", "statemachine_definition", "state", "transition",
+    ]);
+
+    const enclosingIsClassLike = (node: SyntaxNode | null): boolean => {
+      let n = node;
+      while (n) {
+        if (ASSOC_SM_STOPS.has(n.type)) return false;
+        if (CLASS_LIKE_ASSOC_CONTAINERS.has(n.type)) return true;
+        if (n.type === "source_file") return false;
+        n = n.parent;
+      }
+      return false;
+    };
+
+    const findEnclosingError = (n: SyntaxNode | null): SyntaxNode | null => {
+      while (n) {
+        if (n.type === "ERROR") return n;
+        n = n.parent;
+      }
+      return null;
+    };
+
+    const errorNode = prevLeaf ? findEnclosingError(prevLeaf) : null;
+    if (prevLeaf && errorNode && enclosingIsClassLike(errorNode)) {
+      // Anchor classification on prevLeaf's position within the ERROR's non-
+      // extras children. Multiple in-progress associations in the same block
+      // (`association { 1 ->\n 1 -> *\n 0..1 -> 1..* }`) collapse into one
+      // sprawling ERROR; we cannot rely on "the ERROR has shape X". Instead:
+      //
+      //   1. Find the child that contains prevLeaf.
+      //   2. If that child IS an arrow → slot 1 (right-multiplicity), as long
+      //      as any mult-like token appears before it in the same ERROR.
+      //   3. Otherwise, walk backward from prevLeaf's child to find the
+      //      nearest arrow. If one exists AND a mult-like appears before it,
+      //      we're in slot 2 (right-type).
+      //
+      // `mightBeMult` is intentionally lenient: the cascade parse surfaces
+      // multiplicity-shaped content as `multiplicity`, `*`, `..`, digit-
+      // leading `identifier`, or `req_free_text_punct` (leaked from the req
+      // grammar). All count as evidence a user is typing an association.
+      // Letter-leading identifiers DON'T count, so `e ->` in class body
+      // (attribute-shaped, no multiplicity) stays on class_body.
+      const isArrow = (c: SyntaxNode) => c.type === "arrow" || c.type === "->";
+      const mightBeMult = (c: SyntaxNode) =>
+        c.type === "multiplicity" ||
+        c.type === "*" ||
+        c.type === ".." ||
+        c.type === "req_free_text_punct" ||
+        /^[0-9]/.test(c.text);
+
+      const children: SyntaxNode[] = [];
+      for (let i = 0; i < errorNode.childCount; i++) {
+        const c = errorNode.child(i);
+        if (c && !c.isExtra) children.push(c);
+      }
+
+      let prevIdx = -1;
+      for (let i = children.length - 1; i >= 0; i--) {
+        const c = children[i];
+        if (c.startIndex <= prevLeaf.startIndex && prevLeaf.endIndex <= c.endIndex) {
+          prevIdx = i;
+          break;
+        }
+      }
+
+      if (prevIdx >= 0) {
+        if (isArrow(children[prevIdx])) {
+          if (children.slice(0, prevIdx).some(mightBeMult)) {
+            symbolKinds = "association_multiplicity";
+          }
+        } else {
+          let arrowIdx = -1;
+          for (let i = prevIdx - 1; i >= 0; i--) {
+            if (isArrow(children[i])) { arrowIdx = i; break; }
+          }
+          if (arrowIdx >= 0 && children.slice(0, arrowIdx).some(mightBeMult)) {
+            symbolKinds = "association_type";
+          }
+        }
+      }
     }
   }
 
@@ -684,6 +790,8 @@ function resolveCompletionScope(
   if (kindStr === "transition_target") return "transition_target";
   if (kindStr === "userstory_body") return "userstory_body";
   if (kindStr === "usecase_body") return "usecase_body";
+  if (kindStr === "association_multiplicity") return "association_multiplicity";
+  if (kindStr === "association_type") return "association_type";
   if (kindStr === "none") return null;
 
   return kindStr.split("_") as SymbolKind[];

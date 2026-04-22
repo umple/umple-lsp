@@ -1,0 +1,40 @@
+// Phase 042 — partial association slot probes. Fixture intentionally has
+// ERROR nodes where the parser's mid-way through an association. Declaration
+// types live in 130_assoc_partial_completion.ump (imported via use below).
+
+use "130_assoc_partial_completion.ump";
+
+class ClassBodyAfterArrow {
+  1 -> /*@class_body_after_arrow*/
+}
+
+class ClassBodyAfterRightMult {
+  1 -> * /*@class_body_after_right_mult*/
+}
+
+class ClassBodyAfterRangeMult {
+  0..1 -> 1..* /*@class_body_after_range_mult*/
+}
+
+class ClassBodyDashVariant {
+  1 -- * /*@class_body_dash_variant*/
+}
+
+// state body with `e -> |` must remain a transition_target, not association.
+class NegState {
+  status {
+    S1 {
+      e -> /*@state_body_arrow*/
+    }
+    S2 {}
+  }
+}
+
+// Top-level `association { ... }` block — mixed inline-partial associations
+// cascade into one sprawling ERROR, which is the shape codex's bug repro hit.
+// All three cursors must still route correctly.
+association {
+  1 -> /*@assoc_block_after_arrow*/
+  1 -> * /*@assoc_block_after_right_mult*/
+  0..1 -> 1..* /*@assoc_block_after_range_mult*/
+}

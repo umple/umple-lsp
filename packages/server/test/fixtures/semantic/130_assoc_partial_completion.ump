@@ -1,0 +1,16 @@
+// Phase 042 — partial inline association completion.
+// While the user is mid-typing a `<mult> -> <mult> <Type>` association inside
+// a class-like body, tree-sitter produces an ERROR until the type identifier
+// starts. This fixture pins the two slot-specific scopes surfaced before the
+// parser recovers into a full `association_inline`.
+//
+// The fixture contains *completed* associations so everything parses clean;
+// the `parse_has_error`-style slot probes live in 130b below.
+
+class Other {}
+class Thing {}
+class C {
+  1 -> * Other;
+  /*@class_body_empty*/
+}
+/*@top_boundary*/

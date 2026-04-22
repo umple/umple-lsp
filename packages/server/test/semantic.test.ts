@@ -4398,6 +4398,162 @@ const TEST_CASES: TestCase[] = [
       { type: "rename_rejected", at: "def_r01", newName: "dot.inside",     reason: "invalid-name" }, // . not allowed
     ],
   },
+
+  // 130: Phase 042 — partial inline association completion.
+  // Probes the two slot-specific scopes the completionAnalysis fallback
+  // surfaces while the parser is still inside an ERROR for a mid-typed
+  // association. Also pins the negative boundaries: class-body stays
+  // class_body when no association is being typed; state-body `e ->` still
+  // routes to transition_target, not association_multiplicity.
+  {
+    name: "130 assoc_partial_completion: multiplicity + type slot completion for partial `<mult> -> <mult>`",
+    fixtures: [
+      "130_assoc_partial_completion.ump",
+      "130b_assoc_partial_slots.ump",
+    ],
+    assertions: [
+      // Completed fixture must still parse clean — proves the completed
+      // `association_inline` path is unaffected.
+      { type: "parse_clean", fixture: "130_assoc_partial_completion.ump" },
+
+      // Neighbors in the completed fixture — class symbols must be indexed
+      // so the association_type slot has class names to offer.
+      { type: "symbol_count", fixture: "130_assoc_partial_completion.ump", name: "Other", kind: "class", expect: 1 },
+      { type: "symbol_count", fixture: "130_assoc_partial_completion.ump", name: "Thing", kind: "class", expect: 1 },
+      { type: "symbol_count", fixture: "130_assoc_partial_completion.ump", name: "C",     kind: "class", expect: 1 },
+
+      // Slot 1: right-multiplicity after the arrow.
+      {
+        type: "completion_kinds",
+        at: "class_body_after_arrow",
+        expect: "association_multiplicity",
+      },
+      {
+        type: "completion_includes",
+        at: "class_body_after_arrow",
+        expect: ["1", "*", "0..1", "1..*", "0..*"],
+      },
+      {
+        type: "completion_excludes",
+        at: "class_body_after_arrow",
+        expect: [
+          "isA", "before", "trace", "class", "trait", "mixset", "ERROR",
+          "namespace", "abstract", "singleton",
+        ],
+      },
+
+      // Slot 2: right-type after the right multiplicity.
+      {
+        type: "completion_kinds",
+        at: "class_body_after_right_mult",
+        expect: "association_type",
+      },
+      {
+        type: "completion_includes",
+        at: "class_body_after_right_mult",
+        expect: ["Other", "Thing", "C"],
+      },
+      {
+        type: "completion_excludes",
+        at: "class_body_after_right_mult",
+        expect: [
+          "isA", "before", "trace", "abstract", "class", "trait", "ERROR",
+        ],
+      },
+
+      // Ranged multiplicity (`0..1 -> 1..*`) still routes to slot 2.
+      {
+        type: "completion_kinds",
+        at: "class_body_after_range_mult",
+        expect: "association_type",
+      },
+      {
+        type: "completion_includes",
+        at: "class_body_after_range_mult",
+        expect: ["Other", "Thing"],
+      },
+
+      // `--` arrow variant behaves the same as `->` for slot 2.
+      {
+        type: "completion_kinds",
+        at: "class_body_dash_variant",
+        expect: "association_type",
+      },
+      {
+        type: "completion_includes",
+        at: "class_body_dash_variant",
+        expect: ["Other", "Thing"],
+      },
+
+      // Negative: a state-body `e -> ` must still route to transition_target,
+      // proving the association fallback doesn't leak into state machines.
+      {
+        type: "completion_kinds",
+        at: "state_body_arrow",
+        expect: "transition_target",
+      },
+
+      // Cascade — top-level `association { }` block with three partial
+      // associations collapsed into one ERROR. All three slots must still
+      // classify correctly despite the sprawling child list.
+      {
+        type: "completion_kinds",
+        at: "assoc_block_after_arrow",
+        expect: "association_multiplicity",
+      },
+      {
+        type: "completion_includes",
+        at: "assoc_block_after_arrow",
+        expect: ["1", "*", "0..1"],
+      },
+      {
+        type: "completion_excludes",
+        at: "assoc_block_after_arrow",
+        expect: ["isA", "namespace", "class", "Java", "ERROR"],
+      },
+      {
+        type: "completion_kinds",
+        at: "assoc_block_after_right_mult",
+        expect: "association_type",
+      },
+      {
+        type: "completion_includes",
+        at: "assoc_block_after_right_mult",
+        expect: ["Other", "Thing"],
+      },
+      {
+        type: "completion_excludes",
+        at: "assoc_block_after_right_mult",
+        expect: ["isA", "namespace", "class", "Java", "ERROR"],
+      },
+      {
+        type: "completion_kinds",
+        at: "assoc_block_after_range_mult",
+        expect: "association_type",
+      },
+      {
+        type: "completion_includes",
+        at: "assoc_block_after_range_mult",
+        expect: ["Other", "Thing"],
+      },
+
+      // Negative: plain class-body cursor (no association being typed) keeps
+      // the existing class_body scope — proves we didn't widen the generic
+      // fallback path.
+      {
+        type: "completion_kinds",
+        at: "class_body_empty",
+        expect: "class_body",
+      },
+
+      // Boundary: top-level unchanged past the last class.
+      {
+        type: "completion_kinds",
+        at: "top_boundary",
+        expect: "top_level",
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────
