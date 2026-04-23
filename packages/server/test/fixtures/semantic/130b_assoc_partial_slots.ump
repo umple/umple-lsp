@@ -49,3 +49,29 @@ class ClassBodyTypedPrefix {
 association {
   1 -> * O/*@assoc_block_typed_prefix*/
 }
+
+// Topic 044 — arrow slot. After the user finishes the left multiplicity but
+// before any arrow is committed, completion must offer only association
+// arrow operators. Covers blank-after-mult and partial-arrow-typed cases,
+// in both class body and association block.
+class ClassBodyArrowSlot {
+  1 /*@class_body_arrow_blank*/
+}
+
+class ClassBodyArrowPartial {
+  1 -/*@class_body_arrow_dash*/
+}
+
+class ClassBodyArrowAggregation {
+  1 <@/*@class_body_arrow_aggregation*/
+}
+
+association {
+  1 /*@assoc_block_arrow_blank*/
+}
+
+// Cascade — second association's left mult after a complete first one.
+class CascadeArrow {
+  1 -> * Other;
+  1 /*@cascade_arrow_slot*/
+}

@@ -4580,6 +4580,81 @@ const TEST_CASES: TestCase[] = [
         ],
       },
 
+      // Topic 044: arrow slot. Cursor sits between the left multiplicity and
+      // the arrow operator. Must offer only the curated arrow set; no
+      // class-body junk, no `ERROR`.
+      {
+        type: "completion_kinds",
+        at: "class_body_arrow_blank",
+        expect: "association_arrow",
+      },
+      {
+        type: "completion_includes",
+        at: "class_body_arrow_blank",
+        expect: ["--", "->", "<-", "<@>-", "-<@>", ">->", "<-<"],
+      },
+      {
+        type: "completion_excludes",
+        at: "class_body_arrow_blank",
+        expect: [
+          "isA", "before", "trace", "abstract", "namespace", "Java",
+          "ERROR", "class", "trait", "mixset",
+        ],
+      },
+
+      // Partial-arrow typed (`1 -|`) — same scope, prefix-filtered by editor.
+      {
+        type: "completion_kinds",
+        at: "class_body_arrow_dash",
+        expect: "association_arrow",
+      },
+      {
+        type: "completion_includes",
+        at: "class_body_arrow_dash",
+        expect: ["--", "->"],
+      },
+
+      // Aggregation partial (`1 <@|`) lands in the same scope.
+      {
+        type: "completion_kinds",
+        at: "class_body_arrow_aggregation",
+        expect: "association_arrow",
+      },
+
+      // Top-level association block — same arrow slot.
+      {
+        type: "completion_kinds",
+        at: "assoc_block_arrow_blank",
+        expect: "association_arrow",
+      },
+      {
+        type: "completion_includes",
+        at: "assoc_block_arrow_blank",
+        expect: ["--", "->", "<@>-"],
+      },
+
+      // Cascade — second association's left mult after a complete first one
+      // (delimited by `;`). Must still classify as arrow slot, not pick up
+      // the prior association's arrow.
+      {
+        type: "completion_kinds",
+        at: "cascade_arrow_slot",
+        expect: "association_arrow",
+      },
+      {
+        type: "completion_includes",
+        at: "cascade_arrow_slot",
+        expect: ["->", "--"],
+      },
+      {
+        type: "completion_excludes",
+        at: "cascade_arrow_slot",
+        expect: [
+          "isA", "namespace", "Java", "ERROR", "class", "trait",
+          "Other",  // prior right_type must NOT bleed in
+        ],
+      },
+
       // Negative: plain class-body cursor (no association being typed) keeps
       // the existing class_body scope — proves we didn't widen the generic
       // fallback path.

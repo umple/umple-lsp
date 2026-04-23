@@ -69,7 +69,7 @@ export interface CompletionInfo {
   /** Operators the parser expects at this position. */
   operators: string[];
   /** Which symbol kinds to offer, or null for none. */
-  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "trace_state" | "trace_method" | "trace_state_method" | "trace_attribute" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | "top_level" | "class_body" | "trait_body" | "interface_body" | "assoc_class_body" | "mixset_body" | "statemachine_body" | "state_body" | "filter_body" | "transition_target" | "userstory_body" | "usecase_body" | "association_multiplicity" | "association_type" | "association_typed_prefix" | null;
+  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "trace_state" | "trace_method" | "trace_state_method" | "trace_attribute" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | "top_level" | "class_body" | "trait_body" | "interface_body" | "assoc_class_body" | "mixset_body" | "statemachine_body" | "state_body" | "filter_body" | "transition_target" | "userstory_body" | "usecase_body" | "association_multiplicity" | "association_type" | "association_typed_prefix" | "association_arrow" | null;
   /** True if cursor is at a definition-name position (suppress all). */
   isDefinitionName: boolean;
   /** True if cursor is inside a comment. */
@@ -376,25 +376,48 @@ export function analyzeCompletion(
       }
 
       if (prevIdx >= 0) {
-        if (isArrow(children[prevIdx])) {
-          if (children.slice(0, prevIdx).some(mightBeMult)) {
+        // All slot detection is segment-bounded. The segment is the range of
+        // children since the last `;` boundary up to and including prevIdx —
+        // i.e. the current association attempt only. Without this, cascades
+        // in `association { 1 -> * Other; 1 |}` would inherit the prior
+        // association's arrow and misclassify the new left-mult as slot 2.
+        let segStart = 0;
+        for (let i = prevIdx - 1; i >= 0; i--) {
+          if (children[i].type === ";") { segStart = i + 1; break; }
+        }
+        const segment = children.slice(segStart, prevIdx + 1);
+        const segArrowIdxInSeg = segment.findIndex(isArrow);
+        const prevInSeg = segment.length - 1; // prevIdx in segment terms
+
+        if (isArrow(segment[prevInSeg])) {
+          // Slot 1: cursor IS an arrow → right-multiplicity slot.
+          if (segment.slice(0, prevInSeg).some(mightBeMult)) {
             symbolKinds = "association_multiplicity";
           }
+        } else if (segArrowIdxInSeg >= 0
+                   && segment.slice(0, segArrowIdxInSeg).some(mightBeMult)) {
+          // Slot 2: arrow appears before prevLeaf in the segment → right-type
+          // slot. typed-prefix vs blank-multiplicity disambiguation matches
+          // topic 043's heuristic.
+          const child = segment[prevInSeg];
+          const isLetterLeadingId =
+            child.type === "identifier" && /^[A-Za-z_]/.test(child.text);
+          symbolKinds = isLetterLeadingId
+            ? "association_typed_prefix"
+            : "association_type";
         } else {
-          let arrowIdx = -1;
-          for (let i = prevIdx - 1; i >= 0; i--) {
-            if (isArrow(children[i])) { arrowIdx = i; break; }
-          }
-          if (arrowIdx >= 0 && children.slice(0, arrowIdx).some(mightBeMult)) {
-            // If prevLeaf sits inside a letter-leading identifier (cursor at
-            // end of typed prefix WITH trailing whitespace), the user has
-            // started the right_type name and wants type-symbol completion.
-            const child = children[prevIdx];
-            const isLetterLeadingId =
-              child.type === "identifier" && /^[A-Za-z_]/.test(child.text);
-            symbolKinds = isLetterLeadingId
-              ? "association_typed_prefix"
-              : "association_type";
+          // Slot 0: no arrow in this segment yet. If prevLeaf is mult-like
+          // OR a partial-arrow character (`-`, `<`, `>`, `@`,
+          // `req_free_text_punct` for things like `<@`), AND the segment has
+          // a mult-like → arrow slot.
+          const PARTIAL_ARROW_TYPES = new Set(["-", "<", ">", "@"]);
+          const last = segment[prevInSeg];
+          const partial =
+            mightBeMult(last) ||
+            PARTIAL_ARROW_TYPES.has(last.type) ||
+            last.type === "req_free_text_punct";
+          if (partial && segment.some(mightBeMult)) {
+            symbolKinds = "association_arrow";
           }
         }
       }
@@ -842,6 +865,7 @@ function resolveCompletionScope(
   if (kindStr === "association_multiplicity") return "association_multiplicity";
   if (kindStr === "association_type") return "association_type";
   if (kindStr === "association_typed_prefix") return "association_typed_prefix";
+  if (kindStr === "association_arrow") return "association_arrow";
   if (kindStr === "none") return null;
 
   return kindStr.split("_") as SymbolKind[];

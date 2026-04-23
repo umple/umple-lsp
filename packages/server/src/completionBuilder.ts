@@ -218,6 +218,19 @@ const ASSOCIATION_MULTIPLICITY_STARTERS: string[] = [
   "0..*",
 ];
 
+// All seven Umple association arrow operators, mirroring the grammar rule
+//   arrow: choice("--", "->", "<-", "<@>-", "-<@>", ">->", "<-<")
+// Offered after the left multiplicity (`1 |`) before the arrow is committed.
+const ASSOCIATION_ARROW_STARTERS: string[] = [
+  "--",
+  "->",
+  "<-",
+  "<@>-",
+  "-<@>",
+  ">->",
+  "<-<",
+];
+
 // ── Constraint keyword blocklist ────────────────────────────────────────────
 
 const CONSTRAINT_BLOCKLIST = new Set([
@@ -725,6 +738,17 @@ export function buildSemanticCompletionItems(
     return USER_STORY_BODY_STARTERS.map((kw) => ({
       label: kw,
       kind: CompletionItemKind.Keyword,
+    }));
+  }
+
+  // Partial inline association — arrow slot after the left multiplicity
+  // (e.g. `1 |`, `1 -|`, `1 <|`). Curated arrow operators only — no
+  // multiplicity, no type symbols, no class-body keywords.
+  if (symbolKinds === "association_arrow") {
+    return ASSOCIATION_ARROW_STARTERS.map((a) => ({
+      label: a,
+      kind: CompletionItemKind.Operator,
+      detail: "association arrow",
     }));
   }
 
