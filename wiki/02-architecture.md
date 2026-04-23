@@ -1,0 +1,186 @@
+# 02 — Architecture
+
+How the LSP server is organized inside `packages/server/src/`, how it talks to its dependencies, and the key abstractions you'll be reading and editing.
+
+## Module layout
+
+```
+packages/server/src/
+├── server.ts                  ← LSP wire orchestration; hooks for init / hover / def / refs / rename / completion / diagnostics / format
+├── symbolIndex.ts             ← Symbol storage + queries; tree-sitter parser host
+├── resolver.ts                ← resolveSymbolAtPosition() — used by goto-def, hover, rename
+├── completionAnalysis.ts      ← analyzeCompletion() — context detection (scopes, fallbacks)
+├── completionBuilder.ts       ← buildSemanticCompletionItems() — turn scope into items
+├── tokenAnalysis.ts           ← analyzeToken() — what the cursor is on
+├── referenceSearch.ts         ← findReferences() with semantic disambiguation
+├── hoverBuilder.ts            ← Markdown hover assembly per SymbolKind
+├── documentSymbolBuilder.ts   ← Flat SymbolEntry[] → nested DocumentSymbol[]
+├── formatter.ts               ← Indent/spacing/blank-line/embedded-code passes
+├── formatRules.ts             ← Node classification used by the formatter
+├── formatSafetyNet.ts         ← Pre/post symbol-set comparison; aborts if format breaks semantics
+├── diagramNavigation.ts       ← state/transition click-to-select for VS Code diagrams
+├── diagramRequests.ts         ← Custom LSP request handlers
+├── importGraph.ts             ← Forward/reverse import edges
+├── traitSmEventResolver.ts    ← trait-side SM operation event lookup
+├── tokenTypes.ts              ← Shared types: SymbolKind, LookupContext, TokenResult
+├── symbolTypes.ts             ← Shared types: SymbolEntry, ReferenceLocation
+├── treeUtils.ts               ← Shared tree walkers
+├── renameValidation.ts        ← RENAMEABLE_KINDS + isValidNewName(kind, newName)
+└── keywords.ts                ← Built-in type names (Integer, String, ...)
+```
+
+The CLI binary is a 2-line shell shebang at `packages/server/bin/umple-lsp-server` that just `require()`s `out/server.js`. The CLI flag handling (`--version` / `--help` / `--stdio`) is a small preamble at the top of `server.ts` — runs before `createConnection` so the process can exit cleanly without ever opening an LSP connection.
+
+## Request lifecycle
+
+### initialize → connection.onInitialize
+
+Server startup sequence (`server.ts`):
+
+1. Read `params.initializationOptions` for `umpleSyncJarPath` and `umpleSyncTimeoutMs`
+2. Resolve the umplesync.jar path (init option → env `UMPLESYNC_JAR_PATH` → `__dirname/../umplesync.jar` auto-discovery)
+3. Resolve workspace roots
+4. Initialize `SymbolIndex` (loads tree-sitter WASM, all `.scm` queries)
+5. Return `serverInfo` (name + version) and capabilities
+
+### Document open / change
+
+`onDidOpen` and `onDidChangeContent`:
+
+1. Strip the UmpleOnline layout tail (the `//$?[End_of_model]$?` delimiter and everything after) — see `tokenTypes.stripLayoutTail`
+2. `symbolIndex.indexFile(path, content)` — parses with tree-sitter, runs the `definitions.scm` query, stores a `SymbolEntry[]`
+3. Eagerly index all files reachable via `use` statements (transitive imports)
+4. Schedule diagnostics with debounce + abort
+
+### Diagnostics
+
+`runDiagnostics()` in `server.ts`:
+
+1. Build a **shadow workspace** — temp directory with the current file + every `use`-reachable file. Open editor content overlays disk content.
+2. Spawn `java -jar umplesync.jar -generate nothing <file>` with timeout
+3. Parse JSON output → LSP diagnostics
+4. Map filenames: errors in directly imported files appear on the `use` statement line; transitively imported errors also surface on the direct `use` line
+
+Debounced (500ms default). Re-runs when any file in a chain changes (forward + reverse importer set).
+
+### Symbol resolution
+
+`resolveSymbolAtPosition(docPath, content, line, col, reachableFiles)` — the workhorse used by goto-def, hover, and rename.
+
+1. `getTokenAtPosition` returns a `TokenResult` (word + valid `SymbolKind[]` from `references.scm` + enclosingClass / enclosingStateMachine + dotted-path info)
+2. Discriminated `LookupContext` — handles trait_sm_param, trait_sm_value, trait_sm_op, referenced_sm, etc.
+3. For class-/SM-scoped kinds (`attribute`, `method`, `state`, ...): try enclosing container first (with isA inheritance), fall back to global
+4. Post-lookup disambiguation: dotted state paths, state definition sites, use_case_step exact-position matching
+
+### Completion
+
+`analyzeCompletion(tree, lang, completionsQuery, content, line, col)` returns a `CompletionInfo` with:
+
+- `keywords` — from tree-sitter's `LookaheadIterator` at the current parse state
+- `operators` — operator-shaped keywords (separated for filtering)
+- `symbolKinds` — discriminated scope type (`top_level`, `class_body`, `association_multiplicity`, `userstory_body`, `requirement`, ...)
+- `prefix` — what the user has already typed
+- `isComment`, `isDefinitionName` — guards
+
+Then `buildSemanticCompletionItems(info, symbolKinds, ...)` turns the scope into `CompletionItem[]`. Each scope has its own branch — narrow scopes (e.g. `association_arrow`) return only curated keywords, no LookaheadIterator dump.
+
+The scope detection uses two complementary mechanisms:
+
+- **`completions.scm` query captures** — for normal grammar shapes (e.g. `(req_implementation) @scope.requirement`)
+- **`prevLeaf`-based fallbacks** in `completionAnalysis.ts` — for cursor positions the parser hasn't yet committed to a real node (empty bodies, partial associations, slots between tokens)
+
+The `prevLeaf` pattern handles tree-sitter's LR(1) limitations gracefully without grammar contortions. Search `completionAnalysis.ts` for `prevLeaf?.type ===` to see all the recovery branches.
+
+### Find references
+
+`findReferences(declarations, reachableFiles, includeDecl)` in `symbolIndex.ts`:
+
+1. For each file in scope, walk the AST
+2. For each identifier matching the declaration name, check via `references.scm` whether it can reference the declaration's kind
+3. Apply state-path disambiguation, container check, shared-state equivalence
+
+For reused state machines (`as` aliasing), `getSharedStateDeclarations()` builds the equivalence class first.
+
+### Rename
+
+`onPrepareRename` checks: kind ∈ `RENAMEABLE_KINDS`, identity unambiguous, file not recovered.
+`onRenameRequest` validates new name with `isValidNewName(kind, newName)` (kind-aware), then runs the same search as find-references and returns a `WorkspaceEdit`.
+
+`renameValidation.ts` is the single source of truth for both rules. Used by both `server.ts` and the test harness.
+
+## Symbol index design
+
+`SymbolEntry` (`symbolTypes.ts`) is the universal record:
+
+```ts
+{
+  name, kind, file, line, column, endLine, endColumn,
+  container?,        // class.name for attributes; classname.smName for states
+  defLine?, defColumn?, defEndLine?, defEndColumn?,
+  statePath?,        // ["EEE","Open","Inner"] for nested states
+  recovered?,        // extracted from a tree with parse errors
+  // Structured req metadata:
+  reqLanguage?, reqWho?, reqWhen?, reqWhat?, reqWhy?,
+  reqStepKind?, reqStepId?,
+}
+```
+
+Storage: a flat `SymbolEntry[]` per file plus three indexes:
+
+- `symbolsByContainer: Map<string, SymbolEntry[]>` — O(1) container-scoped lookups
+- `isAGraph: Map<string, string[]>` — for `inherited: true` walks
+- `forward/reverseImportGraph` — for diagnostics + rename scope
+
+Public API is a single unified function:
+
+```ts
+getSymbols({ name?, kind?, container?, inherited? }) → SymbolEntry[]
+```
+
+There's no `getSymbolsByName` / `getSymbolsByContainer` etc. — one query interface.
+
+## Tree-sitter integration
+
+Server loads `tree-sitter-umple.wasm` (copied from the grammar package at build time) via `web-tree-sitter`. The four `.scm` query files (`definitions.scm`, `references.scm`, `completions.scm`, plus `highlights.scm` shipped to editors) are also copied into the server package.
+
+Parser is instantiated once per `SymbolIndex`. Per-file: parse → store `Tree` → run query → extract `SymbolEntry[]`. Content-hash caching skips re-parse when content hasn't changed.
+
+For details on the grammar itself: [04-grammar.md](04-grammar.md).
+
+## Cold-open recovery
+
+When opening a file with parse errors, the indexer applies a **kind-sensitive** filter (`symbolIndex.ts` ~line 194):
+
+- `RECOVERY_SAFE_KINDS` (`class`, `interface`, `trait`, `enum`, `mixset`, `attribute`, `const`, `method`, `statemachine`, `state`) are extracted from the broken tree
+- Other kinds are preserved from the last clean snapshot
+- Recovered symbols are tagged `recovered: true`; rename is blocked on them
+
+This lets users get partial autocomplete / hover / goto-def even mid-edit, while preventing rename from making changes based on a guess.
+
+## Diagnostics + import resolution
+
+For accurate cross-file diagnostics the server creates a **shadow workspace** per validation:
+
+1. Identify the file being validated + every file reachable via `use` statements (lazy, only follows what's in scope)
+2. Materialize all of them in a temp directory; overlay open-editor content for unsaved buffers
+3. Run `umplesync.jar` against the shadow root
+4. Map errors back to the real files; errors in transitively imported files surface on the direct `use` line, prefixed with `In imported file (X:line):`
+
+Concurrent validations are aborted via `AbortController` so only the latest request's results win.
+
+## Formatter
+
+Multi-pass, AST-driven (`formatter.ts`):
+
+- **Phase 0** — `expandCompactStates`: rewrites compact `S1 { e -> S2; }` blocks onto multiple lines so subsequent passes see consistent shape
+- **Phase 1** — `computeIndentEdits`: indent based on `INDENT_NODES` (class/interface/trait/state/req/...)
+- **Phase 2** — `fixTransitionSpacing`, `fixAssociationSpacing`, `normalizeTopLevelBlankLines`
+- **Phase 3** — `reindentEmbeddedCode`: re-indent code inside `{...}` method/template bodies relative to the surrounding Umple indent
+
+Safety net (`formatSafetyNet.ts`): before returning edits, the formatter re-parses the result, re-runs symbol extraction, and compares symbol sets. If the formatted version has materially fewer symbols (or the parse goes from clean to broken), the format is **discarded** and a warning is logged.
+
+## Where to go next
+
+- Adding grammar features → [04-grammar.md](04-grammar.md)
+- Running it locally → [03-development.md](03-development.md)
+- Common gotchas while editing the server → [12-gotchas.md](12-gotchas.md)
