@@ -60,6 +60,11 @@
 (association_definition) @scope.class_interface_trait
 (association_inline) @scope.class_interface_trait
 (association_member) @scope.class_interface_trait
+; Typed-prefix on the right_type identifier — narrower scope wins over the
+; broader (association_inline) capture above. Suppresses raw keyword
+; spillover that the generic ["class","interface","trait"] array path adds.
+(association_inline right_type: (identifier) @scope.association_typed_prefix)
+(association_member right_type: (identifier) @scope.association_typed_prefix)
 
 ; =====================
 ; STATE MACHINE SCOPES (offer state names)

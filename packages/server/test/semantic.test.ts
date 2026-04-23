@@ -4537,6 +4537,49 @@ const TEST_CASES: TestCase[] = [
         expect: ["Other", "Thing"],
       },
 
+      // Topic 043: typed-prefix on the right_type identifier.
+      // Class-body case: cursor inside the partial identifier "O" —
+      // (association_inline right_type: identifier) capture wins via
+      // smallest-scope rule.
+      {
+        type: "completion_kinds",
+        at: "class_body_typed_prefix",
+        expect: "association_typed_prefix",
+      },
+      {
+        type: "completion_includes",
+        at: "class_body_typed_prefix",
+        expect: ["Other", "Thing"],
+      },
+      {
+        type: "completion_excludes",
+        at: "class_body_typed_prefix",
+        expect: [
+          "isA", "before", "trace", "abstract", "namespace", "Java",
+          "ERROR", "class", "trait", "mixset",
+        ],
+      },
+
+      // Assoc-block case: parser produces ERROR; nodeAtCursor-based fallback
+      // inside completionAnalysis classifies the typed prefix.
+      {
+        type: "completion_kinds",
+        at: "assoc_block_typed_prefix",
+        expect: "association_typed_prefix",
+      },
+      {
+        type: "completion_includes",
+        at: "assoc_block_typed_prefix",
+        expect: ["Other", "Thing"],
+      },
+      {
+        type: "completion_excludes",
+        at: "assoc_block_typed_prefix",
+        expect: [
+          "namespace", "Java", "ERROR", "class", "trait", "isA",
+        ],
+      },
+
       // Negative: plain class-body cursor (no association being typed) keeps
       // the existing class_body scope — proves we didn't widen the generic
       // fallback path.

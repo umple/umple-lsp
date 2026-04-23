@@ -759,6 +759,32 @@ export function buildSemanticCompletionItems(
     return atItems;
   }
 
+  // Typed-prefix on the right_type identifier (e.g. `1 -> * O|`). Once the
+  // parser commits to a complete `association_inline` / `association_member`,
+  // the (association_inline) @scope.class_interface_trait capture would add
+  // raw LookaheadIterator keyword junk; this narrower scope returns just the
+  // legitimate type symbols (class / interface / trait) without keywords.
+  if (symbolKinds === "association_typed_prefix") {
+    const atItems: CompletionItem[] = [];
+    const atSeen = new Set<string>();
+    for (const symKind of ["class", "interface", "trait"] as SymbolKind[]) {
+      const symbols = symbolIndex
+        .getSymbols({ kind: symKind })
+        .filter((s) => reachableFiles.has(path.normalize(s.file)));
+      for (const sym of symbols) {
+        if (!atSeen.has(sym.name)) {
+          atSeen.add(sym.name);
+          atItems.push({
+            label: sym.name,
+            kind: symbolKindToCompletionKind(symKind),
+            detail: symKind,
+          });
+        }
+      }
+    }
+    return atItems;
+  }
+
   // Structured useCase body — userStoryTags plus useCaseStep starters.
   if (symbolKinds === "usecase_body") {
     return USE_CASE_BODY_STARTERS.map((kw) => ({

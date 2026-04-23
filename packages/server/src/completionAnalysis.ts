@@ -69,7 +69,7 @@ export interface CompletionInfo {
   /** Operators the parser expects at this position. */
   operators: string[];
   /** Which symbol kinds to offer, or null for none. */
-  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "trace_state" | "trace_method" | "trace_state_method" | "trace_attribute" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | "top_level" | "class_body" | "trait_body" | "interface_body" | "assoc_class_body" | "mixset_body" | "statemachine_body" | "state_body" | "filter_body" | "transition_target" | "userstory_body" | "usecase_body" | "association_multiplicity" | "association_type" | null;
+  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "trace_state" | "trace_method" | "trace_state_method" | "trace_attribute" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | "top_level" | "class_body" | "trait_body" | "interface_body" | "assoc_class_body" | "mixset_body" | "statemachine_body" | "state_body" | "filter_body" | "transition_target" | "userstory_body" | "usecase_body" | "association_multiplicity" | "association_type" | "association_typed_prefix" | null;
   /** True if cursor is at a definition-name position (suppress all). */
   isDefinitionName: boolean;
   /** True if cursor is inside a comment. */
@@ -386,8 +386,57 @@ export function analyzeCompletion(
             if (isArrow(children[i])) { arrowIdx = i; break; }
           }
           if (arrowIdx >= 0 && children.slice(0, arrowIdx).some(mightBeMult)) {
-            symbolKinds = "association_type";
+            // If prevLeaf sits inside a letter-leading identifier (cursor at
+            // end of typed prefix WITH trailing whitespace), the user has
+            // started the right_type name and wants type-symbol completion.
+            const child = children[prevIdx];
+            const isLetterLeadingId =
+              child.type === "identifier" && /^[A-Za-z_]/.test(child.text);
+            symbolKinds = isLetterLeadingId
+              ? "association_typed_prefix"
+              : "association_type";
           }
+        }
+      }
+    }
+
+    // --- Typed-prefix on the right-type identifier (cursor INSIDE the
+    // identifier, no trailing whitespace before it) ---
+    // findPreviousLeaf backs up over identifier chars, so the prevLeaf-based
+    // detection above misses this case — cursor on `Fo|` lands on `*` instead.
+    // Anchor on nodeAtCursor instead: if the cursor sits inside a letter-
+    // leading identifier under an association ERROR, classify as typed prefix.
+    if (
+      nodeAtCursor &&
+      nodeAtCursor.type === "identifier" &&
+      /^[A-Za-z_]/.test(nodeAtCursor.text)
+    ) {
+      const errAnc = findEnclosingError(nodeAtCursor);
+      if (errAnc && enclosingIsClassLike(errAnc)) {
+        // Sanity: ERROR contains an arrow with a mult-like before it (i.e.
+        // we're really in an association right-side identifier slot, not
+        // some unrelated identifier under a recovery ERROR).
+        const isArrow2 = (c: SyntaxNode) => c.type === "arrow" || c.type === "->";
+        const mightBeMult2 = (c: SyntaxNode) =>
+          c.type === "multiplicity" ||
+          c.type === "*" ||
+          c.type === ".." ||
+          c.type === "req_free_text_punct" ||
+          /^[0-9]/.test(c.text);
+        const errChildren: SyntaxNode[] = [];
+        for (let i = 0; i < errAnc.childCount; i++) {
+          const c = errAnc.child(i);
+          if (c && !c.isExtra) errChildren.push(c);
+        }
+        let arrowSeen = false;
+        let multSeen = false;
+        for (const c of errChildren) {
+          if (c.id === nodeAtCursor.id) break;
+          if (isArrow2(c)) arrowSeen = true;
+          if (!arrowSeen && mightBeMult2(c)) multSeen = true;
+        }
+        if (arrowSeen && multSeen) {
+          symbolKinds = "association_typed_prefix";
         }
       }
     }
@@ -792,6 +841,7 @@ function resolveCompletionScope(
   if (kindStr === "usecase_body") return "usecase_body";
   if (kindStr === "association_multiplicity") return "association_multiplicity";
   if (kindStr === "association_type") return "association_type";
+  if (kindStr === "association_typed_prefix") return "association_typed_prefix";
   if (kindStr === "none") return null;
 
   return kindStr.split("_") as SymbolKind[];

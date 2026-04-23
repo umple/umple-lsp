@@ -38,3 +38,14 @@ association {
   1 -> * /*@assoc_block_after_right_mult*/
   0..1 -> 1..* /*@assoc_block_after_range_mult*/
 }
+
+// Topic 043 — typed-prefix on the right_type identifier. Cursor sits INSIDE
+// the partial identifier the user is still typing. Must offer class /
+// interface / trait symbols only — no class-body keyword junk.
+class ClassBodyTypedPrefix {
+  1 -> * O/*@class_body_typed_prefix*/
+}
+
+association {
+  1 -> * O/*@assoc_block_typed_prefix*/
+}
