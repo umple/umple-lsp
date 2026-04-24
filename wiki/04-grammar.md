@@ -2,6 +2,11 @@
 
 The tree-sitter grammar (`packages/tree-sitter-umple/`) is the foundation. The LSP server can't see anything the grammar doesn't parse correctly. This page covers the workflow for editing the grammar and the four query files that drive the server's semantic features.
 
+If you are changing grammar **and** another LSP behavior together, read the overall playbook too: [14-feature-work-playbook.md](14-feature-work-playbook.md). Then branch to the focused page you need:
+
+- defs / refs / rename / hover / outline: [15-symbol-features-playbook.md](15-symbol-features-playbook.md)
+- completion: [16-completion-playbook.md](16-completion-playbook.md)
+
 ## Files
 
 ```

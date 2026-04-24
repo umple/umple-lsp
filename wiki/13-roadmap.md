@@ -37,15 +37,46 @@ We parse `mixset name --redefine` but don't verify it actually points at an exis
 
 ## Known LSP gaps
 
-### Completion doesn't account for partial type prefixes everywhere
+### Remaining array-fallback completion scopes
 
-Topic 043 fixed it for association right_type. Same pattern (typed prefix → narrow scope) probably applies to:
+The recent completion cleanup eliminated scalar-scope raw-lookahead leaks and most typed-prefix leaks. What remains is the generic **array fallback** path in `packages/server/src/completionBuilder.ts`. Any scope that still falls through there will show:
 
-- `isA |` then typing — should narrow to class/interface/trait
-- Type position in attribute declarations: `Integer x;` — typing letters should narrow to types
-- Method return types
+- raw `LookaheadIterator` keywords
+- then operators
+- then symbol completions
 
-Each one is a focused topic — see topic 043's pattern (query capture for the inner identifier + nodeAtCursor fallback for ERROR).
+That is still the wrong UX in a few targeted places. Current candidates:
+
+- blank `isA |` slot (`["class","interface","trait"]`)
+- `before |` / `after |` method-name slot (`["method"]`)
+- `... as |` statemachine slot (`["statemachine"]`)
+- `filter { include | }` class target slot (`["class"]`)
+- `key { | }` attribute slot (`["attribute"]`)
+- `template_list` positions (`["template"]`)
+- `referenced_statemachine` identifier positions (`["statemachine"]`)
+
+The right long-term direction is to keep shrinking that fallback until it is truly exceptional. Each fix should follow the same pattern used in topics 043, 047, and 049:
+
+1. detect the exact slot in `completionAnalysis.ts`
+2. route to a dedicated scalar scope or symbol-only early return
+3. add focused regressions proving raw keyword junk is gone
+
+### Parameter-type typed-prefix completion
+
+Typed-prefix narrowing is now fixed for:
+
+- association right-side type names
+- `isA` type lists
+- declaration types
+- method return types
+
+The obvious next typed-prefix feature is **parameter types**. Example:
+
+```umple
+void f(P|)
+```
+
+That should narrow to type-only completion instead of whatever the broader enclosing scope offers. Topic 047 intentionally did not cover parameter types; now that the helper structure exists, this should be a small, focused topic.
 
 ### Code actions
 
