@@ -69,7 +69,7 @@ export interface CompletionInfo {
   /** Operators the parser expects at this position. */
   operators: string[];
   /** Which symbol kinds to offer, or null for none. */
-  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "trace_state" | "trace_method" | "trace_state_method" | "trace_attribute" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | "top_level" | "class_body" | "trait_body" | "interface_body" | "assoc_class_body" | "mixset_body" | "statemachine_body" | "state_body" | "filter_body" | "transition_target" | "userstory_body" | "usecase_body" | "association_multiplicity" | "association_type" | "association_typed_prefix" | "association_arrow" | "isa_typed_prefix" | null;
+  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "trace_state" | "trace_method" | "trace_state_method" | "trace_attribute" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | "top_level" | "class_body" | "trait_body" | "interface_body" | "assoc_class_body" | "mixset_body" | "statemachine_body" | "state_body" | "filter_body" | "transition_target" | "userstory_body" | "usecase_body" | "association_multiplicity" | "association_type" | "association_typed_prefix" | "association_arrow" | "isa_typed_prefix" | "decl_type_typed_prefix" | null;
   /** True if cursor is at a definition-name position (suppress all). */
   isDefinitionName: boolean;
   /** True if cursor is inside a comment. */
@@ -307,6 +307,52 @@ export function analyzeCompletion(
       }
     }
     if (insideIsaDecl) symbolKinds = "isa_typed_prefix";
+  }
+
+  // --- Typed-prefix on declaration-type identifier (topic 047 item 2) ---
+  // Same class of bug as isa_typed_prefix: when the user types a prefix
+  // inside an attribute_declaration or const_declaration's type_name, the
+  // scope query has no dedicated capture so completion falls through to
+  // generic class_body (54+ LookaheadIterator keywords, zero type symbols).
+  // Force scalar `decl_type_typed_prefix` to take a symbol-only builder
+  // branch that offers built-in types + class / interface / trait / enum.
+  if (
+    nodeAtCursor &&
+    nodeAtCursor.type === "identifier" &&
+    /^[A-Za-z_]/.test(nodeAtCursor.text)
+  ) {
+    // Walk up for a type_name whose parent is attribute_declaration or
+    // const_declaration in the "type" field. Scope is strict: ERROR-recovery
+    // where type_name sits under ERROR (e.g. class body without closing
+    // brace) deliberately NOT matched — too ambiguous with isA/modifier
+    // prefixes.
+    let n: SyntaxNode | null = nodeAtCursor.parent;
+    let inDeclTypeSlot = false;
+    while (n) {
+      if (n.type === "type_name") {
+        const p = n.parent;
+        if (
+          p &&
+          (p.type === "attribute_declaration" || p.type === "const_declaration")
+        ) {
+          for (let i = 0; i < p.childCount; i++) {
+            if (p.child(i)?.id === n.id) {
+              if (p.fieldNameForChild(i) === "type") inDeclTypeSlot = true;
+              break;
+            }
+          }
+        }
+        break;
+      }
+      if (
+        n.type === "class_definition" || n.type === "trait_definition" ||
+        n.type === "interface_definition" ||
+        n.type === "association_class_definition" ||
+        n.type === "source_file"
+      ) break;
+      n = n.parent;
+    }
+    if (inDeclTypeSlot) symbolKinds = "decl_type_typed_prefix";
   }
 
   if (
@@ -920,6 +966,7 @@ function resolveCompletionScope(
   if (kindStr === "association_type") return "association_type";
   if (kindStr === "association_typed_prefix") return "association_typed_prefix";
   if (kindStr === "isa_typed_prefix") return "isa_typed_prefix";
+  if (kindStr === "decl_type_typed_prefix") return "decl_type_typed_prefix";
   if (kindStr === "association_arrow") return "association_arrow";
   if (kindStr === "none") return null;
 

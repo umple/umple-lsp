@@ -4763,6 +4763,120 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 132: Topic 047 item 2 — typed-prefix narrowing on attribute / const
+  // declaration type names. Default class_body scope leaks 54+ keywords
+  // (test, generic, class, isA, trace, ...) and surfaces no type symbols
+  // when the user is typing inside a declaration type slot. Scalar
+  // decl_type_typed_prefix replaces that with symbol-only output: built-in
+  // types + class / interface / trait / enum. `void` stays excluded
+  // (method-return only, item 3).
+  {
+    name: "132 decl_type_typed_prefix: narrow attribute/const declaration type slots; drop keyword leak",
+    fixtures: ["132_decl_type_typed_prefix.ump"],
+    assertions: [
+      { type: "symbol_count", fixture: "132_decl_type_typed_prefix.ump", name: "Person", kind: "class", expect: 1 },
+      { type: "symbol_count", fixture: "132_decl_type_typed_prefix.ump", name: "Printable", kind: "interface", expect: 1 },
+      { type: "symbol_count", fixture: "132_decl_type_typed_prefix.ump", name: "Plantable", kind: "trait", expect: 1 },
+      { type: "symbol_count", fixture: "132_decl_type_typed_prefix.ump", name: "Color", kind: "enum", expect: 1 },
+
+      // Built-in type prefix inside attribute_declaration.
+      {
+        type: "completion_kinds",
+        at: "attr_type_builtin_prefix",
+        expect: "decl_type_typed_prefix",
+      },
+      {
+        type: "completion_includes",
+        at: "attr_type_builtin_prefix",
+        expect: ["Integer", "String", "Boolean", "Person", "Printable", "Plantable", "Color"],
+      },
+      {
+        type: "completion_excludes",
+        at: "attr_type_builtin_prefix",
+        expect: [
+          "ERROR", "namespace", "Java", "generate", "test", "generic",
+          "isA", "trace", "class", "trait", "mixset", "void",
+        ],
+      },
+
+      // User-defined class type prefix.
+      {
+        type: "completion_kinds",
+        at: "attr_type_class_prefix",
+        expect: "decl_type_typed_prefix",
+      },
+      {
+        type: "completion_includes",
+        at: "attr_type_class_prefix",
+        expect: ["Person", "Parent", "Integer", "Color"],
+      },
+
+      // const as attribute_modifier in a class.
+      {
+        type: "completion_kinds",
+        at: "attr_type_const_modifier",
+        expect: "decl_type_typed_prefix",
+      },
+      {
+        type: "completion_includes",
+        at: "attr_type_const_modifier",
+        expect: ["Integer", "Person"],
+      },
+      {
+        type: "completion_excludes",
+        at: "attr_type_const_modifier",
+        expect: ["ERROR", "immutable", "settable", "void"],
+      },
+
+      // Second attribute slot after a completed first attribute.
+      {
+        type: "completion_kinds",
+        at: "attr_type_second_slot",
+        expect: "decl_type_typed_prefix",
+      },
+      {
+        type: "completion_includes",
+        at: "attr_type_second_slot",
+        expect: ["Integer", "Person"],
+      },
+
+      // const_declaration inside interface (dedicated grammar rule).
+      {
+        type: "completion_kinds",
+        at: "const_decl_type_prefix",
+        expect: "decl_type_typed_prefix",
+      },
+      {
+        type: "completion_includes",
+        at: "const_decl_type_prefix",
+        expect: ["Integer", "Person"],
+      },
+
+      // Negatives — must NOT be reclassified.
+      // Name slot after the type is suppressed (isAtAttributeNamePosition).
+      {
+        type: "completion_kinds",
+        at: "attr_name_slot",
+        expect: null,
+      },
+      {
+        type: "completion_kinds",
+        at: "blank_class_body",
+        expect: "class_body",
+      },
+      {
+        type: "completion_kinds",
+        at: "lone_identifier",
+        expect: "class_body",
+      },
+      {
+        type: "completion_kinds",
+        at: "after_name_prefix",
+        expect: "class_body",
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

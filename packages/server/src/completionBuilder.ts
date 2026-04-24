@@ -835,6 +835,40 @@ export function buildSemanticCompletionItems(
     return items;
   }
 
+  // Typed-prefix on attribute/const declaration type identifier (topic 047
+  // item 2). Cursor sits inside a type_name under attribute_declaration or
+  // const_declaration. Default class_body scope leaks 54+ LookaheadIterator
+  // keywords (test, generic, class, isA, trace, ...) and surfaces zero type
+  // symbols. Symbol-only early-return: built-in types + class / interface /
+  // trait / enum. `void` is deliberately excluded — method-return only.
+  if (symbolKinds === "decl_type_typed_prefix") {
+    const items: CompletionItem[] = [];
+    const seen = new Set<string>();
+    for (const typ of BUILTIN_TYPES) {
+      if (typ === "void") continue;
+      if (!seen.has(typ)) {
+        seen.add(typ);
+        items.push({ label: typ, kind: CompletionItemKind.TypeParameter, detail: "built-in" });
+      }
+    }
+    for (const symKind of ["class", "interface", "trait", "enum"] as SymbolKind[]) {
+      const symbols = symbolIndex
+        .getSymbols({ kind: symKind })
+        .filter((s) => reachableFiles.has(path.normalize(s.file)));
+      for (const sym of symbols) {
+        if (!seen.has(sym.name)) {
+          seen.add(sym.name);
+          items.push({
+            label: sym.name,
+            kind: symbolKindToCompletionKind(symKind),
+            detail: symKind,
+          });
+        }
+      }
+    }
+    return items;
+  }
+
   // Structured useCase body — userStoryTags plus useCaseStep starters.
   if (symbolKinds === "usecase_body") {
     return USE_CASE_BODY_STARTERS.map((kw) => ({

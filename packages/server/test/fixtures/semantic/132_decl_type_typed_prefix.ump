@@ -1,0 +1,75 @@
+// Topic 047 item 2 — typed-prefix narrowing on attribute / const declaration
+// type names.
+//
+// Before the fix: `Int|eger x;` inside a class body classified as generic
+// `class_body` — 54 LookaheadIterator keywords (test, generic, class, isA,
+// trace, ...) and zero type symbols. Same for `Pers|on owner;`, second-
+// attribute type slots, and `const Int|eger N = 1;`.
+//
+// After: scalar `decl_type_typed_prefix` scope, symbol-only builder branch
+// returning built-in types + class / interface / trait / enum. `void` is
+// excluded (method-return only, item 3). Attribute-name position after the
+// type is NOT reclassified.
+
+class Person {}
+class Parent {}
+interface Printable {}
+trait Plantable {}
+enum Color { Red, Blue }
+
+// Parsed attribute with typed type-name prefix — the bread-and-butter case.
+class ClassA {
+  Int/*@attr_type_builtin_prefix*/eger x;
+}
+
+// User-defined class type prefix.
+class ClassB {
+  Pers/*@attr_type_class_prefix*/on owner;
+}
+
+// const as attribute_modifier (classes use attribute_declaration, not
+// const_declaration — grammar parses this as an attribute with the `const`
+// modifier plus an optional type name).
+class ClassC {
+  const Int/*@attr_type_const_modifier*/eger N = 1;
+}
+
+// Second attribute after a completed one. Confirms the walk works even when
+// the preceding sibling is in recovery.
+class ClassD {
+  Integer x;
+  Int/*@attr_type_second_slot*/eger y;
+}
+
+// Interface uses const_declaration (the dedicated grammar rule, not the
+// modifier). The walk stops at type_name whose parent is const_declaration.
+interface IfaceE {
+  const Int/*@const_decl_type_prefix*/eger N;
+}
+
+// ─── Negatives: must NOT be decl_type_typed_prefix ───────────────────────
+
+// Attribute name slot (after the type). isAtAttributeNamePosition suppresses
+// completions here — symbolKinds is null, not decl_type_typed_prefix.
+class NegName {
+  Integer x/*@attr_name_slot*/
+}
+
+// Blank class body — legit class_body scope; no identifier, no type_name.
+class NegBlank {
+  /*@blank_class_body*/
+}
+
+// Lone letter in class body — too ambiguous (could become isA, immutable,
+// Integer, etc.). Keeps class_body. Documented non-goal for item 2.
+class NegLone {
+  I/*@lone_identifier*/
+}
+
+// Pre-existing attribute followed by a new-attribute prefix. No type_name
+// ancestor (identifier sits directly under the incomplete attribute_
+// declaration), so the walk bails.
+class NegAfterName {
+  name;
+  I/*@after_name_prefix*/
+}
