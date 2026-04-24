@@ -302,6 +302,70 @@ export function symbolKindToCompletionKind(kind: SymbolKind): CompletionItemKind
   }
 }
 
+// ── Symbol-only type completion helper (topic 048 phase 2) ─────────────────
+
+interface TypeCompletionOptions {
+  /** Symbol kinds to enumerate, in emit order (class before interface, etc.). */
+  kinds: readonly SymbolKind[];
+  /** If true, prepend BUILTIN_TYPES before symbol kinds. Default false. */
+  includeBuiltins?: boolean;
+  /** If true (and includeBuiltins), skip `void` — it's method-return only. */
+  excludeVoid?: boolean;
+}
+
+/**
+ * Assemble a symbol-only completion list: optional built-ins followed by
+ * named symbols across the given kinds. A single dedup Set shares across
+ * built-ins and symbols so a user-defined type that shadows a built-in name
+ * (rare) doesn't appear twice.
+ *
+ * Used by every typed-prefix scope and by `association_type`. Preserves the
+ * exact emission ordering the pre-refactor branches relied on:
+ *   1. built-ins in BUILTIN_TYPES order (optionally skipping `void`)
+ *   2. symbols per-kind, kinds iterated in declared order
+ *   3. within each kind, whatever order `SymbolIndex.getSymbols` returns
+ */
+function buildTypeCompletionItems(
+  symbolIndex: SymbolIndex,
+  reachableFiles: Set<string>,
+  opts: TypeCompletionOptions,
+): CompletionItem[] {
+  const items: CompletionItem[] = [];
+  const seen = new Set<string>();
+
+  if (opts.includeBuiltins) {
+    for (const typ of BUILTIN_TYPES) {
+      if (opts.excludeVoid && typ === "void") continue;
+      if (!seen.has(typ)) {
+        seen.add(typ);
+        items.push({
+          label: typ,
+          kind: CompletionItemKind.TypeParameter,
+          detail: "built-in",
+        });
+      }
+    }
+  }
+
+  for (const symKind of opts.kinds) {
+    const symbols = symbolIndex
+      .getSymbols({ kind: symKind })
+      .filter((s) => reachableFiles.has(path.normalize(s.file)));
+    for (const sym of symbols) {
+      if (!seen.has(sym.name)) {
+        seen.add(sym.name);
+        items.push({
+          label: sym.name,
+          kind: symbolKindToCompletionKind(symKind),
+          detail: symKind,
+        });
+      }
+    }
+  }
+
+  return items;
+}
+
 // ── Main builder ────────────────────────────────────────────────────────────
 
 /**
@@ -765,22 +829,9 @@ export function buildSemanticCompletionItems(
   // Partial inline association — right-type slot after the right multiplicity
   // (e.g. `1 -> * |`). Offer class symbols only, no keywords.
   if (symbolKinds === "association_type") {
-    const atItems: CompletionItem[] = [];
-    const atSeen = new Set<string>();
-    const classes = symbolIndex
-      .getSymbols({ kind: "class" })
-      .filter((s) => reachableFiles.has(path.normalize(s.file)));
-    for (const sym of classes) {
-      if (!atSeen.has(sym.name)) {
-        atSeen.add(sym.name);
-        atItems.push({
-          label: sym.name,
-          kind: symbolKindToCompletionKind("class"),
-          detail: "class",
-        });
-      }
-    }
-    return atItems;
+    return buildTypeCompletionItems(symbolIndex, reachableFiles, {
+      kinds: ["class"],
+    });
   }
 
   // Typed-prefix on the right_type identifier (e.g. `1 -> * O|`). Once the
@@ -789,24 +840,9 @@ export function buildSemanticCompletionItems(
   // raw LookaheadIterator keyword junk; this narrower scope returns just the
   // legitimate type symbols (class / interface / trait) without keywords.
   if (symbolKinds === "association_typed_prefix") {
-    const atItems: CompletionItem[] = [];
-    const atSeen = new Set<string>();
-    for (const symKind of ["class", "interface", "trait"] as SymbolKind[]) {
-      const symbols = symbolIndex
-        .getSymbols({ kind: symKind })
-        .filter((s) => reachableFiles.has(path.normalize(s.file)));
-      for (const sym of symbols) {
-        if (!atSeen.has(sym.name)) {
-          atSeen.add(sym.name);
-          atItems.push({
-            label: sym.name,
-            kind: symbolKindToCompletionKind(symKind),
-            detail: symKind,
-          });
-        }
-      }
-    }
-    return atItems;
+    return buildTypeCompletionItems(symbolIndex, reachableFiles, {
+      kinds: ["class", "interface", "trait"],
+    });
   }
 
   // Typed-prefix on the isa_declaration type identifier (topic 047 item 1).
@@ -815,24 +851,9 @@ export function buildSemanticCompletionItems(
   // LookaheadIterator keyword junk when recovering from incomplete parses.
   // This narrower scope returns only class / interface / trait symbols.
   if (symbolKinds === "isa_typed_prefix") {
-    const items: CompletionItem[] = [];
-    const seen = new Set<string>();
-    for (const symKind of ["class", "interface", "trait"] as SymbolKind[]) {
-      const symbols = symbolIndex
-        .getSymbols({ kind: symKind })
-        .filter((s) => reachableFiles.has(path.normalize(s.file)));
-      for (const sym of symbols) {
-        if (!seen.has(sym.name)) {
-          seen.add(sym.name);
-          items.push({
-            label: sym.name,
-            kind: symbolKindToCompletionKind(symKind),
-            detail: symKind,
-          });
-        }
-      }
-    }
-    return items;
+    return buildTypeCompletionItems(symbolIndex, reachableFiles, {
+      kinds: ["class", "interface", "trait"],
+    });
   }
 
   // Typed-prefix on attribute/const declaration type identifier (topic 047
@@ -842,31 +863,11 @@ export function buildSemanticCompletionItems(
   // symbols. Symbol-only early-return: built-in types + class / interface /
   // trait / enum. `void` is deliberately excluded — method-return only.
   if (symbolKinds === "decl_type_typed_prefix") {
-    const items: CompletionItem[] = [];
-    const seen = new Set<string>();
-    for (const typ of BUILTIN_TYPES) {
-      if (typ === "void") continue;
-      if (!seen.has(typ)) {
-        seen.add(typ);
-        items.push({ label: typ, kind: CompletionItemKind.TypeParameter, detail: "built-in" });
-      }
-    }
-    for (const symKind of ["class", "interface", "trait", "enum"] as SymbolKind[]) {
-      const symbols = symbolIndex
-        .getSymbols({ kind: symKind })
-        .filter((s) => reachableFiles.has(path.normalize(s.file)));
-      for (const sym of symbols) {
-        if (!seen.has(sym.name)) {
-          seen.add(sym.name);
-          items.push({
-            label: sym.name,
-            kind: symbolKindToCompletionKind(symKind),
-            detail: symKind,
-          });
-        }
-      }
-    }
-    return items;
+    return buildTypeCompletionItems(symbolIndex, reachableFiles, {
+      kinds: ["class", "interface", "trait", "enum"],
+      includeBuiltins: true,
+      excludeVoid: true,
+    });
   }
 
   // Typed-prefix on method return-type identifier (topic 047 item 3).
@@ -876,30 +877,10 @@ export function buildSemanticCompletionItems(
   // and are excluded by detection, so they fall through to the class_body
   // path and remain untouched by this branch.
   if (symbolKinds === "return_type_typed_prefix") {
-    const items: CompletionItem[] = [];
-    const seen = new Set<string>();
-    for (const typ of BUILTIN_TYPES) {
-      if (!seen.has(typ)) {
-        seen.add(typ);
-        items.push({ label: typ, kind: CompletionItemKind.TypeParameter, detail: "built-in" });
-      }
-    }
-    for (const symKind of ["class", "interface", "trait", "enum"] as SymbolKind[]) {
-      const symbols = symbolIndex
-        .getSymbols({ kind: symKind })
-        .filter((s) => reachableFiles.has(path.normalize(s.file)));
-      for (const sym of symbols) {
-        if (!seen.has(sym.name)) {
-          seen.add(sym.name);
-          items.push({
-            label: sym.name,
-            kind: symbolKindToCompletionKind(symKind),
-            detail: symKind,
-          });
-        }
-      }
-    }
-    return items;
+    return buildTypeCompletionItems(symbolIndex, reachableFiles, {
+      kinds: ["class", "interface", "trait", "enum"],
+      includeBuiltins: true,
+    });
   }
 
   // Structured useCase body — userStoryTags plus useCaseStep starters.
