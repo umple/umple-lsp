@@ -2,6 +2,9 @@
 
 A Language Server Protocol implementation for the [Umple](https://www.umple.org) modeling language. Provides IDE features for `.ump` files across multiple editors.
 
+> **📚 Contributors / future maintainers — start at [`wiki/README.md`](wiki/README.md).**
+> The wiki has the full handoff documentation: architecture, dev setup, all four publishing pipelines (npm / VS Code / Zed / Neovim), CI automation, the AI-collab review protocol, and known gotchas.
+
 ## Features
 
 - **Diagnostics** - Real-time error and warning detection via the Umple compiler
@@ -81,9 +84,9 @@ The table below shows the LSP's support for Umple language features, based on th
 
 | Editor | Repo | Auto-installs server? |
 |--------|------|-----------------------|
-| VS Code | [umple.vscode](https://github.com/umple/umple.vscode) ([Marketplace](https://marketplace.visualstudio.com/items?itemName=digized.umple)) | Yes |
-| Zed | [umple.zed](https://github.com/umple/umple.zed) ([Zed Extensions](https://zed.dev/extensions?query=umple)) | Yes |
-| Neovim | [umple.nvim](https://github.com/umple/umple.nvim) | Yes |
+| VS Code | [umple.vscode](https://github.com/umple/umple.vscode) ([Marketplace](https://marketplace.visualstudio.com/items?itemName=digized.umple)) | Bundled in `.vsix` at packaging time (not auto-pulled at runtime) |
+| Zed | [umple.zed](https://github.com/umple/umple.zed) ([Zed Extensions](https://zed.dev/extensions?query=umple)) | Yes — downloaded from npm at extension load |
+| Neovim | [umple.nvim](https://github.com/umple/umple.nvim) | Yes — `npm install umple-lsp-server` during plugin build |
 | IntelliJ / JetBrains | [Setup guide](editors/intellij/) (LSP4IJ + npm) | No (`npm install -g`) |
 | BBEdit | [Setup guide](editors/bbedit/) (plist + npm) | No (`npm install -g`) |
 | Sublime Text | [Setup guide](editors/sublime/) (config only) | No (manual build) |
@@ -92,8 +95,8 @@ The LSP server is also available as an npm package: [`umple-lsp-server`](https:/
 
 ## Prerequisites
 
-- **Node.js 18+**
-- **Java 11+** (for the Umple compiler)
+- **Node.js 20+** (tested on 20 and 23)
+- **Java 11+** (for the Umple compiler — only needed if you want diagnostics)
 
 ## Quick Start
 
@@ -123,15 +126,19 @@ umple-lsp/
 │   │   │   ├── documentSymbolBuilder.ts # Document outline (symbol hierarchy)
 │   │   │   ├── formatter.ts           # Document formatting (indent, spacing, expansion)
 │   │   │   ├── formatRules.ts         # Formatting node classification
+│   │   │   ├── formatSafetyNet.ts     # Pre/post symbol-set check; aborts unsafe formats
 │   │   │   ├── diagramNavigation.ts   # Diagram click-to-select resolution
 │   │   │   ├── diagramRequests.ts     # Custom LSP request handlers for diagrams
 │   │   │   ├── importGraph.ts         # Forward/reverse import edge management
+│   │   │   ├── traitSmEventResolver.ts # Trait-side SM operation event lookup
+│   │   │   ├── renameValidation.ts    # RENAMEABLE_KINDS + kind-aware new-name regex
 │   │   │   ├── tokenTypes.ts          # Shared token/symbol type definitions
 │   │   │   ├── symbolTypes.ts         # Shared symbol entry types
 │   │   │   ├── treeUtils.ts           # Shared tree-walking utilities
 │   │   │   └── keywords.ts            # Built-in type names
+│   │   ├── bin/umple-lsp-server       # 2-line shell shebang requiring out/server.js
 │   │   └── test/                      # Semantic regression tests
-│   │       ├── semantic.test.ts       # Test runner (85 assertions)
+│   │       ├── semantic.test.ts       # Test runner (682 assertions)
 │   │       ├── helpers.ts             # Test harness helpers
 │   │       └── fixtures/semantic/     # .ump fixture files
 │   └── tree-sitter-umple/             # Tree-sitter grammar & queries
@@ -175,18 +182,20 @@ The LSP server accepts these initialization options:
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `umpleSyncJarPath` | string | required | Path to umplesync.jar |
+| `umpleSyncJarPath` | string | auto-discovered at `<server>/../umplesync.jar` since v0.2.6 | Path to umplesync.jar. Diagnostics are silently disabled if the jar can't be found. |
 | `umpleSyncTimeoutMs` | number | 30000 | Timeout for umplesync per-request process (ms) |
 
 Environment variables: `UMPLESYNC_JAR_PATH`, `UMPLESYNC_TIMEOUT_MS`, `UMPLE_TREE_SITTER_WASM_PATH`
 
 ## Development
 
+> **In-depth docs:** [`wiki/03-development.md`](wiki/03-development.md) covers first-time setup, dev symlink mode, programmatic test probes, and editor-specific reload tips. The summary below is just the most-used commands.
+
 ```bash
 npm run compile        # Build server (also copies WASM)
 npm run build-grammar  # Full rebuild after grammar.js changes
 npm run watch          # Watch mode
-npm test               # Run semantic regression tests (85 assertions)
+npm test               # Run semantic regression tests (682 assertions)
 ```
 
 ### Testing
@@ -194,7 +203,7 @@ npm test               # Run semantic regression tests (85 assertions)
 The project includes a semantic regression test harness that exercises go-to-definition, find-references, completion, hover, document symbols, and formatting. Tests use real `.ump` fixture files with `/*@marker*/` annotations for position-independent assertions.
 
 ```bash
-npm test    # Compile + run all 85 assertions
+npm test    # Compile + run all 682 assertions
 ```
 
 ### Manual Testing
@@ -204,3 +213,22 @@ Run the server directly for JSON-RPC testing:
 ```bash
 node packages/server/out/server.js --stdio
 ```
+
+## For Contributors
+
+See [`wiki/`](wiki/) for the full project handoff:
+
+| Topic | Page |
+|-------|------|
+| What this project is + architecture | [01-overview](wiki/01-overview.md), [02-architecture](wiki/02-architecture.md) |
+| Setup, build, test | [03-development](wiki/03-development.md) |
+| Editing the grammar | [04-grammar](wiki/04-grammar.md) |
+| Releasing — npm | [05-publishing-npm](wiki/05-publishing-npm.md) |
+| Releasing — VS Code | [06-publishing-vscode](wiki/06-publishing-vscode.md) |
+| Releasing — Zed | [07-publishing-zed](wiki/07-publishing-zed.md) |
+| Releasing — Neovim | [08-publishing-nvim](wiki/08-publishing-nvim.md) |
+| BBEdit / IntelliJ / Sublime | [09-other-editors](wiki/09-other-editors.md) |
+| CI automation | [10-ci-automation](wiki/10-ci-automation.md) |
+| Review process (collab w/ Codex) | [11-collab-protocol](wiki/11-collab-protocol.md) |
+| Common pitfalls | [12-gotchas](wiki/12-gotchas.md) |
+| Roadmap + known gaps | [13-roadmap](wiki/13-roadmap.md) |
