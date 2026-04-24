@@ -4672,6 +4672,97 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 131: Topic 047 item 1 — typed-prefix narrowing on the isA type identifier.
+  // Mirrors topic 043's association_typed_prefix pattern. Before the fix,
+  // `isA P|` in certain parse contexts leaked 175 LookaheadIterator keywords
+  // (ERROR, namespace, Java, generate, ...) via the array symbolKinds path.
+  // The scalar `isa_typed_prefix` scope takes a symbol-only early-return
+  // branch in completionBuilder.
+  {
+    name: "131 isa_typed_prefix: narrow isA type identifier completion; drop keyword leak",
+    fixtures: ["131_isa_typed_prefix.ump"],
+    assertions: [
+      // Neighbors exist.
+      { type: "symbol_count", fixture: "131_isa_typed_prefix.ump", name: "Person", kind: "class", expect: 1 },
+      { type: "symbol_count", fixture: "131_isa_typed_prefix.ump", name: "Parent", kind: "class", expect: 1 },
+      { type: "symbol_count", fixture: "131_isa_typed_prefix.ump", name: "Printable", kind: "interface", expect: 1 },
+      { type: "symbol_count", fixture: "131_isa_typed_prefix.ump", name: "Plantable", kind: "trait", expect: 1 },
+
+      // Parsed leak case — isa_declaration forms, but array-form path would
+      // leak 175 keywords. Scalar scope narrows the final output.
+      {
+        type: "completion_kinds",
+        at: "isa_typed_prefix_parsed",
+        expect: "isa_typed_prefix",
+      },
+      {
+        type: "completion_includes",
+        at: "isa_typed_prefix_parsed",
+        expect: ["Person", "Parent", "Printable", "Plantable"],
+      },
+      {
+        type: "completion_excludes",
+        at: "isa_typed_prefix_parsed",
+        expect: [
+          "isA", "before", "trace", "abstract", "namespace", "Java",
+          "ERROR", "class", "trait", "mixset", "generate", "Color",
+        ],
+      },
+
+      // Comma case — second name in type_list.
+      {
+        type: "completion_kinds",
+        at: "isa_typed_prefix_comma",
+        expect: "isa_typed_prefix",
+      },
+      {
+        type: "completion_includes",
+        at: "isa_typed_prefix_comma",
+        expect: ["Person", "Parent", "Printable", "Plantable"],
+      },
+      {
+        type: "completion_excludes",
+        at: "isa_typed_prefix_comma",
+        expect: ["ERROR", "namespace", "Java", "Color"],
+      },
+
+      // Mid-identifier cursor — clean parse, nodeAtCursor is on the inner
+      // identifier text.
+      {
+        type: "completion_kinds",
+        at: "isa_typed_prefix_midid",
+        expect: "isa_typed_prefix",
+      },
+      {
+        type: "completion_includes",
+        at: "isa_typed_prefix_midid",
+        expect: ["Person", "Parent", "Printable", "Plantable"],
+      },
+
+      // Blank-slot `isA |` must keep existing behavior (array-form via the
+      // prevLeaf.type==="isA" branch), not isa_typed_prefix.
+      {
+        type: "completion_kinds",
+        at: "isa_blank",
+        expect: ["class", "interface", "trait"],
+      },
+
+      // Negative regressions — trait SM angle-bracket positions must NOT
+      // become isa_typed_prefix. The prevLeaf gate (`<` / `as`) rules them
+      // out even when the enclosing ERROR still holds an `isA` keyword.
+      {
+        type: "completion_kinds",
+        at: "trait_sm_inner_typed",
+        expect: "class_body",
+      },
+      {
+        type: "completion_kinds",
+        at: "trait_sm_binding_typed",
+        expect: "class_body",
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

@@ -1,0 +1,51 @@
+// Topic 047 item 1 — typed-prefix narrowing on the isA type identifier.
+//
+// Before the fix: at `isA P|`, the (isa_declaration)
+// @scope.class_interface_trait scope query matches, returning the array
+// form ["class","interface","trait"]. That path still merges raw
+// LookaheadIterator output (ERROR, namespace, Java, generate, ...) into the
+// final completion list. Topic 043 fixed the same class of bug for
+// association right-type; this fixture locks the same pattern for isA.
+//
+// Must offer: class / interface / trait symbols only.
+// Must exclude: enums, class-body keyword junk, and especially `ERROR`.
+
+class Person {}
+class Parent {}
+interface Printable {}
+trait Plantable {}
+enum Color { Red, Blue }
+
+// Parsed shape — isa_declaration forms, preceded by an attribute so the
+// parser falls into recovery and leaks 175 keywords via LookaheadIterator
+// without the fix.
+class StudentA {
+  name;
+  isA P/*@isa_typed_prefix_parsed*/
+}
+
+// Multi-name type_list, cursor on the second name.
+class StudentB {
+  isA Person, P/*@isa_typed_prefix_comma*/
+}
+
+// Clean parse (closing brace present), mid-identifier cursor.
+class StudentC {
+  isA Per/*@isa_typed_prefix_midid*/
+}
+
+// Blank slot — must keep existing behavior. Should NOT be isa_typed_prefix;
+// still returns class/interface/trait via the blank-isA branch.
+class StudentD {
+  isA /*@isa_blank*/
+}
+
+// Negative: trait SM angle-bracket typing. Neither position is an isA type
+// slot — prevLeaf is `<` / `as`, which excludes the ERROR fallback.
+class StudentE {
+  isA T<sm/*@trait_sm_inner_typed*/
+}
+
+class StudentF {
+  isA T<sm as S/*@trait_sm_binding_typed*/
+}

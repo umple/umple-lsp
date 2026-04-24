@@ -69,7 +69,7 @@ export interface CompletionInfo {
   /** Operators the parser expects at this position. */
   operators: string[];
   /** Which symbol kinds to offer, or null for none. */
-  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "trace_state" | "trace_method" | "trace_state_method" | "trace_attribute" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | "top_level" | "class_body" | "trait_body" | "interface_body" | "assoc_class_body" | "mixset_body" | "statemachine_body" | "state_body" | "filter_body" | "transition_target" | "userstory_body" | "usecase_body" | "association_multiplicity" | "association_type" | "association_typed_prefix" | "association_arrow" | null;
+  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "trace_state" | "trace_method" | "trace_state_method" | "trace_attribute" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | "top_level" | "class_body" | "trait_body" | "interface_body" | "assoc_class_body" | "mixset_body" | "statemachine_body" | "state_body" | "filter_body" | "transition_target" | "userstory_body" | "usecase_body" | "association_multiplicity" | "association_type" | "association_typed_prefix" | "association_arrow" | "isa_typed_prefix" | null;
   /** True if cursor is at a definition-name position (suppress all). */
   isDefinitionName: boolean;
   /** True if cursor is inside a comment. */
@@ -253,6 +253,60 @@ export function analyzeCompletion(
     if (errorParent && CLASS_LIKE_TYPES.has(errorParent.type)) {
       symbolKinds = ["class", "interface", "trait"];
     }
+  }
+
+  // --- Typed-prefix on isa_declaration type identifier (topic 047 item 1) ---
+  // Once the user types a prefix inside the type_list, the existing
+  // (isa_declaration) @scope.class_interface_trait scope query still matches,
+  // but the array form lets LookaheadIterator append class-body / top-level
+  // starters (ERROR, namespace, Java, generate, ...). Force the scalar
+  // `isa_typed_prefix` so completionBuilder takes the symbol-only early-return
+  // branch — mirrors topic 043's association_typed_prefix pattern.
+  if (
+    nodeAtCursor &&
+    nodeAtCursor.type === "identifier" &&
+    /^[A-Za-z_]/.test(nodeAtCursor.text)
+  ) {
+    // Primary: identifier is inside an isa_declaration's type_list.
+    // Hard-stop at trait_sm_binding so `isA T<sm as S|` is never misclassified.
+    let n: SyntaxNode | null = nodeAtCursor.parent;
+    let insideIsaDecl = false;
+    while (n) {
+      if (n.type === "trait_sm_binding") break;
+      if (n.type === "isa_declaration") { insideIsaDecl = true; break; }
+      if (
+        n.type === "class_definition" || n.type === "trait_definition" ||
+        n.type === "interface_definition" ||
+        n.type === "association_class_definition" ||
+        n.type === "source_file"
+      ) break;
+      n = n.parent;
+    }
+    // Fallback: ERROR recovery where isa_declaration didn't form at all
+    // (e.g. `class S { isA P` with no closing brace). findPreviousLeaf backs
+    // up over the current identifier, so prevLeaf for `isA P|` is `isA` and
+    // for `isA Person, P|` is `,`. For trait-SM angle-bracket positions
+    // (`isA T<sm|`, `isA T<sm as S|`) prevLeaf is `<` / `as`, so the gate
+    // excludes them even when they share an ERROR region with `isA`.
+    if (
+      !insideIsaDecl &&
+      (prevLeaf?.type === "isA" || prevLeaf?.type === ",")
+    ) {
+      let err: SyntaxNode | null = nodeAtCursor.parent;
+      while (err && err.type !== "ERROR") err = err.parent;
+      if (err) {
+        // For the comma case, additionally confirm the enclosing ERROR has
+        // `isA` as an earlier child — rules out stray commas in unrelated
+        // broken constructs.
+        for (let i = 0; i < err.childCount; i++) {
+          const c = err.child(i);
+          if (!c) continue;
+          if (c.startIndex >= nodeAtCursor.startIndex) break;
+          if (c.type === "isA") { insideIsaDecl = true; break; }
+        }
+      }
+    }
+    if (insideIsaDecl) symbolKinds = "isa_typed_prefix";
   }
 
   if (
@@ -865,6 +919,7 @@ function resolveCompletionScope(
   if (kindStr === "association_multiplicity") return "association_multiplicity";
   if (kindStr === "association_type") return "association_type";
   if (kindStr === "association_typed_prefix") return "association_typed_prefix";
+  if (kindStr === "isa_typed_prefix") return "isa_typed_prefix";
   if (kindStr === "association_arrow") return "association_arrow";
   if (kindStr === "none") return null;
 

@@ -809,6 +809,32 @@ export function buildSemanticCompletionItems(
     return atItems;
   }
 
+  // Typed-prefix on the isa_declaration type identifier (topic 047 item 1).
+  // Same motivation as association_typed_prefix above: the generic
+  // (isa_declaration) @scope.class_interface_trait capture pulls in raw
+  // LookaheadIterator keyword junk when recovering from incomplete parses.
+  // This narrower scope returns only class / interface / trait symbols.
+  if (symbolKinds === "isa_typed_prefix") {
+    const items: CompletionItem[] = [];
+    const seen = new Set<string>();
+    for (const symKind of ["class", "interface", "trait"] as SymbolKind[]) {
+      const symbols = symbolIndex
+        .getSymbols({ kind: symKind })
+        .filter((s) => reachableFiles.has(path.normalize(s.file)));
+      for (const sym of symbols) {
+        if (!seen.has(sym.name)) {
+          seen.add(sym.name);
+          items.push({
+            label: sym.name,
+            kind: symbolKindToCompletionKind(symKind),
+            detail: symKind,
+          });
+        }
+      }
+    }
+    return items;
+  }
+
   // Structured useCase body — userStoryTags plus useCaseStep starters.
   if (symbolKinds === "usecase_body") {
     return USE_CASE_BODY_STARTERS.map((kw) => ({
