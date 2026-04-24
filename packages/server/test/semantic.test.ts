@@ -2117,11 +2117,18 @@ const TEST_CASES: TestCase[] = [
         at: "comp_left",
         expect: ["score", "label"],
       },
-      // Left-side sorted completion excludes non-attribute symbols
+      // Left-side sorted completion excludes non-attribute symbols. Topic
+      // 049 phase 2 narrowed this scope to symbol-only; raw parser keyword
+      // leaks that previously slipped through the CONSTRAINT_BLOCKLIST
+      // filter must NOT appear in the final completion list either.
       {
         type: "completion_excludes",
         at: "comp_left",
-        expect: ["Student", "Course", "Integer"],
+        expect: [
+          "Student", "Course", "Integer",
+          "ERROR", "namespace", "class", "isA", "trace", "generate",
+          "abstract", "mixset",
+        ],
       },
       // Right-side sorted completion includes target class attrs (Student)
       {
@@ -2129,11 +2136,16 @@ const TEST_CASES: TestCase[] = [
         at: "comp_right",
         expect: ["id", "name"],
       },
-      // Right-side sorted completion excludes enclosing class attrs
+      // Right-side sorted completion excludes enclosing class attrs AND
+      // the same raw-parser junk that was silently leaking pre-phase-2.
       {
         type: "completion_excludes",
         at: "comp_right",
-        expect: ["score", "label"],
+        expect: [
+          "score", "label",
+          "ERROR", "namespace", "class", "isA", "trace", "generate",
+          "abstract", "mixset",
+        ],
       },
     ],
   },
@@ -5001,6 +5013,51 @@ const TEST_CASES: TestCase[] = [
         type: "completion_kinds",
         at: "param_type_slot",
         expect: "class_body",
+      },
+    ],
+  },
+
+  // 134: Topic 049 phase 2 — constraint `[...]` own_attribute narrowing.
+  // Scope classifies as `own_attribute`; emits only the enclosing class's
+  // own attributes (Umple E28 — no inherited). Used to also surface every
+  // parser keyword that wasn't in CONSTRAINT_BLOCKLIST; after the phase,
+  // symbol-only.
+  {
+    name: "134 own_attribute_completion: constraint scope emits own attrs only, no raw keyword junk",
+    fixtures: ["134_own_attribute_completion.ump"],
+    assertions: [
+      { type: "symbol_count", fixture: "134_own_attribute_completion.ump", name: "Person", kind: "class", expect: 1 },
+      { type: "symbol_count", fixture: "134_own_attribute_completion.ump", name: "age", kind: "attribute", expect: 1 },
+
+      // Scope classification.
+      {
+        type: "completion_kinds",
+        at: "constraint_cursor",
+        expect: "own_attribute",
+      },
+
+      // Own attrs present.
+      {
+        type: "completion_includes",
+        at: "constraint_cursor",
+        expect: ["name", "age"],
+      },
+
+      // Inherited attrs from `isA Base` must NOT be offered — Umple E28.
+      {
+        type: "completion_excludes",
+        at: "constraint_cursor",
+        expect: ["inheritedAttr", "basePriority"],
+      },
+
+      // No raw LookaheadIterator junk in the final completion list.
+      {
+        type: "completion_excludes",
+        at: "constraint_cursor",
+        expect: [
+          "ERROR", "namespace", "class", "interface", "trait", "isA",
+          "trace", "generate", "abstract", "mixset", "Java", "enum",
+        ],
       },
     ],
   },

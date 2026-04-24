@@ -231,42 +231,6 @@ const ASSOCIATION_ARROW_STARTERS: string[] = [
   "<-<",
 ];
 
-// ── Constraint keyword blocklist ────────────────────────────────────────────
-
-const CONSTRAINT_BLOCKLIST = new Set([
-  "ERROR",
-  // Top-level definition keywords
-  "namespace", "class", "interface", "trait", "abstract",
-  "association", "associationClass", "statemachine",
-  "enum", "external", "mixset",
-  // Generate statement + all targets
-  "generate", "Java", "Nothing", "Php", "RTCpp", "SimpleCpp",
-  "Ruby", "Python", "Cpp", "Json", "StructureDiagram", "Yuml",
-  "Violet", "Umlet", "Simulate", "TextUml", "Scxml",
-  "GvStateDiagram", "GvClassDiagram", "GvFeatureDiagram",
-  "GvClassTraitDiagram", "GvEntityRelationshipDiagram",
-  "Alloy", "NuSMV", "NuSMVOptimizer", "Papyrus", "Ecore", "Xmi",
-  "Xtext", "Sql", "StateTables", "EventSequence", "InstanceDiagram",
-  "Umple", "UmpleSelf", "USE", "Test", "SimpleMetrics",
-  "PlainRequirementsDoc", "Uigu2", "ExternalGrammar", "Mermaid",
-  // Other top-level directives
-  "use", "strictness",
-  // Class-level keywords invalid inside constraints
-  "isA", "req", "require", "subfeature", "isFeature",
-  "depend", "singleton", "displayColor", "displayColour",
-  "implementsReq", "filter", "includeFilter",
-  // Trace/SM/attribute keywords that can't appear in expressions
-  "trace", "tracecase", "activate", "deactivate",
-  "onAllObjects", "onThisThreadOnly", "onThisObject",
-  "where", "until", "giving", "record",
-  "queued", "pooled", "as",
-  "key", "immutable", "unique", "lazy", "settable",
-  "internal", "defaulted", "autounique",
-  "entry", "exit", "do",
-  "emit", "around", "custom", "generated",
-  "include", "hops", "super", "sub",
-]);
-
 // ── Kind → CompletionItemKind mapping ───────────────────────────────────────
 
 export function symbolKindToCompletionKind(kind: SymbolKind): CompletionItemKind {
@@ -547,6 +511,31 @@ export function buildSemanticCompletionItems(
       inherited: true,
     });
     return gItems;
+  }
+
+  // Constraint scope `[...]`: own attributes only (Umple E28 — no inherited
+  // attrs in constraints). Symbol-only; no raw lookahead, no operators.
+  if (symbolKinds === "own_attribute" && info.enclosingClass) {
+    const oaItems: CompletionItem[] = [];
+    const oaSeen = new Set<string>();
+    appendSymbolsOfKinds(oaItems, oaSeen, symbolIndex, reachableFiles, {
+      kinds: ["attribute"],
+      container: info.enclosingClass,
+    });
+    return oaItems;
+  }
+
+  // Sorted-key scope `sorted{...}`: attributes of the owner class with
+  // inheritance. Symbol-only; no raw lookahead, no operators.
+  if (symbolKinds === "sorted_attribute" && info.sortedKeyOwner) {
+    const skItems: CompletionItem[] = [];
+    const skSeen = new Set<string>();
+    appendSymbolsOfKinds(skItems, skSeen, symbolIndex, reachableFiles, {
+      kinds: ["attribute"],
+      container: info.sortedKeyOwner,
+      inherited: true,
+    });
+    return skItems;
   }
 
   // Transition-target scope: state symbols only, no keywords.
@@ -835,38 +824,16 @@ export function buildSemanticCompletionItems(
 }
 
 /**
- * Documentation-only. Lists the scalar `symbolKinds` values that are
- * expected to reach `buildLookaheadFallbackItems`. Array-form symbolKinds
- * also reach it (generic type-compatible lookups). Any scalar not in this
- * set must be handled by an early-return branch in
- * `buildSemanticCompletionItems`; otherwise raw LookaheadIterator output
- * would surface for that scope.
- *
- * Not referenced at runtime — this constant exists so future contributors
- * can grep for a scope name and verify its placement.
- */
-const FALLBACK_SCALAR_SCOPES: ReadonlySet<string> = new Set([
-  "own_attribute",
-  "guard_attribute_method",
-  "trace_attribute_method",
-  "sorted_attribute",
-]);
-void FALLBACK_SCALAR_SCOPES; // silence unused-const (documentation only)
-
-/**
  * The raw-lookahead fallback path for `buildSemanticCompletionItems`.
  *
- * Reached only when no specialized / curated scope branch handled the
- * scope. Two kinds of callers get here:
- *   1. `Array.isArray(symbolKinds)` — generic type-compatible lookups
- *      such as `[class, interface, trait, enum]` or `[method]`.
- *   2. One of the mixed keyword-filter + scoped-symbol scalars listed in
- *      `FALLBACK_SCALAR_SCOPES` (own_attribute, guard_attribute_method,
- *      trace_attribute_method, sorted_attribute).
+ * After topic 049 phase 2 this is reached only when `symbolKinds` is an
+ * array (`SymbolKind[]`) — every scalar scope has its own early-return
+ * branch above. This is the ONLY place in the builder where raw
+ * `info.keywords` (LookaheadIterator output) is surfaced to the user, and
+ * it is now array-only: no scalar scope surfaces raw lookahead anywhere.
  *
- * This is the ONLY place in the builder where raw `info.keywords`
- * (LookaheadIterator output) reaches the user. Scopes that need to bypass
- * raw lookahead MUST early-return in `buildSemanticCompletionItems`.
+ * If you add a new scalar scope, route it via an early-return in
+ * `buildSemanticCompletionItems`, not through this path.
  */
 function buildLookaheadFallbackItems(
   info: CompletionInfo,
@@ -877,40 +844,23 @@ function buildLookaheadFallbackItems(
   const items: CompletionItem[] = [];
   const seen = new Set<string>();
 
-  // 1. Keywords from LookaheadIterator (filtered in constraint contexts)
-  let keywords = info.keywords;
-  if (
-    symbolKinds === "own_attribute" ||
-    symbolKinds === "guard_attribute_method" ||
-    symbolKinds === "trace_attribute_method" ||
-    symbolKinds === "sorted_attribute"
-  ) {
-    keywords = keywords.filter((kw) => !CONSTRAINT_BLOCKLIST.has(kw));
-  }
-
-  for (const kw of keywords) {
+  // 1. Keywords from LookaheadIterator.
+  for (const kw of info.keywords) {
     if (!seen.has(kw)) {
       seen.add(kw);
       items.push({ label: kw, kind: CompletionItemKind.Keyword });
     }
   }
 
-  // 2. Operators (skip in guard/constraint/trace contexts)
-  if (
-    symbolKinds !== "own_attribute" &&
-    symbolKinds !== "guard_attribute_method" &&
-    symbolKinds !== "trace_attribute_method" &&
-    symbolKinds !== "sorted_attribute"
-  ) {
-    for (const op of info.operators) {
-      if (!seen.has(op)) {
-        seen.add(op);
-        items.push({ label: op, kind: CompletionItemKind.Operator });
-      }
+  // 2. Operators.
+  for (const op of info.operators) {
+    if (!seen.has(op)) {
+      seen.add(op);
+      items.push({ label: op, kind: CompletionItemKind.Operator });
     }
   }
 
-  // 3. Built-in types (when in type-compatible scope)
+  // 3. Built-in types (when in type-compatible scope).
   if (
     Array.isArray(symbolKinds) &&
     symbolKinds.some((k) => ["class", "interface", "trait", "enum"].includes(k))
@@ -927,40 +877,7 @@ function buildLookaheadFallbackItems(
     }
   }
 
-  // 4. Constraint scope: only own attributes (Umple E28)
-  if (symbolKinds === "own_attribute" && info.enclosingClass) {
-    appendSymbolsOfKinds(items, seen, symbolIndex, reachableFiles, {
-      kinds: ["attribute"],
-      container: info.enclosingClass,
-    });
-    return items;
-  }
-
-  // 5. Sorted key scope: attributes of the owner class (with inheritance)
-  if (symbolKinds === "sorted_attribute" && info.sortedKeyOwner) {
-    appendSymbolsOfKinds(items, seen, symbolIndex, reachableFiles, {
-      kinds: ["attribute"],
-      container: info.sortedKeyOwner,
-      inherited: true,
-    });
-    return items;
-  }
-
-  // 6. Guard/trace scope: attributes + methods from enclosing class (with inheritance)
-  if (
-    (symbolKinds === "guard_attribute_method" ||
-      symbolKinds === "trace_attribute_method") &&
-    info.enclosingClass
-  ) {
-    appendSymbolsOfKinds(items, seen, symbolIndex, reachableFiles, {
-      kinds: ["attribute", "method"],
-      container: info.enclosingClass,
-      inherited: true,
-    });
-    return items;
-  }
-
-  // 6. Symbol completions from index (scoped to reachable files)
+  // 4. Symbol completions from index (scoped to reachable files).
   if (Array.isArray(symbolKinds)) {
     for (const symKind of symbolKinds) {
       let symbols: SymbolEntry[];

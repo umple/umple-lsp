@@ -1,0 +1,23 @@
+// Topic 049 phase 2 — own_attribute narrowing.
+//
+// Constraint brackets `[ ... ]` offer ONLY the enclosing class's own
+// attributes (Umple E28 — no inherited attrs in constraints). Before this
+// phase completion leaked dozens of filtered-but-nonzero parser keywords
+// via the raw lookahead path. After: symbol-only, zero keyword dump.
+
+class Base {
+  inheritedAttr;
+  Integer basePriority;
+}
+
+class Person {
+  isA Base;
+  name;
+  Integer age;
+
+  // Constraint context — cursor inside the comparison expression. The
+  // completion scope is `own_attribute`: emit Person's own attrs (name,
+  // age), exclude Base's (inheritedAttr, basePriority) per E28, and emit
+  // zero raw-parser keyword junk.
+  [ /*@constraint_cursor*/n != "" ]
+}
