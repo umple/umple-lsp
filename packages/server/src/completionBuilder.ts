@@ -387,9 +387,6 @@ export function buildSemanticCompletionItems(
   symbolIndex: SymbolIndex,
   reachableFiles: Set<string>,
 ): CompletionItem[] {
-  const items: CompletionItem[] = [];
-  const seen = new Set<string>();
-
   // Top-level scope: curated keywords only, no raw lookahead or symbols.
   if (symbolKinds === "top_level") {
     return TOP_LEVEL_KEYWORDS.map((kw) => ({
@@ -912,6 +909,56 @@ export function buildSemanticCompletionItems(
     }
     return reqItems;
   }
+
+  // Every specialized / curated scope has early-returned above. Everything
+  // else falls through to the raw-lookahead path — it is the ONLY place in
+  // this builder where `info.keywords` (LookaheadIterator output) reaches
+  // the user. See `buildLookaheadFallbackItems` for the contract.
+  return buildLookaheadFallbackItems(info, symbolKinds, symbolIndex, reachableFiles);
+}
+
+/**
+ * Documentation-only. Lists the scalar `symbolKinds` values that are
+ * expected to reach `buildLookaheadFallbackItems`. Array-form symbolKinds
+ * also reach it (generic type-compatible lookups). Any scalar not in this
+ * set must be handled by an early-return branch in
+ * `buildSemanticCompletionItems`; otherwise raw LookaheadIterator output
+ * would surface for that scope.
+ *
+ * Not referenced at runtime — this constant exists so future contributors
+ * can grep for a scope name and verify its placement.
+ */
+const FALLBACK_SCALAR_SCOPES: ReadonlySet<string> = new Set([
+  "own_attribute",
+  "guard_attribute_method",
+  "trace_attribute_method",
+  "sorted_attribute",
+]);
+void FALLBACK_SCALAR_SCOPES; // silence unused-const (documentation only)
+
+/**
+ * The raw-lookahead fallback path for `buildSemanticCompletionItems`.
+ *
+ * Reached only when no specialized / curated scope branch handled the
+ * scope. Two kinds of callers get here:
+ *   1. `Array.isArray(symbolKinds)` — generic type-compatible lookups
+ *      such as `[class, interface, trait, enum]` or `[method]`.
+ *   2. One of the mixed keyword-filter + scoped-symbol scalars listed in
+ *      `FALLBACK_SCALAR_SCOPES` (own_attribute, guard_attribute_method,
+ *      trace_attribute_method, sorted_attribute).
+ *
+ * This is the ONLY place in the builder where raw `info.keywords`
+ * (LookaheadIterator output) reaches the user. Scopes that need to bypass
+ * raw lookahead MUST early-return in `buildSemanticCompletionItems`.
+ */
+function buildLookaheadFallbackItems(
+  info: CompletionInfo,
+  symbolKinds: CompletionInfo["symbolKinds"],
+  symbolIndex: SymbolIndex,
+  reachableFiles: Set<string>,
+): CompletionItem[] {
+  const items: CompletionItem[] = [];
+  const seen = new Set<string>();
 
   // 1. Keywords from LookaheadIterator (filtered in constraint contexts)
   let keywords = info.keywords;
