@@ -4877,6 +4877,133 @@ const TEST_CASES: TestCase[] = [
       },
     ],
   },
+
+  // 133: Topic 047 item 3 — typed-prefix narrowing on method return-type
+  // names. Same pattern as items 1/2 / topic 043, applied to the four
+  // grammar rules that use a `return_type` field on type_name. Unlike item
+  // 2, the builder keeps `void` here (valid only as a method return type).
+  // Parameter types are cleanly excluded because type_name's parent is
+  // `param`, not a method rule.
+  {
+    name: "133 return_type_typed_prefix: narrow method return-type slots; drop keyword leak",
+    fixtures: ["133_return_type_typed_prefix.ump"],
+    assertions: [
+      { type: "symbol_count", fixture: "133_return_type_typed_prefix.ump", name: "Person", kind: "class", expect: 1 },
+      { type: "symbol_count", fixture: "133_return_type_typed_prefix.ump", name: "Printable", kind: "interface", expect: 1 },
+      { type: "symbol_count", fixture: "133_return_type_typed_prefix.ump", name: "Plantable", kind: "trait", expect: 1 },
+      { type: "symbol_count", fixture: "133_return_type_typed_prefix.ump", name: "Color", kind: "enum", expect: 1 },
+
+      // Built-in return type prefix in method_declaration.
+      {
+        type: "completion_kinds",
+        at: "ret_builtin_prefix",
+        expect: "return_type_typed_prefix",
+      },
+      {
+        type: "completion_includes",
+        at: "ret_builtin_prefix",
+        expect: ["Integer", "String", "Boolean", "void", "Person", "Printable", "Plantable", "Color"],
+      },
+      {
+        type: "completion_excludes",
+        at: "ret_builtin_prefix",
+        expect: [
+          "ERROR", "namespace", "Java", "generate", "test", "generic",
+          "isA", "trace", "class", "mixset",
+        ],
+      },
+
+      // void return type — the case reserved from item 2.
+      {
+        type: "completion_kinds",
+        at: "ret_void_prefix",
+        expect: "return_type_typed_prefix",
+      },
+      {
+        type: "completion_includes",
+        at: "ret_void_prefix",
+        expect: ["void", "Integer", "Person"],
+      },
+
+      // User-defined class return type prefix.
+      {
+        type: "completion_kinds",
+        at: "ret_class_prefix",
+        expect: "return_type_typed_prefix",
+      },
+      {
+        type: "completion_includes",
+        at: "ret_class_prefix",
+        expect: ["Person", "void", "Integer"],
+      },
+
+      // abstract_method_declaration — class body with `abstract` keyword.
+      {
+        type: "completion_kinds",
+        at: "ret_abstract_prefix",
+        expect: "return_type_typed_prefix",
+      },
+      {
+        type: "completion_includes",
+        at: "ret_abstract_prefix",
+        expect: ["void", "Integer", "Person"],
+      },
+
+      // method_signature — interface body.
+      {
+        type: "completion_kinds",
+        at: "ret_iface_signature",
+        expect: "return_type_typed_prefix",
+      },
+      {
+        type: "completion_includes",
+        at: "ret_iface_signature",
+        expect: ["void", "Integer", "Person"],
+      },
+
+      // trait_method_signature — implicit-abstract branch.
+      {
+        type: "completion_kinds",
+        at: "ret_trait_implicit",
+        expect: "return_type_typed_prefix",
+      },
+      {
+        type: "completion_includes",
+        at: "ret_trait_implicit",
+        expect: ["void", "Integer", "Person"],
+      },
+
+      // trait_method_signature — explicit-abstract branch.
+      {
+        type: "completion_kinds",
+        at: "ret_trait_explicit",
+        expect: "return_type_typed_prefix",
+      },
+      {
+        type: "completion_includes",
+        at: "ret_trait_explicit",
+        expect: ["void", "Integer", "Person"],
+      },
+
+      // Negatives — must NOT be reclassified.
+      // Method-name slot: isAtAttributeNamePosition already suppresses
+      // completion here (prevLeaf sits under a type_name with fieldName
+      // "return_type"). Confirms the stronger invariant: nothing useful
+      // surfaces at the name slot, return_type_typed_prefix or otherwise.
+      {
+        type: "completion_kinds",
+        at: "method_name_slot",
+        expect: null,
+      },
+      // Parameter type: type_name's parent is `param`, not a method rule —
+      // the field/slot check excludes it without extra logic.
+      {
+        type: "completion_kinds",
+        at: "param_type_slot",
+        expect: "class_body",
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────

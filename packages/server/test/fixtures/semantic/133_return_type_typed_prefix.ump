@@ -1,0 +1,72 @@
+// Topic 047 item 3 — typed-prefix narrowing on method return-type names.
+//
+// Four grammar rules use the `return_type` field on type_name:
+//   - method_declaration       (class bodies)
+//   - abstract_method_declaration (class bodies, with `abstract` keyword)
+//   - method_signature         (interface bodies)
+//   - trait_method_signature   (trait bodies — both implicit-abstract and
+//                               explicit-abstract branches)
+//
+// Before the fix: all these positions fell through to generic class_body /
+// interface_body / trait_body — keyword leak + zero type symbols.
+// After: scalar `return_type_typed_prefix` routes to a symbol-only builder
+// branch that KEEPS `void` (unlike decl_type_typed_prefix).
+//
+// Parameter types live under `param` (not one of the four method rules), so
+// the field/slot check excludes them cleanly — no broadening.
+
+class Person {}
+interface Printable {}
+trait Plantable {}
+enum Color { Red, Blue }
+
+// class method with built-in return type prefix.
+class ClassA {
+  Int/*@ret_builtin_prefix*/eger f() {}
+}
+
+// void return type (the one case item 2 reserved for us).
+class ClassB {
+  vo/*@ret_void_prefix*/id ping() {}
+}
+
+// User-defined class return type prefix.
+class ClassC {
+  Pers/*@ret_class_prefix*/on make() {}
+}
+
+// abstract_method_declaration — uses `abstract` keyword, ends with `;`.
+class ClassD {
+  abstract vo/*@ret_abstract_prefix*/id cleanup();
+}
+
+// method_signature — interface bodies.
+interface IfaceE {
+  vo/*@ret_iface_signature*/id f();
+}
+
+// trait_method_signature — implicit-abstract branch (return type required,
+// no `abstract` keyword).
+trait TraitF {
+  vo/*@ret_trait_implicit*/id perform();
+}
+
+// trait_method_signature — explicit-abstract branch (`abstract` required,
+// return type optional but present here).
+trait TraitG {
+  abstract vo/*@ret_trait_explicit*/id shutdown();
+}
+
+// ─── Negatives: must NOT be return_type_typed_prefix ─────────────────────
+
+// Method name slot (after the return type). nodeAtCursor lands on `(`, not
+// an identifier, so the detection gate rejects it.
+class NegMethodName {
+  void f/*@method_name_slot*/() {}
+}
+
+// Parameter type — type_name's parent is `param`, not a method rule.
+// Detection's parent-type check excludes it cleanly.
+class NegParamType {
+  void f(Int/*@param_type_slot*/eger x) {}
+}

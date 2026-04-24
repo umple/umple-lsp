@@ -869,6 +869,39 @@ export function buildSemanticCompletionItems(
     return items;
   }
 
+  // Typed-prefix on method return-type identifier (topic 047 item 3).
+  // Same shape as decl_type_typed_prefix, but fires on method_declaration /
+  // abstract_method_declaration / method_signature / trait_method_signature
+  // and KEEPS `void`. Parameter types sit under `param` (not a method rule)
+  // and are excluded by detection, so they fall through to the class_body
+  // path and remain untouched by this branch.
+  if (symbolKinds === "return_type_typed_prefix") {
+    const items: CompletionItem[] = [];
+    const seen = new Set<string>();
+    for (const typ of BUILTIN_TYPES) {
+      if (!seen.has(typ)) {
+        seen.add(typ);
+        items.push({ label: typ, kind: CompletionItemKind.TypeParameter, detail: "built-in" });
+      }
+    }
+    for (const symKind of ["class", "interface", "trait", "enum"] as SymbolKind[]) {
+      const symbols = symbolIndex
+        .getSymbols({ kind: symKind })
+        .filter((s) => reachableFiles.has(path.normalize(s.file)));
+      for (const sym of symbols) {
+        if (!seen.has(sym.name)) {
+          seen.add(sym.name);
+          items.push({
+            label: sym.name,
+            kind: symbolKindToCompletionKind(symKind),
+            detail: symKind,
+          });
+        }
+      }
+    }
+    return items;
+  }
+
   // Structured useCase body — userStoryTags plus useCaseStep starters.
   if (symbolKinds === "usecase_body") {
     return USE_CASE_BODY_STARTERS.map((kw) => ({

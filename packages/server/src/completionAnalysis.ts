@@ -69,7 +69,7 @@ export interface CompletionInfo {
   /** Operators the parser expects at this position. */
   operators: string[];
   /** Which symbol kinds to offer, or null for none. */
-  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "trace_state" | "trace_method" | "trace_state_method" | "trace_attribute" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | "top_level" | "class_body" | "trait_body" | "interface_body" | "assoc_class_body" | "mixset_body" | "statemachine_body" | "state_body" | "filter_body" | "transition_target" | "userstory_body" | "usecase_body" | "association_multiplicity" | "association_type" | "association_typed_prefix" | "association_arrow" | "isa_typed_prefix" | "decl_type_typed_prefix" | null;
+  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "trace_state" | "trace_method" | "trace_state_method" | "trace_attribute" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | "top_level" | "class_body" | "trait_body" | "interface_body" | "assoc_class_body" | "mixset_body" | "statemachine_body" | "state_body" | "filter_body" | "transition_target" | "userstory_body" | "usecase_body" | "association_multiplicity" | "association_type" | "association_typed_prefix" | "association_arrow" | "isa_typed_prefix" | "decl_type_typed_prefix" | "return_type_typed_prefix" | null;
   /** True if cursor is at a definition-name position (suppress all). */
   isDefinitionName: boolean;
   /** True if cursor is inside a comment. */
@@ -353,6 +353,50 @@ export function analyzeCompletion(
       n = n.parent;
     }
     if (inDeclTypeSlot) symbolKinds = "decl_type_typed_prefix";
+  }
+
+  // --- Typed-prefix on method return-type identifier (topic 047 item 3) ---
+  // Same pattern as decl_type_typed_prefix, but for method return-type slots
+  // across method_declaration, abstract_method_declaration, method_signature,
+  // and trait_method_signature. All four rules use a `return_type` field.
+  // Parameter types sit under `param`, not a method rule, so the field/slot
+  // check excludes them cleanly without extra logic. Void IS valid here
+  // (unlike decl_type_typed_prefix, where it is reserved for this item).
+  if (
+    nodeAtCursor &&
+    nodeAtCursor.type === "identifier" &&
+    /^[A-Za-z_]/.test(nodeAtCursor.text)
+  ) {
+    let n: SyntaxNode | null = nodeAtCursor.parent;
+    let inReturnTypeSlot = false;
+    while (n) {
+      if (n.type === "type_name") {
+        const p = n.parent;
+        if (
+          p &&
+          (p.type === "method_declaration" ||
+            p.type === "abstract_method_declaration" ||
+            p.type === "method_signature" ||
+            p.type === "trait_method_signature")
+        ) {
+          for (let i = 0; i < p.childCount; i++) {
+            if (p.child(i)?.id === n.id) {
+              if (p.fieldNameForChild(i) === "return_type") inReturnTypeSlot = true;
+              break;
+            }
+          }
+        }
+        break;
+      }
+      if (
+        n.type === "class_definition" || n.type === "trait_definition" ||
+        n.type === "interface_definition" ||
+        n.type === "association_class_definition" ||
+        n.type === "source_file"
+      ) break;
+      n = n.parent;
+    }
+    if (inReturnTypeSlot) symbolKinds = "return_type_typed_prefix";
   }
 
   if (
@@ -967,6 +1011,7 @@ function resolveCompletionScope(
   if (kindStr === "association_typed_prefix") return "association_typed_prefix";
   if (kindStr === "isa_typed_prefix") return "isa_typed_prefix";
   if (kindStr === "decl_type_typed_prefix") return "decl_type_typed_prefix";
+  if (kindStr === "return_type_typed_prefix") return "return_type_typed_prefix";
   if (kindStr === "association_arrow") return "association_arrow";
   if (kindStr === "none") return null;
 
