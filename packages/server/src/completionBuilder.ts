@@ -302,6 +302,54 @@ export function symbolKindToCompletionKind(kind: SymbolKind): CompletionItemKind
   }
 }
 
+// ── Symbol append helper (topic 049 phase 1) ───────────────────────────────
+
+interface AppendSymbolsOptions {
+  /** Symbol kinds to enumerate, in emit order. */
+  kinds: readonly SymbolKind[];
+  /** Exact-match container scope (`className` or `className.smName`). */
+  container?: string;
+  /** Include inherited symbols via the isA graph. Requires `container`. */
+  inherited?: boolean;
+}
+
+/**
+ * Append symbols of the given kinds into `items`/`seen`. Each kind is looked
+ * up either globally (no `container`) or container-scoped with optional
+ * inheritance. Dedup is by label against the shared `seen` set, so callers
+ * can interleave this with curated keyword / built-in emission.
+ *
+ * Order: kinds iterated in declared order; within a kind, whatever order
+ * `symbolIndex.getSymbols` returns.
+ */
+function appendSymbolsOfKinds(
+  items: CompletionItem[],
+  seen: Set<string>,
+  symbolIndex: SymbolIndex,
+  reachableFiles: Set<string>,
+  opts: AppendSymbolsOptions,
+): void {
+  for (const symKind of opts.kinds) {
+    const query =
+      opts.container !== undefined
+        ? { container: opts.container, kind: symKind, inherited: opts.inherited }
+        : { kind: symKind };
+    const symbols = symbolIndex
+      .getSymbols(query)
+      .filter((s) => reachableFiles.has(path.normalize(s.file)));
+    for (const sym of symbols) {
+      if (!seen.has(sym.name)) {
+        seen.add(sym.name);
+        items.push({
+          label: sym.name,
+          kind: symbolKindToCompletionKind(symKind),
+          detail: symKind,
+        });
+      }
+    }
+  }
+}
+
 // ── Symbol-only type completion helper (topic 048 phase 2) ─────────────────
 
 interface TypeCompletionOptions {
@@ -347,21 +395,9 @@ function buildTypeCompletionItems(
     }
   }
 
-  for (const symKind of opts.kinds) {
-    const symbols = symbolIndex
-      .getSymbols({ kind: symKind })
-      .filter((s) => reachableFiles.has(path.normalize(s.file)));
-    for (const sym of symbols) {
-      if (!seen.has(sym.name)) {
-        seen.add(sym.name);
-        items.push({
-          label: sym.name,
-          kind: symbolKindToCompletionKind(symKind),
-          detail: symKind,
-        });
-      }
-    }
-  }
+  appendSymbolsOfKinds(items, seen, symbolIndex, reachableFiles, {
+    kinds: opts.kinds,
+  });
 
   return items;
 }
@@ -409,21 +445,9 @@ export function buildSemanticCompletionItems(
         cbItems.push({ label: typ, kind: CompletionItemKind.TypeParameter, detail: "type" });
       }
     }
-    for (const symKind of ["class", "interface", "trait", "enum"] as SymbolKind[]) {
-      const symbols = symbolIndex
-        .getSymbols({ kind: symKind })
-        .filter((s) => reachableFiles.has(path.normalize(s.file)));
-      for (const sym of symbols) {
-        if (!cbSeen.has(sym.name)) {
-          cbSeen.add(sym.name);
-          cbItems.push({
-            label: sym.name,
-            kind: symbolKindToCompletionKind(symKind),
-            detail: symKind,
-          });
-        }
-      }
-    }
+    appendSymbolsOfKinds(cbItems, cbSeen, symbolIndex, reachableFiles, {
+      kinds: ["class", "interface", "trait", "enum"],
+    });
     return cbItems;
   }
 
@@ -441,21 +465,9 @@ export function buildSemanticCompletionItems(
         tbItems.push({ label: typ, kind: CompletionItemKind.TypeParameter, detail: "type" });
       }
     }
-    for (const symKind of ["class", "interface", "trait", "enum"] as SymbolKind[]) {
-      const symbols = symbolIndex
-        .getSymbols({ kind: symKind })
-        .filter((s) => reachableFiles.has(path.normalize(s.file)));
-      for (const sym of symbols) {
-        if (!tbSeen.has(sym.name)) {
-          tbSeen.add(sym.name);
-          tbItems.push({
-            label: sym.name,
-            kind: symbolKindToCompletionKind(symKind),
-            detail: symKind,
-          });
-        }
-      }
-    }
+    appendSymbolsOfKinds(tbItems, tbSeen, symbolIndex, reachableFiles, {
+      kinds: ["class", "interface", "trait", "enum"],
+    });
     return tbItems;
   }
 
@@ -473,21 +485,9 @@ export function buildSemanticCompletionItems(
         ibItems.push({ label: typ, kind: CompletionItemKind.TypeParameter, detail: "type" });
       }
     }
-    for (const symKind of ["class", "interface", "trait", "enum"] as SymbolKind[]) {
-      const symbols = symbolIndex
-        .getSymbols({ kind: symKind })
-        .filter((s) => reachableFiles.has(path.normalize(s.file)));
-      for (const sym of symbols) {
-        if (!ibSeen.has(sym.name)) {
-          ibSeen.add(sym.name);
-          ibItems.push({
-            label: sym.name,
-            kind: symbolKindToCompletionKind(symKind),
-            detail: symKind,
-          });
-        }
-      }
-    }
+    appendSymbolsOfKinds(ibItems, ibSeen, symbolIndex, reachableFiles, {
+      kinds: ["class", "interface", "trait", "enum"],
+    });
     return ibItems;
   }
 
@@ -505,21 +505,9 @@ export function buildSemanticCompletionItems(
         abItems.push({ label: typ, kind: CompletionItemKind.TypeParameter, detail: "type" });
       }
     }
-    for (const symKind of ["class", "interface", "trait", "enum"] as SymbolKind[]) {
-      const symbols = symbolIndex
-        .getSymbols({ kind: symKind })
-        .filter((s) => reachableFiles.has(path.normalize(s.file)));
-      for (const sym of symbols) {
-        if (!abSeen.has(sym.name)) {
-          abSeen.add(sym.name);
-          abItems.push({
-            label: sym.name,
-            kind: symbolKindToCompletionKind(symKind),
-            detail: symKind,
-          });
-        }
-      }
-    }
+    appendSymbolsOfKinds(abItems, abSeen, symbolIndex, reachableFiles, {
+      kinds: ["class", "interface", "trait", "enum"],
+    });
     return abItems;
   }
 
@@ -535,21 +523,11 @@ export function buildSemanticCompletionItems(
   if (symbolKinds === "trace_attribute_method" && info.enclosingClass) {
     const trItems: CompletionItem[] = [];
     const trSeen = new Set<string>();
-    for (const kind of ["attribute", "method"] as SymbolKind[]) {
-      const symbols = symbolIndex
-        .getSymbols({ container: info.enclosingClass, kind, inherited: true })
-        .filter((s) => reachableFiles.has(path.normalize(s.file)));
-      for (const sym of symbols) {
-        if (!trSeen.has(sym.name)) {
-          trSeen.add(sym.name);
-          trItems.push({
-            label: sym.name,
-            kind: symbolKindToCompletionKind(kind),
-            detail: kind,
-          });
-        }
-      }
-    }
+    appendSymbolsOfKinds(trItems, trSeen, symbolIndex, reachableFiles, {
+      kinds: ["attribute", "method"],
+      container: info.enclosingClass,
+      inherited: true,
+    });
     return trItems;
   }
 
@@ -563,21 +541,11 @@ export function buildSemanticCompletionItems(
       gItems.push({ label: lit, kind: CompletionItemKind.Keyword });
     }
     // Scoped attrs + methods from enclosing class
-    for (const kind of ["attribute", "method"] as SymbolKind[]) {
-      const symbols = symbolIndex
-        .getSymbols({ container: info.enclosingClass, kind, inherited: true })
-        .filter((s) => reachableFiles.has(path.normalize(s.file)));
-      for (const sym of symbols) {
-        if (!gSeen.has(sym.name)) {
-          gSeen.add(sym.name);
-          gItems.push({
-            label: sym.name,
-            kind: symbolKindToCompletionKind(kind),
-            detail: kind,
-          });
-        }
-      }
-    }
+    appendSymbolsOfKinds(gItems, gSeen, symbolIndex, reachableFiles, {
+      kinds: ["attribute", "method"],
+      container: info.enclosingClass,
+      inherited: true,
+    });
     return gItems;
   }
 
@@ -600,19 +568,10 @@ export function buildSemanticCompletionItems(
           });
         }
       } else {
-        const states = symbolIndex
-          .getSymbols({ kind: "state", container: info.enclosingStateMachine })
-          .filter((s) => reachableFiles.has(path.normalize(s.file)));
-        for (const sym of states) {
-          if (!ttSeen.has(sym.name)) {
-            ttSeen.add(sym.name);
-            ttItems.push({
-              label: sym.name,
-              kind: symbolKindToCompletionKind("state"),
-              detail: "state",
-            });
-          }
-        }
+        appendSymbolsOfKinds(ttItems, ttSeen, symbolIndex, reachableFiles, {
+          kinds: ["state"],
+          container: info.enclosingStateMachine,
+        });
       }
     }
     return ttItems;
@@ -632,21 +591,9 @@ export function buildSemanticCompletionItems(
         mbItems.push({ label: typ, kind: CompletionItemKind.TypeParameter, detail: "type" });
       }
     }
-    for (const symKind of ["class", "interface", "trait", "enum"] as SymbolKind[]) {
-      const symbols = symbolIndex
-        .getSymbols({ kind: symKind })
-        .filter((s) => reachableFiles.has(path.normalize(s.file)));
-      for (const sym of symbols) {
-        if (!mbSeen.has(sym.name)) {
-          mbSeen.add(sym.name);
-          mbItems.push({
-            label: sym.name,
-            kind: symbolKindToCompletionKind(symKind),
-            detail: symKind,
-          });
-        }
-      }
-    }
+    appendSymbolsOfKinds(mbItems, mbSeen, symbolIndex, reachableFiles, {
+      kinds: ["class", "interface", "trait", "enum"],
+    });
     return mbItems;
   }
 
@@ -660,19 +607,10 @@ export function buildSemanticCompletionItems(
     }
     // Offer existing state names from the enclosing SM
     if (info.enclosingStateMachine) {
-      const states = symbolIndex
-        .getSymbols({ kind: "state", container: info.enclosingStateMachine })
-        .filter((s) => reachableFiles.has(path.normalize(s.file)));
-      for (const sym of states) {
-        if (!smSeen.has(sym.name)) {
-          smSeen.add(sym.name);
-          smItems.push({
-            label: sym.name,
-            kind: symbolKindToCompletionKind("state"),
-            detail: "state",
-          });
-        }
-      }
+      appendSymbolsOfKinds(smItems, smSeen, symbolIndex, reachableFiles, {
+        kinds: ["state"],
+        container: info.enclosingStateMachine,
+      });
     }
     return smItems;
   }
@@ -694,19 +632,10 @@ export function buildSemanticCompletionItems(
     }
     // Offer state names from enclosing SM (for nested state references)
     if (info.enclosingStateMachine) {
-      const states = symbolIndex
-        .getSymbols({ kind: "state", container: info.enclosingStateMachine })
-        .filter((s) => reachableFiles.has(path.normalize(s.file)));
-      for (const sym of states) {
-        if (!sbSeen.has(sym.name)) {
-          sbSeen.add(sym.name);
-          sbItems.push({
-            label: sym.name,
-            kind: symbolKindToCompletionKind("state"),
-            detail: "state",
-          });
-        }
-      }
+      appendSymbolsOfKinds(sbItems, sbSeen, symbolIndex, reachableFiles, {
+        kinds: ["state"],
+        container: info.enclosingStateMachine,
+      });
     }
     return sbItems;
   }
@@ -742,21 +671,17 @@ export function buildSemanticCompletionItems(
   if (symbolKinds === "trace_method" && info.enclosingClass) {
     const items: CompletionItem[] = [];
     const seen = new Set<string>();
-    const symbols = symbolIndex
-      .getSymbols({ kind: "method", container: info.enclosingClass, inherited: true })
-      .filter((s) => reachableFiles.has(path.normalize(s.file)));
-    for (const sym of symbols) {
-      if (!seen.has(sym.name)) {
-        seen.add(sym.name);
-        items.push({ label: sym.name, kind: symbolKindToCompletionKind("method"), detail: "method" });
-      }
-    }
+    appendSymbolsOfKinds(items, seen, symbolIndex, reachableFiles, {
+      kinds: ["method"],
+      container: info.enclosingClass,
+      inherited: true,
+    });
     return items;
   }
   if (symbolKinds === "trace_state_method" && info.enclosingClass) {
     const items: CompletionItem[] = [];
     const seen = new Set<string>();
-    // States from all SMs in the enclosing class
+    // States from all SMs in the enclosing class — pattern C, specialized.
     const states = symbolIndex
       .getSymbols({ kind: "state" })
       .filter((s) => s.container?.startsWith(info.enclosingClass + "."))
@@ -768,29 +693,21 @@ export function buildSemanticCompletionItems(
       }
     }
     // Methods from the enclosing class
-    const methods = symbolIndex
-      .getSymbols({ kind: "method", container: info.enclosingClass, inherited: true })
-      .filter((s) => reachableFiles.has(path.normalize(s.file)));
-    for (const sym of methods) {
-      if (!seen.has(sym.name)) {
-        seen.add(sym.name);
-        items.push({ label: sym.name, kind: symbolKindToCompletionKind("method"), detail: "method" });
-      }
-    }
+    appendSymbolsOfKinds(items, seen, symbolIndex, reachableFiles, {
+      kinds: ["method"],
+      container: info.enclosingClass,
+      inherited: true,
+    });
     return items;
   }
   if (symbolKinds === "trace_attribute" && info.enclosingClass) {
     const items: CompletionItem[] = [];
     const seen = new Set<string>();
-    const symbols = symbolIndex
-      .getSymbols({ kind: "attribute", container: info.enclosingClass, inherited: true })
-      .filter((s) => reachableFiles.has(path.normalize(s.file)));
-    for (const sym of symbols) {
-      if (!seen.has(sym.name)) {
-        seen.add(sym.name);
-        items.push({ label: sym.name, kind: symbolKindToCompletionKind("attribute"), detail: "attribute" });
-      }
-    }
+    appendSymbolsOfKinds(items, seen, symbolIndex, reachableFiles, {
+      kinds: ["attribute"],
+      container: info.enclosingClass,
+      inherited: true,
+    });
     return items;
   }
 
@@ -1012,37 +929,20 @@ function buildLookaheadFallbackItems(
 
   // 4. Constraint scope: only own attributes (Umple E28)
   if (symbolKinds === "own_attribute" && info.enclosingClass) {
-    const symbols = symbolIndex
-      .getSymbols({ container: info.enclosingClass, kind: "attribute" })
-      .filter((s) => reachableFiles.has(path.normalize(s.file)));
-    for (const sym of symbols) {
-      if (!seen.has(sym.name)) {
-        seen.add(sym.name);
-        items.push({
-          label: sym.name,
-          kind: symbolKindToCompletionKind("attribute"),
-          detail: "attribute",
-        });
-      }
-    }
+    appendSymbolsOfKinds(items, seen, symbolIndex, reachableFiles, {
+      kinds: ["attribute"],
+      container: info.enclosingClass,
+    });
     return items;
   }
 
   // 5. Sorted key scope: attributes of the owner class (with inheritance)
   if (symbolKinds === "sorted_attribute" && info.sortedKeyOwner) {
-    const symbols = symbolIndex
-      .getSymbols({ container: info.sortedKeyOwner, kind: "attribute", inherited: true })
-      .filter((s) => reachableFiles.has(path.normalize(s.file)));
-    for (const sym of symbols) {
-      if (!seen.has(sym.name)) {
-        seen.add(sym.name);
-        items.push({
-          label: sym.name,
-          kind: symbolKindToCompletionKind("attribute"),
-          detail: "attribute",
-        });
-      }
-    }
+    appendSymbolsOfKinds(items, seen, symbolIndex, reachableFiles, {
+      kinds: ["attribute"],
+      container: info.sortedKeyOwner,
+      inherited: true,
+    });
     return items;
   }
 
@@ -1052,21 +952,11 @@ function buildLookaheadFallbackItems(
       symbolKinds === "trace_attribute_method") &&
     info.enclosingClass
   ) {
-    for (const kind of ["attribute", "method"] as SymbolKind[]) {
-      const symbols = symbolIndex
-        .getSymbols({ container: info.enclosingClass, kind, inherited: true })
-        .filter((s) => reachableFiles.has(path.normalize(s.file)));
-      for (const sym of symbols) {
-        if (!seen.has(sym.name)) {
-          seen.add(sym.name);
-          items.push({
-            label: sym.name,
-            kind: symbolKindToCompletionKind(kind),
-            detail: kind,
-          });
-        }
-      }
-    }
+    appendSymbolsOfKinds(items, seen, symbolIndex, reachableFiles, {
+      kinds: ["attribute", "method"],
+      container: info.enclosingClass,
+      inherited: true,
+    });
     return items;
   }
 
