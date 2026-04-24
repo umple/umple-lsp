@@ -60,6 +60,71 @@ function isOperatorToken(name: string): boolean {
   return /^[<>-]/.test(name) && name.length > 1;
 }
 
+// ── Typed-prefix detection helpers (topic 048 phase 1) ──────────────────────
+
+/**
+ * The standard gate for typed-prefix detection: letter-leading identifier
+ * nodes. Shared by every typed-prefix classification block. Letter-leading
+ * ensures we don't misclassify digit-leading tokens (multiplicity bits, etc.)
+ * that the parser occasionally recovers as `identifier`.
+ */
+function isLetterLeadingIdentifier(node: SyntaxNode): boolean {
+  return node.type === "identifier" && /^[A-Za-z_]/.test(node.text);
+}
+
+/**
+ * Walk up from `start` looking for a `type_name` node. On hit, return true
+ * iff type_name's parent rule is in `parentTypes` AND the child field name
+ * equals `fieldName`. Bails at any node in `boundaryTypes`. Used by the
+ * declaration-type and return-type typed-prefix detections, whose shapes are
+ * `identifier < qualified_name < type_name < <parent-rule>` with a specific
+ * grammar-level field binding the type_name into its parent.
+ */
+function isInsideTypeNameFieldSlot(
+  start: SyntaxNode,
+  parentTypes: ReadonlySet<string>,
+  fieldName: string,
+  boundaryTypes: ReadonlySet<string>,
+): boolean {
+  let n: SyntaxNode | null = start.parent;
+  while (n) {
+    if (n.type === "type_name") {
+      const p = n.parent;
+      if (p && parentTypes.has(p.type)) {
+        for (let i = 0; i < p.childCount; i++) {
+          if (p.child(i)?.id === n.id) {
+            return p.fieldNameForChild(i) === fieldName;
+          }
+        }
+      }
+      return false;
+    }
+    if (boundaryTypes.has(n.type)) return false;
+    n = n.parent;
+  }
+  return false;
+}
+
+const TYPE_SLOT_BOUNDARIES: ReadonlySet<string> = new Set([
+  "class_definition",
+  "trait_definition",
+  "interface_definition",
+  "association_class_definition",
+  "source_file",
+]);
+
+const DECL_TYPE_PARENTS: ReadonlySet<string> = new Set([
+  "attribute_declaration",
+  "const_declaration",
+]);
+
+const RETURN_TYPE_PARENTS: ReadonlySet<string> = new Set([
+  "method_declaration",
+  "abstract_method_declaration",
+  "method_signature",
+  "trait_method_signature",
+]);
+
 // ── CompletionInfo type ─────────────────────────────────────────────────────
 
 /** Information needed by the completion handler. */
@@ -262,11 +327,11 @@ export function analyzeCompletion(
   // starters (ERROR, namespace, Java, generate, ...). Force the scalar
   // `isa_typed_prefix` so completionBuilder takes the symbol-only early-return
   // branch — mirrors topic 043's association_typed_prefix pattern.
-  if (
-    nodeAtCursor &&
-    nodeAtCursor.type === "identifier" &&
-    /^[A-Za-z_]/.test(nodeAtCursor.text)
-  ) {
+  //
+  // Walk shape is specialized (direct-ancestor match + trait_sm_binding hard-
+  // stop + ERROR-recovery fallback), so only the identifier gate is shared
+  // with items 2 / 3 via isLetterLeadingIdentifier.
+  if (nodeAtCursor && isLetterLeadingIdentifier(nodeAtCursor)) {
     // Primary: identifier is inside an isa_declaration's type_list.
     // Hard-stop at trait_sm_binding so `isA T<sm as S|` is never misclassified.
     let n: SyntaxNode | null = nodeAtCursor.parent;
@@ -274,12 +339,7 @@ export function analyzeCompletion(
     while (n) {
       if (n.type === "trait_sm_binding") break;
       if (n.type === "isa_declaration") { insideIsaDecl = true; break; }
-      if (
-        n.type === "class_definition" || n.type === "trait_definition" ||
-        n.type === "interface_definition" ||
-        n.type === "association_class_definition" ||
-        n.type === "source_file"
-      ) break;
+      if (TYPE_SLOT_BOUNDARIES.has(n.type)) break;
       n = n.parent;
     }
     // Fallback: ERROR recovery where isa_declaration didn't form at all
@@ -316,43 +376,18 @@ export function analyzeCompletion(
   // generic class_body (54+ LookaheadIterator keywords, zero type symbols).
   // Force scalar `decl_type_typed_prefix` to take a symbol-only builder
   // branch that offers built-in types + class / interface / trait / enum.
+  //
+  // ERROR-recovery where type_name sits under ERROR (e.g. class body without
+  // closing brace) is deliberately NOT matched — too ambiguous with isA /
+  // modifier prefixes.
   if (
     nodeAtCursor &&
-    nodeAtCursor.type === "identifier" &&
-    /^[A-Za-z_]/.test(nodeAtCursor.text)
+    isLetterLeadingIdentifier(nodeAtCursor) &&
+    isInsideTypeNameFieldSlot(
+      nodeAtCursor, DECL_TYPE_PARENTS, "type", TYPE_SLOT_BOUNDARIES,
+    )
   ) {
-    // Walk up for a type_name whose parent is attribute_declaration or
-    // const_declaration in the "type" field. Scope is strict: ERROR-recovery
-    // where type_name sits under ERROR (e.g. class body without closing
-    // brace) deliberately NOT matched — too ambiguous with isA/modifier
-    // prefixes.
-    let n: SyntaxNode | null = nodeAtCursor.parent;
-    let inDeclTypeSlot = false;
-    while (n) {
-      if (n.type === "type_name") {
-        const p = n.parent;
-        if (
-          p &&
-          (p.type === "attribute_declaration" || p.type === "const_declaration")
-        ) {
-          for (let i = 0; i < p.childCount; i++) {
-            if (p.child(i)?.id === n.id) {
-              if (p.fieldNameForChild(i) === "type") inDeclTypeSlot = true;
-              break;
-            }
-          }
-        }
-        break;
-      }
-      if (
-        n.type === "class_definition" || n.type === "trait_definition" ||
-        n.type === "interface_definition" ||
-        n.type === "association_class_definition" ||
-        n.type === "source_file"
-      ) break;
-      n = n.parent;
-    }
-    if (inDeclTypeSlot) symbolKinds = "decl_type_typed_prefix";
+    symbolKinds = "decl_type_typed_prefix";
   }
 
   // --- Typed-prefix on method return-type identifier (topic 047 item 3) ---
@@ -364,39 +399,12 @@ export function analyzeCompletion(
   // (unlike decl_type_typed_prefix, where it is reserved for this item).
   if (
     nodeAtCursor &&
-    nodeAtCursor.type === "identifier" &&
-    /^[A-Za-z_]/.test(nodeAtCursor.text)
+    isLetterLeadingIdentifier(nodeAtCursor) &&
+    isInsideTypeNameFieldSlot(
+      nodeAtCursor, RETURN_TYPE_PARENTS, "return_type", TYPE_SLOT_BOUNDARIES,
+    )
   ) {
-    let n: SyntaxNode | null = nodeAtCursor.parent;
-    let inReturnTypeSlot = false;
-    while (n) {
-      if (n.type === "type_name") {
-        const p = n.parent;
-        if (
-          p &&
-          (p.type === "method_declaration" ||
-            p.type === "abstract_method_declaration" ||
-            p.type === "method_signature" ||
-            p.type === "trait_method_signature")
-        ) {
-          for (let i = 0; i < p.childCount; i++) {
-            if (p.child(i)?.id === n.id) {
-              if (p.fieldNameForChild(i) === "return_type") inReturnTypeSlot = true;
-              break;
-            }
-          }
-        }
-        break;
-      }
-      if (
-        n.type === "class_definition" || n.type === "trait_definition" ||
-        n.type === "interface_definition" ||
-        n.type === "association_class_definition" ||
-        n.type === "source_file"
-      ) break;
-      n = n.parent;
-    }
-    if (inReturnTypeSlot) symbolKinds = "return_type_typed_prefix";
+    symbolKinds = "return_type_typed_prefix";
   }
 
   if (
