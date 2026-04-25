@@ -191,6 +191,18 @@ export function analyzeCompletion(
     return { ...empty, isComment: true };
   }
 
+  // --- Topic 050: contexts where any popup would be wrong ────────────────
+  // Each guard returns `empty` (symbolKinds=null, keywords=[], operators=[])
+  // so completionBuilder shows nothing. Order matters: java_annotation
+  // first because it can wrap content that resembles other contexts; the
+  // structural ones (param-list, attribute initializer) before the textual
+  // identifier-fragment guard.
+  if (nodeAtCursor && isInsideJavaAnnotation(nodeAtCursor)) return empty;
+  if (nodeAtCursor && isInsideMethodParamListStart(nodeAtCursor)) return empty;
+  if (nodeAtCursor && isInsideAttributeInitializer(nodeAtCursor)) return empty;
+  if (isInsideMalformedDashIdentifier(content, line, column, nodeAtCursor)) return empty;
+  if (nodeAtCursor && isBareCompleteMultiplicityAtEnd(nodeAtCursor, content, line, column)) return empty;
+
   // --- Extract prefix from the token at cursor ---
   let prefix = "";
   if (
@@ -437,6 +449,32 @@ export function analyzeCompletion(
       if (n.type === "class_definition" || n.type === "source_file") break;
       n = n.parent;
     }
+    // Topic 050 case 3 — `status { s1 -> }` parses as `enumerated_attribute
+    // < ERROR(->)` rather than reaching state_machine recovery, so the walk
+    // above bails at class_definition. Detect the `enumerated_attribute`
+    // ancestor and treat the position as transition_target. The completion
+    // builder's transition_target branch returns an empty list when no
+    // enclosingStateMachine is present — better empty than 48 wrong items.
+    if (symbolKinds !== "transition_target") {
+      let walk: SyntaxNode | null = prevLeaf.parent;
+      while (walk) {
+        if (walk.type === "enumerated_attribute") {
+          // Confirm class-like outer container.
+          let outer: SyntaxNode | null = walk.parent;
+          while (outer) {
+            if (CLASS_LIKE_DEF_TYPES.has(outer.type)) {
+              symbolKinds = "transition_target";
+              break;
+            }
+            if (outer.type === "source_file") break;
+            outer = outer.parent;
+          }
+          break;
+        }
+        if (walk.type === "class_definition" || walk.type === "source_file") break;
+        walk = walk.parent;
+      }
+    }
   }
 
   // --- Partial inline association completion ---
@@ -568,7 +606,20 @@ export function analyzeCompletion(
             mightBeMult(last) ||
             PARTIAL_ARROW_TYPES.has(last.type) ||
             last.type === "req_free_text_punct";
-          if (partial && segment.some(mightBeMult)) {
+          // Topic 050 case 2 — bare `0..*` (a single complete multiplicity
+          // node with cursor exactly at its end) is not yet starting an
+          // association. Without intervening whitespace there's no arrow
+          // intent. `1 |` (cursor after a space) still fires because the
+          // cursor offset is past the digit token's end.
+          const contentLines = content.split("\n");
+          let cursorOffset = 0;
+          for (let li = 0; li < line; li++) cursorOffset += contentLines[li].length + 1;
+          cursorOffset += column;
+          const onlyOneCompleteMultAtCursor =
+            segment.length === 1 &&
+            last.type === "multiplicity" &&
+            last.endIndex === cursorOffset;
+          if (partial && segment.some(mightBeMult) && !onlyOneCompleteMultAtCursor) {
             symbolKinds = "association_arrow";
           }
         }
@@ -912,6 +963,214 @@ function isInsideComment(node: SyntaxNode): boolean {
       return true;
     }
     current = current.parent;
+  }
+  return false;
+}
+
+// ── Topic 050 suppression guards ────────────────────────────────────────────
+
+const CLASS_LIKE_DEF_TYPES: ReadonlySet<string> = new Set([
+  "class_definition",
+  "trait_definition",
+  "interface_definition",
+  "association_class_definition",
+  "mixset_definition",
+]);
+
+/** Cursor sits inside a `java_annotation` subtree (e.g. `@Override`). */
+function isInsideJavaAnnotation(node: SyntaxNode): boolean {
+  let n: SyntaxNode | null = node;
+  while (n) {
+    if (n.type === "java_annotation") return true;
+    n = n.parent;
+  }
+  return false;
+}
+
+/**
+ * Cursor sits at or just past the `(` that opens a method param list, before
+ * the matching `)`. Two recovery shapes covered:
+ *   1. clean parse: ancestor is `param_list` (or its broken variant)
+ *   2. broken: cursor is `(` whose parent is ERROR, with a `type_name` and
+ *      identifier earlier in the ERROR (the broken `void f(` shape codex
+ *      mapped). Suppress until param-type narrowing ships as a future topic.
+ */
+function isInsideMethodParamListStart(node: SyntaxNode): boolean {
+  let n: SyntaxNode | null = node;
+  while (n) {
+    if (n.type === "param_list" || n.type === "param") return true;
+    n = n.parent;
+  }
+  // Broken shape: nodeAtCursor is `(` directly under ERROR under class-like.
+  if (node.type === "(" && node.parent?.type === "ERROR") {
+    const err = node.parent;
+    let hasTypeName = false;
+    let hasName = false;
+    for (let i = 0; i < err.childCount; i++) {
+      const c = err.child(i);
+      if (!c) continue;
+      if (c.type === "type_name") hasTypeName = true;
+      if (c.type === "identifier" && hasTypeName) hasName = true;
+    }
+    if (hasTypeName && hasName) {
+      // Confirm class-like ancestor of the ERROR.
+      let p: SyntaxNode | null = err.parent;
+      while (p) {
+        if (CLASS_LIKE_DEF_TYPES.has(p.type)) return true;
+        if (p.type === "source_file") return false;
+        p = p.parent;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Cursor sits inside an attribute-initializer expression after `=` and
+ * before the terminating `;`. The grammar's `_attribute_value` is hidden,
+ * and broken/incomplete expressions live entirely under an ERROR. Codex's
+ * invariant: in a class-like container, enclosing ERROR has `=` before
+ * cursor with no association arrow before cursor → suppress.
+ */
+function isInsideAttributeInitializer(node: SyntaxNode): boolean {
+  let err: SyntaxNode | null = node;
+  while (err && err.type !== "ERROR") err = err.parent;
+  if (!err) return false;
+  // ERROR must sit inside a class-like container.
+  let p: SyntaxNode | null = err.parent;
+  let inClassLike = false;
+  while (p) {
+    if (CLASS_LIKE_DEF_TYPES.has(p.type)) { inClassLike = true; break; }
+    if (p.type === "source_file") return false;
+    p = p.parent;
+  }
+  if (!inClassLike) return false;
+  // Walk ERROR children before the cursor: must contain `=` and no arrow.
+  let sawEquals = false;
+  let sawArrow = false;
+  for (let i = 0; i < err.childCount; i++) {
+    const c = err.child(i);
+    if (!c) continue;
+    if (c.startIndex >= node.startIndex) break;
+    if (c.type === "=") sawEquals = true;
+    if (c.type === "->" || c.type === "arrow") sawArrow = true;
+  }
+  return sawEquals && !sawArrow;
+}
+
+/**
+ * Cursor sits inside or at the end of a contiguous identifier-character run
+ * (`[A-Za-z0-9_-]+`) that contains both a `-` and a letter — i.e. a
+ * malformed identifier the parser couldn't classify. Examples: `req-|foo`,
+ * `req|-foo`, `req-foo|`. Negatives: `Int|`, `isA P|`, `1 -> * O|`,
+ * `1 -|` (no letter in the run).
+ *
+ * Mostly textual; the recovery AST is not stable enough at these positions
+ * to drive the decision off node types alone. We do, however, exempt two
+ * legitimate dash-bearing contexts:
+ *
+ *   1. AST: cursor inside a `req_id`, `req_implementation`, or
+ *      `requirement_definition` subtree — `req_id` allows hyphens, so
+ *      `implementsReq L01-|License` is a valid completion target.
+ *
+ *   2. Textual fallback (when the AST doesn't form because of a missing
+ *      `;`): scan the current line backward from the cursor; if we encounter
+ *      `implementsReq` or `req` keyword before any `;`, `}`, or line start,
+ *      the user is editing a requirement-id position — don't suppress.
+ *
+ * Codex-approved narrow form — does NOT suppress legitimate typed-prefix
+ * completions because those scopes have their own positive entries above
+ * this guard.
+ */
+function isInsideMalformedDashIdentifier(
+  content: string,
+  line: number,
+  column: number,
+  nodeAtCursor: SyntaxNode | null,
+): boolean {
+  const lines = content.split("\n");
+  const lineText = lines[line] ?? "";
+  const isRunChar = (c: string) => /[A-Za-z0-9_-]/.test(c);
+  const isLetter = (c: string) => /[A-Za-z_]/.test(c);
+
+  // Scan the contiguous run that contains (or is adjacent to) the cursor.
+  let start = column;
+  while (start > 0 && isRunChar(lineText[start - 1])) start--;
+  let end = column;
+  while (end < lineText.length && isRunChar(lineText[end])) end++;
+  if (start === end) return false; // empty run on either side
+  const run = lineText.slice(start, end);
+  if (!run.includes("-") || ![...run].some(isLetter)) return false;
+
+  // Exempt #1 — AST shows the cursor is in a real requirement context.
+  if (nodeAtCursor) {
+    let n: SyntaxNode | null = nodeAtCursor;
+    while (n) {
+      if (
+        n.type === "req_id" ||
+        n.type === "req_implementation" ||
+        n.type === "requirement_definition"
+      ) return false;
+      n = n.parent;
+    }
+  }
+
+  // Exempt #2 — same-line back-scan for `implementsReq` / `req` keyword
+  // before any statement boundary. Covers the AST-didn't-form case (no `;`
+  // closing the partial req_implementation).
+  const before = lineText.slice(0, start);
+  // If before contains `;` or `}`, that closes any prior context — bail.
+  if (/[;}]/.test(before)) return true;
+  if (/\b(?:implementsReq|req)\b/.test(before)) return false;
+
+  return true;
+}
+
+/**
+ * Topic 050 case 2 — bare complete multiplicity sitting alone in a class
+ * body or association block, with cursor at the exact end of the
+ * multiplicity token. Examples: `0..*|`, `1|`, `0..1|` placed alone in a
+ * class-body line. Without further context (arrow, type) this isn't a real
+ * completion target — the partial-association refinement keeps it from
+ * classifying as `association_arrow`, but the analyzer would still fall
+ * through to `class_body` and surface 47 wrong keywords. Suppress.
+ *
+ * Negatives this guard does NOT match:
+ *   `0..* |` (cursor past whitespace) — segments differ; partial-association
+ *      logic upstream picks it up as a real arrow slot.
+ *   `1 -> *|` (after the right multiplicity of an in-progress association)
+ *      — segment has an arrow; this guard requires no arrow before cursor.
+ */
+function isBareCompleteMultiplicityAtEnd(
+  node: SyntaxNode,
+  content: string,
+  line: number,
+  column: number,
+): boolean {
+  if (node.type !== "multiplicity") return false;
+  const lines = content.split("\n");
+  let offset = 0;
+  for (let i = 0; i < line; i++) offset += lines[i].length + 1;
+  offset += column;
+  if (node.endIndex !== offset) return false;
+  const err = node.parent;
+  if (!err || err.type !== "ERROR") return false;
+  // No arrow or `;` before this multiplicity in the ERROR
+  for (let i = 0; i < err.childCount; i++) {
+    const c = err.child(i);
+    if (!c) continue;
+    if (c.id === node.id) break;
+    if (c.type === "arrow" || c.type === "->") return false;
+    if (c.type === ";") return false;
+  }
+  // ERROR must sit in a class-like or association container
+  let p: SyntaxNode | null = err.parent;
+  while (p) {
+    if (CLASS_LIKE_DEF_TYPES.has(p.type) || p.type === "association_definition") {
+      return true;
+    }
+    if (p.type === "source_file") return false;
+    p = p.parent;
   }
   return false;
 }

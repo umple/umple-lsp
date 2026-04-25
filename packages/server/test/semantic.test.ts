@@ -5008,11 +5008,14 @@ const TEST_CASES: TestCase[] = [
         expect: null,
       },
       // Parameter type: type_name's parent is `param`, not a method rule —
-      // the field/slot check excludes it without extra logic.
+      // so the return-type field check excludes it. Topic 050 then routes
+      // any cursor inside a `param_list` to the suppression path, so the
+      // popup is empty rather than the wider class_body fallback.
+      // Param-type typed-prefix narrowing is the future positive scope.
       {
         type: "completion_kinds",
         at: "param_type_slot",
-        expect: "class_body",
+        expect: null,
       },
     ],
   },
@@ -5059,6 +5062,53 @@ const TEST_CASES: TestCase[] = [
           "trace", "generate", "abstract", "mixset", "Java", "enum",
         ],
       },
+    ],
+  },
+
+  // 135: Topic 050 — completion suppression in non-completion contexts.
+  // Six positions that previously surfaced wrong popups now suppress (null)
+  // or route to a more specific positive scope (transition_target). Six
+  // negative regressions confirm adjacent legitimate scopes are unchanged.
+  {
+    name: "135 completion_suppression: wrong-popup positions now suppress or route correctly",
+    fixtures: ["135_completion_suppression.ump"],
+    assertions: [
+      // Case 1 — attribute initializer broken expression
+      { type: "completion_kinds", at: "attr_init_dash", expect: null },
+      // Case 2 — bare complete multiplicity. The partial-association
+      // refinement prevents `association_arrow`, and the dedicated bare-
+      // multiplicity suppressor prevents the class_body fallback that
+      // would otherwise surface 47 keywords on `*` trigger expansion.
+      { type: "completion_kinds", at: "bare_mult_end", expect: null },
+      // Case 3 — enumerated_attribute transition arrow → positive recovery
+      { type: "completion_kinds", at: "enum_attr_transition", expect: "transition_target" },
+      // Case 4 — broken method param-list start
+      { type: "completion_kinds", at: "paren_open", expect: null },
+      // Case 5 — Java annotation
+      { type: "completion_kinds", at: "annotation_at", expect: null },
+      // Case 6 — malformed dash-identifier (three cursor positions)
+      { type: "completion_kinds", at: "dash_after",  expect: null },
+      { type: "completion_kinds", at: "dash_before", expect: null },
+      { type: "completion_kinds", at: "dash_end",    expect: null },
+
+      // Hyphenated req-id positions — `req_id` grammar allows hyphens, so
+      // the dash-identifier suppressor must NOT fire here. Codex caught
+      // this during topic 050 review. With a real req declared in the
+      // fixture, all three positions correctly route to the requirement
+      // completion scope.
+      { type: "completion_kinds", at: "neg_hyphen_req_mid",     expect: ["requirement"] },
+      { type: "completion_kinds", at: "neg_hyphen_req_partial", expect: ["requirement"] },
+      { type: "completion_kinds", at: "neg_hyphen_req_full",    expect: ["requirement"] },
+
+      // Negative regressions — these MUST stay on their existing positive
+      // scopes. They share a code path with the new guards via the analyzer
+      // ladder, so it's important to lock them in.
+      { type: "completion_kinds", at: "neg_isa_typed_prefix",   expect: "isa_typed_prefix" },
+      { type: "completion_kinds", at: "neg_decl_type_prefix",   expect: "decl_type_typed_prefix" },
+      { type: "completion_kinds", at: "neg_assoc_typed_prefix", expect: "association_typed_prefix" },
+      { type: "completion_kinds", at: "neg_arrow_slot",         expect: "association_arrow" },
+      { type: "completion_kinds", at: "neg_mult_slot",          expect: "association_multiplicity" },
+      { type: "completion_kinds", at: "neg_class_body",         expect: "class_body" },
     ],
   },
 ];

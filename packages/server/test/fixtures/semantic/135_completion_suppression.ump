@@ -1,0 +1,120 @@
+// Topic 050 — completion suppression in non-completion contexts.
+//
+// Each marker pins a position where, before this topic, the analyzer
+// produced a populated wrong popup. After topic 050, the position either
+// suppresses (returns null) or routes to a more specific positive scope
+// (transition_target). Negative regressions in this fixture confirm that
+// adjacent legitimate scopes still work.
+
+class Other {}
+class Person {}
+
+
+// ─── Case 1 — attribute initializer with broken expression ────────────────
+// `Integer x = 5 -|` previously classified as `association_arrow` (7
+// arrow operators in the popup). Now: empty / null.
+
+class CaseAttrInit {
+  Integer x = 5 -/*@attr_init_dash*/
+}
+
+
+// ─── Case 2 — bare complete multiplicity ──────────────────────────────────
+// `0..*` cursor right at the end (no trailing space). Before: arrow popup.
+// After: NOT association_arrow (falls back to class_body, which is the
+// honest scope for "user wrote a multiplicity in class body").
+
+class CaseBareMult {
+  0..*/*@bare_mult_end*/
+}
+
+
+// ─── Case 3 — `status { s1 -> }` parses as enumerated_attribute ───────────
+// Was class_body 48 keywords. Now: transition_target. Builder returns an
+// empty popup (no enclosingStateMachine resolved) — but the scope name
+// preserves intent for future improvement.
+
+class CaseEnumAttrTransition {
+  status {
+    s1 -> /*@enum_attr_transition*/
+  }
+}
+
+
+// ─── Case 4 — method param-list start ─────────────────────────────────────
+// `void f(|` cursor inside the broken param-list. Before: class_body.
+// After: null. Param-type typed-prefix narrowing is a future topic.
+
+class CaseParamListStart {
+  void f(/*@paren_open*/
+}
+
+
+// ─── Case 5 — Java annotation ─────────────────────────────────────────────
+// Cursor inside `@Override` produced class_body. Now suppressed.
+
+class CaseAnnotation {
+  @/*@annotation_at*/Override
+  void g() {}
+}
+
+
+// ─── Case 6 — malformed dash-identifier `req-foo` ────────────────────────
+// All three positions inside the run produced class_body. Now suppressed.
+
+class CaseDashId {
+  req-/*@dash_after*/foo
+}
+
+class CaseDashId2 {
+  req/*@dash_before*/-foo
+}
+
+class CaseDashId3 {
+  req-foo/*@dash_end*/
+}
+
+
+// ─── Negative regressions — these adjacent positions MUST NOT regress ─────
+
+// Hyphenated req-id contexts: `req_id` allows `[a-zA-Z0-9_-]` per grammar.
+// The dash-identifier suppressor must NOT kill these completion positions.
+// Codex caught this during topic 050 review.
+
+req L01-License userStory { who { x } }
+
+class NegHyphenReqIdMidId {
+  implementsReq L01-/*@neg_hyphen_req_mid*/License
+}
+
+class NegHyphenReqIdEndOfPrefix {
+  implementsReq L01-Li/*@neg_hyphen_req_partial*/
+}
+
+class NegHyphenReqIdEndOfFull {
+  implementsReq L01-License/*@neg_hyphen_req_full*/
+}
+
+class NegLegitTypedPrefix {
+  isA P/*@neg_isa_typed_prefix*/
+}
+
+class NegLegitDeclTypePrefix {
+  Int/*@neg_decl_type_prefix*/ x;
+}
+
+class NegLegitAssocTypedPrefix {
+  1 -> * O/*@neg_assoc_typed_prefix*/
+}
+
+class NegLegitAssocArrowSlot {
+  1 /*@neg_arrow_slot*/
+}
+
+class NegLegitMultSlot {
+  1 -> /*@neg_mult_slot*/
+}
+
+class NegLegitClassBody {
+  /*@neg_class_body*/
+}
