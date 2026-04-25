@@ -5109,6 +5109,17 @@ const TEST_CASES: TestCase[] = [
       { type: "completion_kinds", at: "neg_arrow_slot",         expect: "association_arrow" },
       { type: "completion_kinds", at: "neg_mult_slot",          expect: "association_multiplicity" },
       { type: "completion_kinds", at: "neg_class_body",         expect: "class_body" },
+
+      // Topic 051 stage-1 trigger expansion — comma continuation slots.
+      // Positive: `isA X,|` routes to the typed-prefix scope (type-only),
+      // not class_body's 50 raw keywords.
+      { type: "completion_kinds", at: "stage1_isa_comma",   expect: "isa_typed_prefix" },
+      // Suppress: param-decl comma. No popup until param-type narrowing
+      // ships as a future positive scope.
+      { type: "completion_kinds", at: "stage1_param_comma", expect: null },
+      // Negative: association sibling-slot comma must NOT become
+      // isa_typed_prefix — it's a separate slot with its own scope.
+      { type: "completion_kinds", at: "stage1_assoc_comma", expect: "association_type" },
     ],
   },
 ];

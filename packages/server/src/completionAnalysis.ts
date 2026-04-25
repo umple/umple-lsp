@@ -727,16 +727,24 @@ export function analyzeCompletion(
     let n: SyntaxNode | null = prevLeaf.parent;
     while (n) {
       if (n.type === "req_implementation") { symbolKinds = ["requirement"]; break; }
+      // Topic 051 item 1 — isA comma continuation. After `isA Person,|` the
+      // user is starting another type name. Route to the same scalar
+      // typed-prefix scope as `isa_typed_prefix` so completionBuilder
+      // returns class/interface/trait symbols only (no class_body junk).
+      if (n.type === "isa_declaration") { symbolKinds = "isa_typed_prefix"; break; }
       if (n.type === "ERROR") {
         // Look for a sibling `implementsReq` keyword anywhere in this ERROR
         // recovery region — that's the signature of a partial req_implementation.
+        // Same scan also catches partial isa_declaration recovery.
+        let foundReq = false;
+        let foundIsA = false;
         for (let i = 0; i < n.childCount; i++) {
-          if (n.child(i)?.type === "implementsReq") {
-            symbolKinds = ["requirement"];
-            break;
-          }
+          const c = n.child(i);
+          if (c?.type === "implementsReq") foundReq = true;
+          if (c?.type === "isA") foundIsA = true;
         }
-        if (symbolKinds && Array.isArray(symbolKinds) && symbolKinds[0] === "requirement") break;
+        if (foundReq) { symbolKinds = ["requirement"]; break; }
+        if (foundIsA) { symbolKinds = "isa_typed_prefix"; break; }
       }
       if (n.type === "class_definition" || n.type === "source_file") break;
       n = n.parent;
@@ -988,20 +996,29 @@ function isInsideJavaAnnotation(node: SyntaxNode): boolean {
 }
 
 /**
- * Cursor sits at or just past the `(` that opens a method param list, before
- * the matching `)`. Two recovery shapes covered:
- *   1. clean parse: ancestor is `param_list` (or its broken variant)
- *   2. broken: cursor is `(` whose parent is ERROR, with a `type_name` and
- *      identifier earlier in the ERROR (the broken `void f(` shape codex
- *      mapped). Suppress until param-type narrowing ships as a future topic.
+ * Cursor sits inside a method param list. Three recovery shapes covered:
+ *   1. clean parse: ancestor is `param_list` or `param` (e.g. cursor on
+ *      `,` between two complete params, or inside an in-progress param)
+ *   2. broken `(` start: cursor is `(` whose parent is ERROR, with a
+ *      `type_name` and identifier earlier in the ERROR (the `void f(|`
+ *      shape codex mapped during topic 050)
+ *   3. trailing-comma broken: cursor is `,` whose parent is ERROR sibling
+ *      of `param_list` under `method_declaration` (the `void f(int a,|)`
+ *      shape — comma after a complete param, no following param yet)
+ *
+ * Suppress in all three until parameter-type narrowing ships as a future
+ * topic. Keep the comma case narrow (must be inside method_declaration)
+ * so it doesn't eat unrelated comma-based completions like
+ * `implementsReq R1,` or `isA A,`.
  */
 function isInsideMethodParamListStart(node: SyntaxNode): boolean {
+  // Shape 1 — direct ancestor is param_list / param.
   let n: SyntaxNode | null = node;
   while (n) {
     if (n.type === "param_list" || n.type === "param") return true;
     n = n.parent;
   }
-  // Broken shape: nodeAtCursor is `(` directly under ERROR under class-like.
+  // Shape 2 — broken `(` start.
   if (node.type === "(" && node.parent?.type === "ERROR") {
     const err = node.parent;
     let hasTypeName = false;
@@ -1013,7 +1030,6 @@ function isInsideMethodParamListStart(node: SyntaxNode): boolean {
       if (c.type === "identifier" && hasTypeName) hasName = true;
     }
     if (hasTypeName && hasName) {
-      // Confirm class-like ancestor of the ERROR.
       let p: SyntaxNode | null = err.parent;
       while (p) {
         if (CLASS_LIKE_DEF_TYPES.has(p.type)) return true;
@@ -1021,6 +1037,13 @@ function isInsideMethodParamListStart(node: SyntaxNode): boolean {
         p = p.parent;
       }
     }
+  }
+  // Shape 3 — trailing-comma broken `void f(int a,|)`. nodeAtCursor is `,`,
+  // parent is ERROR, ERROR's parent is method_declaration (sibling of the
+  // `param_list` that holds the complete params before the `,`).
+  if (node.type === "," && node.parent?.type === "ERROR") {
+    const err = node.parent;
+    if (err.parent?.type === "method_declaration") return true;
   }
   return false;
 }

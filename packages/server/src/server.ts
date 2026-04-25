@@ -369,7 +369,16 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
       textDocumentSync: TextDocumentSyncKind.Incremental,
       completionProvider: {
         resolveProvider: false,
-        triggerCharacters: ["/", "."],
+        // Stage-1 trigger expansion (topic 051 item 1).
+        //   "/"  use-path completion inside `use "..."`
+        //   "."  qualified names, dotted state paths
+        //   "-"  association arrow start (`1 -|`)
+        //   ">"  association arrow finish (`1 ->|` → multiplicity slot);
+        //        transition-target flow after `->`
+        //   "*"  association right-multiplicity / type slot (`1 -> *|`)
+        //   ","  isA / implementsReq continuation (`isA A, |`)
+        // Deferred: "<", "@", "(" — lower immediate value, higher churn.
+        triggerCharacters: ["/", ".", "-", ">", "*", ","],
       },
       definitionProvider: true,
       referencesProvider: true,

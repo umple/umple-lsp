@@ -118,3 +118,23 @@ class NegLegitMultSlot {
 class NegLegitClassBody {
   /*@neg_class_body*/
 }
+
+
+// ─── Topic 051 stage-1 trigger expansion — comma continuation slots ──────
+
+// `isA X,|` continuation: must route to typed-prefix scope (type-only).
+class StageOneIsAComma {
+  isA Person,/*@stage1_isa_comma*/
+}
+
+// `void f(int a,|)` param-decl comma: must suppress (param-type completion
+// is a future positive scope; today should be empty).
+class StageOneParamComma {
+  void f(int a,/*@stage1_param_comma*/) {}
+}
+
+// Negative: associative comma `1 -> * X,` is an association sibling slot,
+// not isA — must NOT become `isa_typed_prefix`.
+class StageOneAssocComma {
+  1 -> * Person,/*@stage1_assoc_comma*/
+}
