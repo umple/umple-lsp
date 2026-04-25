@@ -3856,11 +3856,65 @@ const TEST_CASES: TestCase[] = [
         at: "filter_blank",
         expect: ["class", "use", "generate", "Java"],
       },
-      // Include target must still offer class names
+      // Topic 052 item 3 — include target now routes through the scalar
+      // `filter_include_target` (was the array form, which leaked
+      // built-ins + `void` through the fallback path).
       {
         type: "completion_kinds",
         at: "filter_include",
-        expect: ["class"],
+        expect: "filter_include_target",
+      },
+      // Includes user classes, excludes built-ins / void / raw keywords.
+      {
+        type: "completion_includes",
+        at: "filter_include",
+        expect: ["Student", "Course", "Staff"],
+      },
+      {
+        type: "completion_excludes",
+        at: "filter_include",
+        expect: ["String", "Integer", "Boolean", "void", "ERROR", "namespace"],
+      },
+      // Blank `include |` shape (broken ERROR recovery, no following
+      // identifier). Same scope.
+      {
+        type: "completion_kinds",
+        at: "filter_include_blank",
+        expect: "filter_include_target",
+      },
+      {
+        type: "completion_includes",
+        at: "filter_include_blank",
+        expect: ["Student", "Course", "Staff"],
+      },
+      // Typed-prefix `include S|`.
+      {
+        type: "completion_kinds",
+        at: "filter_include_typed",
+        expect: "filter_include_target",
+      },
+      {
+        type: "completion_includes",
+        at: "filter_include_typed",
+        expect: ["Student", "Course", "Staff"],
+      },
+      {
+        type: "completion_excludes",
+        at: "filter_include_typed",
+        expect: ["String", "Integer", "void"],
+      },
+      // Negative — `includeFilter |` must NOT be reclassified. Stays on
+      // the existing filter_body keyword starters.
+      {
+        type: "completion_kinds",
+        at: "filter_include_filter",
+        expect: "filter_body",
+      },
+      // Negative — `namespace |` keeps its existing null route.
+      {
+        type: "completion_kinds",
+        at: "filter_namespace",
+        expect: null,
       },
       // Boundary: top-level must still be top_level
       {

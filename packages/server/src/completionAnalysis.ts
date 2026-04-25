@@ -134,7 +134,7 @@ export interface CompletionInfo {
   /** Operators the parser expects at this position. */
   operators: string[];
   /** Which symbol kinds to offer, or null for none. */
-  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "trace_state" | "trace_method" | "trace_state_method" | "trace_attribute" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | "top_level" | "class_body" | "trait_body" | "interface_body" | "assoc_class_body" | "mixset_body" | "statemachine_body" | "state_body" | "filter_body" | "transition_target" | "userstory_body" | "usecase_body" | "association_multiplicity" | "association_type" | "association_typed_prefix" | "association_arrow" | "isa_typed_prefix" | "decl_type_typed_prefix" | "return_type_typed_prefix" | "code_injection_method" | null;
+  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "trace_state" | "trace_method" | "trace_state_method" | "trace_attribute" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | "top_level" | "class_body" | "trait_body" | "interface_body" | "assoc_class_body" | "mixset_body" | "statemachine_body" | "state_body" | "filter_body" | "transition_target" | "userstory_body" | "usecase_body" | "association_multiplicity" | "association_type" | "association_typed_prefix" | "association_arrow" | "isa_typed_prefix" | "decl_type_typed_prefix" | "return_type_typed_prefix" | "code_injection_method" | "filter_include_target" | null;
   /** True if cursor is at a definition-name position (suppress all). */
   isDefinitionName: boolean;
   /** True if cursor is inside a comment. */
@@ -437,6 +437,50 @@ export function analyzeCompletion(
       // emitted ~177 LookaheadIterator keywords (ERROR, namespace, Java,
       // ...) ahead of the actual method symbols.
       symbolKinds = "code_injection_method";
+    }
+  }
+
+  // Topic 052 item 3 — `filter { include ... }` target completion.
+  //
+  // Two recovery shapes:
+  //   1. Blank `include |`: parses as `filter_definition < ERROR(include)`
+  //      and the scope query falls through to `filter_body` (the keyword-
+  //      starters list). Detection: prevLeaf is the `include` keyword
+  //      whose parent is ERROR whose parent is filter_definition.
+  //   2. Typed `include S|`: parses cleanly as
+  //      `filter_definition < filter_statement < filter_value <
+  //       (include, filter_pattern "S", ;)`. The existing
+  //      `(filter_value) @scope.class` capture in completions.scm produces
+  //      `["class"]`, which leaks built-ins via the fallback path. Detection:
+  //      walk up from nodeAtCursor; if ancestor is `filter_value` and its
+  //      first child is the `include` keyword, override the scope.
+  //
+  // Both routes set `filter_include_target` — class-symbol-only, no
+  // built-ins, no `void`. Negative scopes stay untouched: blank filter
+  // body keeps `filter_body`, `includeFilter |` keeps `filter_body`,
+  // `namespace |` keeps `null`.
+  if (
+    prevLeaf?.type === "include" &&
+    prevLeaf.parent?.type === "ERROR" &&
+    prevLeaf.parent.parent?.type === "filter_definition"
+  ) {
+    symbolKinds = "filter_include_target";
+  } else if (nodeAtCursor) {
+    let n: SyntaxNode | null = nodeAtCursor;
+    while (n) {
+      if (n.type === "filter_value") {
+        // First non-extra child decides — the `include` literal opens
+        // the filter_value variant we want.
+        for (let i = 0; i < n.childCount; i++) {
+          const c = n.child(i);
+          if (!c || c.isExtra) continue;
+          if (c.type === "include") symbolKinds = "filter_include_target";
+          break;
+        }
+        break;
+      }
+      if (n.type === "filter_definition" || n.type === "source_file") break;
+      n = n.parent;
     }
   }
 
@@ -1314,6 +1358,7 @@ function resolveCompletionScope(
   if (kindStr === "decl_type_typed_prefix") return "decl_type_typed_prefix";
   if (kindStr === "return_type_typed_prefix") return "return_type_typed_prefix";
   if (kindStr === "code_injection_method") return "code_injection_method";
+  if (kindStr === "filter_include_target") return "filter_include_target";
   if (kindStr === "association_arrow") return "association_arrow";
   if (kindStr === "none") return null;
 

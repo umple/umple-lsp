@@ -682,6 +682,18 @@ export function buildSemanticCompletionItems(
     });
     return items;
   }
+
+  // Topic 052 item 3 — `filter { include ... }` class-target slot. Class
+  // symbols only — no built-ins, no `void`, no LookaheadIterator
+  // keywords. Covers blank `include |` and typed `include S|`.
+  if (symbolKinds === "filter_include_target") {
+    const items: CompletionItem[] = [];
+    const seen = new Set<string>();
+    appendSymbolsOfKinds(items, seen, symbolIndex, reachableFiles, {
+      kinds: ["class"],
+    });
+    return items;
+  }
   if (symbolKinds === "trace_state_method" && info.enclosingClass) {
     const items: CompletionItem[] = [];
     const seen = new Set<string>();

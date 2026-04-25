@@ -1,7 +1,32 @@
 class Student {}
 class Course {}
+class Staff {}
 filter F {
   /*@filter_blank*/
   include /*@filter_include*/Student;
 }
+
+// Topic 052 item 3 — additional include-target shapes.
+// Blank `include |` (broken-ERROR shape, no following identifier).
+filter F2 {
+  include /*@filter_include_blank*/
+}
+
+// Typed-prefix `include S|`. nodeAtCursor is filter_pattern with
+// the partial identifier; the analyzer overrides the existing
+// `(filter_value) @scope.class` array to the scalar.
+filter F3 {
+  include S/*@filter_include_typed*/
+}
+
+// Negative — `includeFilter |` must NOT route to filter_include_target.
+filter F4 {
+  includeFilter /*@filter_include_filter*/
+}
+
+// Negative — `namespace |` must keep its existing `null` route.
+filter F5 {
+  namespace /*@filter_namespace*/
+}
+
 /*@top_boundary*/
