@@ -728,6 +728,156 @@ export function buildSemanticCompletionItems(
     return items;
   }
 
+  // Topic 055 — `class C { sm name as |` (referenced_statemachine target).
+  // Offer SMs valid for class-local reuse: class-local statemachines from the
+  // enclosing class plus top-level standalone statemachine_definitions
+  // reachable from this file. No keywords, operators, types.
+  if (symbolKinds === "referenced_sm_target") {
+    const items: CompletionItem[] = [];
+    const seen = new Set<string>();
+    if (info.enclosingClass) {
+      // Class-local SMs use the convention `<className>.<smName>` for their
+      // container; symbol container === `${enclosingClass}.${name}`.
+      const local = symbolIndex
+        .getSymbols({ kind: "statemachine" })
+        .filter((s) => s.container === `${info.enclosingClass}.${s.name}`)
+        .filter((s) => reachableFiles.has(path.normalize(s.file)));
+      for (const sym of local) {
+        if (!seen.has(sym.name)) {
+          seen.add(sym.name);
+          items.push({
+            label: sym.name,
+            kind: symbolKindToCompletionKind("statemachine"),
+            detail: "statemachine",
+          });
+        }
+      }
+    }
+    // Top-level standalone statemachines: container === name (no class prefix).
+    const topLevel = symbolIndex
+      .getSymbols({ kind: "statemachine" })
+      .filter((s) => s.container === s.name)
+      .filter((s) => reachableFiles.has(path.normalize(s.file)));
+    for (const sym of topLevel) {
+      if (!seen.has(sym.name)) {
+        seen.add(sym.name);
+        items.push({
+          label: sym.name,
+          kind: symbolKindToCompletionKind("statemachine"),
+          detail: "top-level statemachine",
+        });
+      }
+    }
+    return items;
+  }
+
+  // Topic 055 — `isA T<sm as |...` first-segment slot. Same SM universe as
+  // referenced_sm_target but kept separate so future divergence (e.g., trait
+  // type parameter constraints) is easy to contain.
+  if (symbolKinds === "trait_sm_binding_target") {
+    const items: CompletionItem[] = [];
+    const seen = new Set<string>();
+    if (info.enclosingClass) {
+      const local = symbolIndex
+        .getSymbols({ kind: "statemachine" })
+        .filter((s) => s.container === `${info.enclosingClass}.${s.name}`)
+        .filter((s) => reachableFiles.has(path.normalize(s.file)));
+      for (const sym of local) {
+        if (!seen.has(sym.name)) {
+          seen.add(sym.name);
+          items.push({
+            label: sym.name,
+            kind: symbolKindToCompletionKind("statemachine"),
+            detail: "statemachine",
+          });
+        }
+      }
+    }
+    const topLevel = symbolIndex
+      .getSymbols({ kind: "statemachine" })
+      .filter((s) => s.container === s.name)
+      .filter((s) => reachableFiles.has(path.normalize(s.file)));
+    for (const sym of topLevel) {
+      if (!seen.has(sym.name)) {
+        seen.add(sym.name);
+        items.push({
+          label: sym.name,
+          kind: symbolKindToCompletionKind("statemachine"),
+          detail: "top-level statemachine",
+        });
+      }
+    }
+    return items;
+  }
+
+  // Topic 055 — `isA T<sm as <smName>(.<seg>)*.|...` dotted-state continuation.
+  // The analyzer captures (smName, statePrefix) from the in-progress
+  // qualified_name. Resolve smContainer as class-local first
+  // (`${enclosingClass}.${smName}`), falling back to the top-level standalone
+  // statemachine container (`${smName}` self-container). When the state
+  // prefix is empty, offer depth-1 states of the SM root; otherwise descend
+  // via `getChildStateNames` so nested paths like `Sm.S1.|` surface S1's
+  // direct children.
+  if (symbolKinds === "trait_sm_binding_state_target") {
+    const items: CompletionItem[] = [];
+    const seen = new Set<string>();
+    const enclosingClass = info.enclosingClass;
+    const smName = info.traitSmBindingSmName;
+    const statePrefix = info.traitSmBindingStatePrefix ?? [];
+    if (smName) {
+      const candidates: string[] = [];
+      if (enclosingClass) candidates.push(`${enclosingClass}.${smName}`);
+      candidates.push(smName); // top-level standalone fallback
+      let smContainer: string | undefined;
+      for (const cand of candidates) {
+        const exists = symbolIndex
+          .getSymbols({ container: cand, kind: "statemachine", name: smName })
+          .some((s) => reachableFiles.has(path.normalize(s.file)));
+        if (exists) {
+          smContainer = cand;
+          break;
+        }
+      }
+      if (smContainer) {
+        if (statePrefix.length === 0) {
+          // Top-level states of the SM (depth 1).
+          const directStates = symbolIndex
+            .getSymbols({ container: smContainer, kind: "state" })
+            .filter((s) => reachableFiles.has(path.normalize(s.file)))
+            .filter((s) => (s.statePath?.length ?? 0) === 1);
+          for (const sym of directStates) {
+            if (!seen.has(sym.name)) {
+              seen.add(sym.name);
+              items.push({
+                label: sym.name,
+                kind: symbolKindToCompletionKind("state"),
+                detail: "state",
+              });
+            }
+          }
+        } else {
+          // Nested states under the prefix (e.g., Sm.S1.|).
+          const childNames = symbolIndex.getChildStateNames(
+            statePrefix,
+            smContainer,
+            reachableFiles,
+          );
+          for (const name of childNames) {
+            if (!seen.has(name)) {
+              seen.add(name);
+              items.push({
+                label: name,
+                kind: symbolKindToCompletionKind("state"),
+                detail: "state",
+              });
+            }
+          }
+        }
+      }
+    }
+    return items;
+  }
+
   // Topic 052 item 4 — method parameter-type slot. Built-ins (excluding
   // `void`) + class / interface / trait / enum. Same shape as
   // decl_type_typed_prefix but on a distinct scalar so divergence is

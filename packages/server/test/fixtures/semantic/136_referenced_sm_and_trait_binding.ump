@@ -1,0 +1,48 @@
+// Topic 055 — `as |` slot completion: closed (well-parsed) cases.
+//
+// Every trait_sm_binding closes with `>;` so the parser never enters cold-
+// open V2b recovery — that's important because the nested-state cases here
+// rely on full depth indexing (S1's child Inner gets a `[S1, Inner]`
+// statePath only at depth 2, which V2b drops). The unclosed/recovery
+// shapes (`door as |`, `isA T<sm as |…`) live in fixture 137.
+
+trait T1 { status {} }
+
+statemachine deviceStatus { Idle {} Running {} }
+
+statemachine Global { G1 {} G2 {} }
+
+// Class-local SM, single segment dotted continuation — typed second segment.
+class HostD {
+  status { S {} T2 {} }
+  isA T1<sm as status.S/*@tsb_dotted_typed*/>;
+}
+
+// Class-local SM, single segment dotted continuation — bare-dot cursor,
+// placeholder `x` after the dot lets the parser form a complete
+// trait_sm_binding so the AST-based bare-dot detector fires.
+class HostE {
+  status { S {} }
+  isA T1<sm as status./*@tsb_dotted_blank*/x>;
+}
+
+// Top-level SM dotted continuation — bare-dot cursor.
+class HostF {
+  isA T1<sm as Global./*@tsb_top_dotted_blank*/x>;
+}
+
+// Top-level SM dotted continuation — typed second segment.
+class HostG {
+  isA T1<sm as Global.G/*@tsb_top_dotted_typed*/>;
+}
+
+// Nested class-local SM — `status.S1.|` must descend into S1's child states.
+class HostH {
+  status { S1 { Inner {} } S2 {} }
+  isA T1<sm as status.S1.I/*@tsb_nested_dotted_typed*/>;
+}
+
+class HostI {
+  status { S1 { Inner {} } S2 {} }
+  isA T1<sm as status.S1./*@tsb_nested_dotted_blank*/x>;
+}

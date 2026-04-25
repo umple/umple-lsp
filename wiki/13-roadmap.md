@@ -37,46 +37,31 @@ We parse `mixset name --redefine` but don't verify it actually points at an exis
 
 ## Known LSP gaps
 
-### Remaining array-fallback completion scopes
+### Recently completed
 
-The recent completion cleanup eliminated scalar-scope raw-lookahead leaks and most typed-prefix leaks. What remains is the generic **array fallback** path in `packages/server/src/completionBuilder.ts`. Any scope that still falls through there will show:
+The known array-fallback completion leaks have all been closed:
 
-- raw `LookaheadIterator` keywords
-- then operators
-- then symbol completions
+- blank `isA |` slot — topic 052 (`isa_typed_prefix` scalar)
+- `before |` / `after |` method-name slot — topic 052 (`code_injection_method` scalar)
+- `filter { include | }` class target slot — topic 052 (`filter_include_target` scalar)
+- `key { | }` attribute slot — verified clean (lookahead empty; no leak)
+- `template_list` / trait template parameter positions — verified clean (analyzer returns null)
+- `... as |` statemachine slot — topic 055 split into two scalar scopes:
+  - `referenced_sm_target` for `class C { sm name as |...`
+  - `trait_sm_binding_target` for `class C { isA T<sm as |...`
+- `... as Sm.|` dotted-state continuation in trait binding — topic 055 (`trait_sm_binding_state_target` scalar)
+- parameter-type typed-prefix (`void f(P|)`) — topic 052 (`param_type_typed_prefix` scalar)
+- LSP snippet completion — topic 054 (`packages/server/src/snippets.ts` registry, capability-gated)
 
-That is still the wrong UX in a few targeted places. Current candidates:
+### How to add new completion slots
 
-- blank `isA |` slot (`["class","interface","trait"]`)
-- `before |` / `after |` method-name slot (`["method"]`)
-- `... as |` statemachine slot (`["statemachine"]`)
-- `filter { include | }` class target slot (`["class"]`)
-- `key { | }` attribute slot (`["attribute"]`)
-- `template_list` positions (`["template"]`)
-- `referenced_statemachine` identifier positions (`["statemachine"]`)
+The pattern future fixes should follow:
 
-The right long-term direction is to keep shrinking that fallback until it is truly exceptional. Each fix should follow the same pattern used in topics 043, 047, and 049:
+1. detect the exact slot in `completionAnalysis.ts` (prevLeaf / AST ancestors / completions.scm capture)
+2. route to a dedicated scalar scope or a symbol-only early return — never let new slots ride the raw-lookahead array fallback
+3. add focused regression fixtures + assertions in `packages/server/test/fixtures/semantic/` and `semantic.test.ts`
 
-1. detect the exact slot in `completionAnalysis.ts`
-2. route to a dedicated scalar scope or symbol-only early return
-3. add focused regressions proving raw keyword junk is gone
-
-### Parameter-type typed-prefix completion
-
-Typed-prefix narrowing is now fixed for:
-
-- association right-side type names
-- `isA` type lists
-- declaration types
-- method return types
-
-The obvious next typed-prefix feature is **parameter types**. Example:
-
-```umple
-void f(P|)
-```
-
-That should narrow to type-only completion instead of whatever the broader enclosing scope offers. Topic 047 intentionally did not cover parameter types; now that the helper structure exists, this should be a small, focused topic.
+If you find a new array-fallback leak, treat it the same way: convert to a scalar scope rather than expanding the fallback's filtering logic.
 
 ### Code actions
 
@@ -132,11 +117,10 @@ This wiki lives in `wiki/` in the repo. GitHub also has a separate "Wiki" featur
 
 Pulled from the conversation history + general LSP best practice:
 
-1. **Snippet completion for full association declarations** — typing `assoc` triggers a snippet that scaffolds `1 -> * Foo;` with tab stops. VS Code supports server-provided snippets natively.
-2. **Find-implementations on traits** — distinct from find-refs; specifically traits' isA chain.
-3. **Quick-fix for missing `;`** — already have W-1502 detection via diagnostics; offer the fix as a code action.
-4. **Live diagram refresh on save** — currently the VS Code diagram updates on file save; could update on debounced edit.
-5. **Symbol search across workspace** — `workspace/symbol` LSP request not currently implemented.
+1. **Find-implementations on traits** — distinct from find-refs; specifically traits' isA chain.
+2. **Quick-fix for missing `;`** — already have W-1502 detection via diagnostics; offer the fix as a code action.
+3. **Live diagram refresh on save** — currently the VS Code diagram updates on file save; could update on debounced edit.
+4. **Symbol search across workspace** — `workspace/symbol` LSP request not currently implemented.
 
 Each of these is a focused topic: spec the scope, get codex review, implement, test, commit. The ~5 day cadence we hit during topics 038–044 is comfortable for one of these per cycle.
 

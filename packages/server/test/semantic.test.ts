@@ -944,10 +944,15 @@ const TEST_CASES: TestCase[] = [
         at: "arrow_empty",
         expect: "transition_target",
       },
+      // Topic 055 — `as |` for referenced_statemachine target now routes
+      // through the scalar `referenced_sm_target` scope (was the
+      // `["statemachine"]` array, which fell through to the raw-lookahead
+      // fallback and leaked builtin types). Builder offers class-local SMs
+      // plus top-level standalone statemachines, no keywords/operators/types.
       {
         type: "completion_kinds",
         at: "refsm_empty",
-        expect: ["statemachine"],
+        expect: "referenced_sm_target",
       },
     ],
   },
@@ -4890,9 +4895,9 @@ const TEST_CASES: TestCase[] = [
       // become isa_typed_prefix. The prevLeaf gate (`<` / `as`) rules them
       // out. Topic 053 narrows the `isA T<sm|` mid-typing position from
       // `class_body` (47-keyword leak) to `suppress` via the new
-      // `recoverTraitSmOpFromIsAError` helper. The `isA T<sm as S|`
-      // position is still on the existing class_body fallback (cursor is
-      // inside a formed trait_sm_binding, which the helper hard-stops on).
+      // `recoverTraitSmOpFromIsAError` helper. Topic 055 routes
+      // `isA T<sm as S|` from the previous `class_body` leak to the new
+      // scalar `trait_sm_binding_target` scope (statemachine symbols only).
       {
         type: "completion_kinds",
         at: "trait_sm_inner_typed",
@@ -4901,7 +4906,7 @@ const TEST_CASES: TestCase[] = [
       {
         type: "completion_kinds",
         at: "trait_sm_binding_typed",
-        expect: "class_body",
+        expect: "trait_sm_binding_target",
       },
     ],
   },
@@ -5298,6 +5303,84 @@ const TEST_CASES: TestCase[] = [
       // Broken `void method|()` (no body) → null via the new
       // isInsideBrokenMethodNameSlot guard.
       { type: "completion_kinds", at: "topic053_broken_method_name", expect: null },
+    ],
+  },
+
+  // 136: Topic 055 — closed `as |` slot completion. All trait bindings end
+  // in `>;` so the parser stays clean and cold-open V2b state-recovery is
+  // never triggered (V2b drops nested states beyond depth 1, which would
+  // hide HostH/HostI's `Inner` from the index). Recovery shapes for
+  // unclosed `as` / `<sm as ` live in fixture 137.
+  {
+    name: "136 referenced_sm_and_trait_binding: closed as-slot completion + nested states",
+    fixtures: ["136_referenced_sm_and_trait_binding.ump"],
+    assertions: [
+      // Class-local SM dotted continuation — typed + bare dot.
+      { type: "completion_kinds", at: "tsb_dotted_typed", expect: "trait_sm_binding_state_target" },
+      { type: "completion_includes", at: "tsb_dotted_typed", expect: ["S", "T2"] },
+      { type: "completion_excludes", at: "tsb_dotted_typed", expect: ["isA", "before", "Integer", "void", "ERROR"] },
+
+      { type: "completion_kinds", at: "tsb_dotted_blank", expect: "trait_sm_binding_state_target" },
+      { type: "completion_includes", at: "tsb_dotted_blank", expect: ["S"] },
+      { type: "completion_excludes", at: "tsb_dotted_blank", expect: ["isA", "before", "Integer", "void", "ERROR"] },
+
+      // Top-level SM dotted continuation — `isA T<sm as Global.|` and
+      // `…Global.G|` must descend into the top-level standalone SM's
+      // depth-1 states (codex follow-up: pre-fix the builder only checked
+      // class-local containers and returned 0 items).
+      { type: "completion_kinds", at: "tsb_top_dotted_blank", expect: "trait_sm_binding_state_target" },
+      { type: "completion_includes", at: "tsb_top_dotted_blank", expect: ["G1", "G2"] },
+      { type: "completion_excludes", at: "tsb_top_dotted_blank", expect: ["isA", "before", "Integer", "void", "ERROR"] },
+
+      { type: "completion_kinds", at: "tsb_top_dotted_typed", expect: "trait_sm_binding_state_target" },
+      { type: "completion_includes", at: "tsb_top_dotted_typed", expect: ["G1", "G2"] },
+
+      // Nested-state continuation — `…status.S1.|` and `…status.S1.I|`
+      // must descend into S1's child states. Pre-fix the analyzer only
+      // carried the SM name; now `traitSmBindingStatePrefix` carries the
+      // remainder of the path so the builder can call `getChildStateNames`.
+      { type: "completion_kinds", at: "tsb_nested_dotted_blank", expect: "trait_sm_binding_state_target" },
+      { type: "completion_includes", at: "tsb_nested_dotted_blank", expect: ["Inner"] },
+      { type: "completion_excludes", at: "tsb_nested_dotted_blank", expect: ["S2", "isA", "before", "Integer", "void"] },
+
+      { type: "completion_kinds", at: "tsb_nested_dotted_typed", expect: "trait_sm_binding_state_target" },
+      { type: "completion_includes", at: "tsb_nested_dotted_typed", expect: ["Inner"] },
+      { type: "completion_excludes", at: "tsb_nested_dotted_typed", expect: ["S2", "isA", "before", "Integer", "void"] },
+    ],
+  },
+
+  // 137: Topic 055 — unclosed `as` recovery shapes. Pre-055 the unclosed
+  // `door as |`, `motorStatus as dev|`, and `isA T<sm as |…` shapes either
+  // fell through to the raw-lookahead array fallback (175 keywords leaked)
+  // or to class_body (curated keywords leaked). Post-055 they each route
+  // to a dedicated scalar scope. This fixture deliberately keeps the
+  // bindings unclosed so the analyzer's prevLeaf=`as` + ERROR-parent path
+  // gets covered.
+  {
+    name: "137 as_slot_recovery_shapes: unclosed-typing recovery for as-slot",
+    fixtures: ["137_as_slot_recovery_shapes.ump"],
+    assertions: [
+      // Class-local referenced_statemachine — offers HostA's own status SM.
+      { type: "completion_kinds", at: "refsm_class_local", expect: "referenced_sm_target" },
+      { type: "completion_includes", at: "refsm_class_local", expect: ["status"] },
+      { type: "completion_excludes", at: "refsm_class_local", expect: ["isA", "before", "Integer", "void", "ERROR", "namespace"] },
+
+      // Top-level standalone SM reuse — blank cursor, then mid-typed.
+      { type: "completion_kinds", at: "refsm_top_blank", expect: "referenced_sm_target" },
+      { type: "completion_includes", at: "refsm_top_blank", expect: ["deviceStatus"] },
+      { type: "completion_excludes", at: "refsm_top_blank", expect: ["isA", "before", "Integer", "void", "ERROR"] },
+
+      { type: "completion_kinds", at: "refsm_top_typed", expect: "referenced_sm_target" },
+      { type: "completion_includes", at: "refsm_top_typed", expect: ["deviceStatus"] },
+
+      // trait_sm_binding first segment — HostC's own `status` SM is the
+      // class-local candidate, plus top-level `deviceStatus`.
+      { type: "completion_kinds", at: "tsb_blank", expect: "trait_sm_binding_target" },
+      { type: "completion_includes", at: "tsb_blank", expect: ["status", "deviceStatus"] },
+      { type: "completion_excludes", at: "tsb_blank", expect: ["isA", "before", "Integer", "void", "ERROR", "namespace"] },
+
+      { type: "completion_kinds", at: "tsb_typed", expect: "trait_sm_binding_target" },
+      { type: "completion_includes", at: "tsb_typed", expect: ["status"] },
     ],
   },
 ];

@@ -134,7 +134,7 @@ export interface CompletionInfo {
   /** Operators the parser expects at this position. */
   operators: string[];
   /** Which symbol kinds to offer, or null for none. */
-  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "trace_state" | "trace_method" | "trace_state_method" | "trace_attribute" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | "top_level" | "class_body" | "trait_body" | "interface_body" | "assoc_class_body" | "mixset_body" | "statemachine_body" | "state_body" | "filter_body" | "transition_target" | "userstory_body" | "usecase_body" | "association_multiplicity" | "association_type" | "association_typed_prefix" | "association_arrow" | "isa_typed_prefix" | "decl_type_typed_prefix" | "return_type_typed_prefix" | "code_injection_method" | "filter_include_target" | "param_type_typed_prefix" | null;
+  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "trace_state" | "trace_method" | "trace_state_method" | "trace_attribute" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | "top_level" | "class_body" | "trait_body" | "interface_body" | "assoc_class_body" | "mixset_body" | "statemachine_body" | "state_body" | "filter_body" | "transition_target" | "userstory_body" | "usecase_body" | "association_multiplicity" | "association_type" | "association_typed_prefix" | "association_arrow" | "isa_typed_prefix" | "decl_type_typed_prefix" | "return_type_typed_prefix" | "code_injection_method" | "filter_include_target" | "param_type_typed_prefix" | "referenced_sm_target" | "trait_sm_binding_target" | "trait_sm_binding_state_target" | null;
   /** True if cursor is at a definition-name position (suppress all). */
   isDefinitionName: boolean;
   /** True if cursor is inside a comment. */
@@ -151,6 +151,14 @@ export interface CompletionInfo {
   sortedKeyOwner?: string;
   /** Trait SM operation completion context. */
   traitSmContext?: { traitName: string; smName?: string; statePath?: string[] };
+  /** Topic 055 — SM name when scope is `trait_sm_binding_state_target`. */
+  traitSmBindingSmName?: string;
+  /**
+   * Topic 055 — Path segments AFTER the SM name when scope is
+   * `trait_sm_binding_state_target`. Empty for `Sm.|`, `["S1"]` for
+   * `Sm.S1.|` / `Sm.S1.I|`, etc.
+   */
+  traitSmBindingStatePrefix?: string[];
 }
 
 // ── Main analysis function ──────────────────────────────────────────────────
@@ -499,13 +507,203 @@ export function analyzeCompletion(
     }
   }
 
+  // Topic 055 — `as |` blank slot inside an ERROR, recovered for two distinct
+  // syntaxes:
+  //
+  //   1. `class C { sm name as |`     → referenced_statemachine target
+  //   2. `class C { isA T<sm as |`    → trait_sm_binding target
+  //
+  // Disambiguation: the trait binding ERROR carries a `<` token sibling
+  // because the parser consumed `isA T<` but couldn't close it. The
+  // referenced_statemachine ERROR doesn't. Both routes are scalar so the
+  // builder never falls through to the raw-lookahead path that historically
+  // emitted ~175 keyword junk items.
   if (prevLeaf?.type === "as" && prevLeaf.parent?.type === "ERROR") {
-    const errorParent = prevLeaf.parent.parent;
+    const errorNode = prevLeaf.parent;
+    const errorParent = errorNode.parent;
     if (
       errorParent &&
       (CLASS_LIKE_TYPES.has(errorParent.type) || errorParent.type === "attribute_declaration")
     ) {
-      symbolKinds = ["statemachine"];
+      let isTraitBinding = false;
+      for (let i = 0; i < errorNode.childCount; i++) {
+        const c = errorNode.child(i);
+        if (c && c.type === "<") {
+          isTraitBinding = true;
+          break;
+        }
+      }
+      symbolKinds = isTraitBinding
+        ? "trait_sm_binding_target"
+        : "referenced_sm_target";
+    }
+  }
+
+  // Topic 055 — `... as Sm.|` dotted-state continuation inside an ERROR.
+  // Cursor lands on the `.` token; tree-sitter typically wraps the bare dot
+  // in its own ERROR node, separated from the preceding trait_sm_binding
+  // ERROR. Detection: walk previous siblings of the dot's container looking
+  // for an enclosing `trait_sm_binding` (preferred) or an ERROR that
+  // contains the `<` and `as` tokens of an in-progress trait binding.
+  // Capture the SM name segment so the builder can resolve states.
+  // Topic 055 — capture SM name + remaining state-path prefix for the
+  // trait_sm_binding_state_target builder.
+  let traitSmBindingSmName: string | undefined;
+  let traitSmBindingStatePrefix: string[] | undefined;
+  if (prevLeaf?.type === "." && prevLeaf.parent) {
+    const dotContainer = prevLeaf.parent;
+    let sawAngle = false;
+    let sawAs = false;
+    let valuePathSegments: string[] | undefined;
+    // Helper: extract all identifier names from a qualified_name in document
+    // order. The first becomes the SM name, the rest the state prefix.
+    const collectSegments = (qn: SyntaxNode): string[] => {
+      const out: string[] = [];
+      for (let i = 0; i < qn.childCount; i++) {
+        const c = qn.child(i);
+        if (c && c.type === "identifier") out.push(c.text);
+      }
+      return out;
+    };
+    let sib: SyntaxNode | null = dotContainer.previousSibling;
+    let hops = 0;
+    while (sib && hops < 6) {
+      hops++;
+      if (sib.type === "trait_sm_binding") {
+        for (let i = 0; i < sib.childCount; i++) {
+          const c = sib.child(i);
+          if (!c) continue;
+          const fieldName = sib.fieldNameForChild(i);
+          if (fieldName === "value" && c.type === "qualified_name") {
+            valuePathSegments = collectSegments(c);
+          }
+        }
+        sawAngle = sawAs = true;
+        break;
+      }
+      if (sib.type === "ERROR") {
+        for (let i = 0; i < sib.childCount; i++) {
+          const c = sib.child(i);
+          if (!c) continue;
+          if (c.type === "<") sawAngle = true;
+          if (c.type === "as") sawAs = true;
+          if (c.type === "trait_sm_binding") {
+            for (let j = 0; j < c.childCount; j++) {
+              const cc = c.child(j);
+              if (!cc) continue;
+              const fieldName = c.fieldNameForChild(j);
+              if (fieldName === "value" && cc.type === "qualified_name") {
+                valuePathSegments = collectSegments(cc);
+              }
+            }
+            sawAngle = sawAs = true;
+          }
+        }
+        if (sawAngle && sawAs && valuePathSegments && valuePathSegments.length > 0)
+          break;
+      }
+      sib = sib.previousSibling;
+    }
+    if (
+      sawAngle &&
+      sawAs &&
+      valuePathSegments &&
+      valuePathSegments.length > 0
+    ) {
+      symbolKinds = "trait_sm_binding_state_target";
+      traitSmBindingSmName = valuePathSegments[0];
+      traitSmBindingStatePrefix = valuePathSegments.slice(1);
+    }
+  }
+
+  // Topic 055 — bare dot inside an already-formed `trait_sm_binding > value
+  // (qualified_name)`. This fires when the user types `<sm as Sm.|>;` (or
+  // when the parser otherwise reformed the qualified_name despite the dot
+  // being mid-edit). Detection: prevLeaf is `.`, prevLeaf.parent is
+  // qualified_name, qualified_name.parent is trait_sm_binding (value path).
+  // Capture the SM name and any preceding state-prefix segments so the
+  // builder can resolve `Sm` → top-level / class-local SM and descend.
+  if (
+    prevLeaf?.type === "." &&
+    prevLeaf.parent?.type === "qualified_name" &&
+    prevLeaf.parent.parent?.type === "trait_sm_binding"
+  ) {
+    const tsb = prevLeaf.parent.parent;
+    let isValuePath = false;
+    for (let i = 0; i < tsb.childCount; i++) {
+      const c = tsb.child(i);
+      if (!c) continue;
+      const fieldName = tsb.fieldNameForChild(i);
+      if (fieldName === "value" && c.id === prevLeaf.parent.id) {
+        isValuePath = true;
+        break;
+      }
+    }
+    if (isValuePath) {
+      const qn = prevLeaf.parent;
+      const precedingIdentifiers: string[] = [];
+      for (let i = 0; i < qn.childCount; i++) {
+        const c = qn.child(i);
+        if (!c) continue;
+        if (c.id === prevLeaf.id) break;
+        if (c.type === "identifier") precedingIdentifiers.push(c.text);
+      }
+      if (precedingIdentifiers.length > 0) {
+        symbolKinds = "trait_sm_binding_state_target";
+        traitSmBindingSmName = precedingIdentifiers[0];
+        traitSmBindingStatePrefix = precedingIdentifiers.slice(1);
+      }
+    }
+  }
+
+  // Topic 055 — typed dotted continuation: cursor on identifier inside
+  // `trait_sm_binding > qualified_name`. The query-based scope already routes
+  // first-identifier captures to `trait_sm_binding_target`; here we promote
+  // non-first identifiers (i.e., the dotted-state segment) to the dedicated
+  // state target. Detection: walk siblings of the cursor identifier inside
+  // the qualified_name; if any preceding sibling is a `.` token we're past
+  // the SM-name segment.
+  if (
+    nodeAtCursor &&
+    nodeAtCursor.type === "identifier" &&
+    nodeAtCursor.parent?.type === "qualified_name" &&
+    nodeAtCursor.parent.parent?.type === "trait_sm_binding"
+  ) {
+    const tsb = nodeAtCursor.parent.parent;
+    // Only consider the value path, not the param path.
+    let isValuePath = false;
+    for (let i = 0; i < tsb.childCount; i++) {
+      const c = tsb.child(i);
+      if (!c) continue;
+      const fieldName = tsb.fieldNameForChild(i);
+      if (fieldName === "value" && c.id === nodeAtCursor.parent.id) {
+        isValuePath = true;
+        break;
+      }
+    }
+    if (isValuePath) {
+      const qn = nodeAtCursor.parent;
+      const precedingIdentifiers: string[] = [];
+      let pastDot = false;
+      for (let i = 0; i < qn.childCount; i++) {
+        const c = qn.child(i);
+        if (!c) continue;
+        if (c.id === nodeAtCursor.id) break;
+        if (c.type === ".") pastDot = true;
+        else if (c.type === "identifier") precedingIdentifiers.push(c.text);
+      }
+      if (pastDot) {
+        symbolKinds = "trait_sm_binding_state_target";
+        // First identifier is the SM name; subsequent are state-path segments
+        // BEFORE the cursor (state-prefix). The cursor identifier itself is
+        // the typed prefix the client filters on.
+        if (precedingIdentifiers.length > 0) {
+          traitSmBindingSmName = precedingIdentifiers[0];
+          traitSmBindingStatePrefix = precedingIdentifiers.slice(1);
+        }
+      } else {
+        symbolKinds = "trait_sm_binding_target";
+      }
     }
   }
 
@@ -1036,6 +1234,8 @@ export function analyzeCompletion(
     dottedStatePrefix,
     sortedKeyOwner,
     traitSmContext,
+    traitSmBindingSmName,
+    traitSmBindingStatePrefix,
   };
 }
 
@@ -1470,6 +1670,9 @@ function resolveCompletionScope(
   if (kindStr === "filter_include_target") return "filter_include_target";
   if (kindStr === "param_type_typed_prefix") return "param_type_typed_prefix";
   if (kindStr === "association_arrow") return "association_arrow";
+  if (kindStr === "referenced_sm_target") return "referenced_sm_target";
+  if (kindStr === "trait_sm_binding_target") return "trait_sm_binding_target";
+  if (kindStr === "trait_sm_binding_state_target") return "trait_sm_binding_state_target";
   if (kindStr === "none") return null;
 
   return kindStr.split("_") as SymbolKind[];

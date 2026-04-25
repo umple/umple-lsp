@@ -1,0 +1,28 @@
+// Topic 055 — `as |` slot completion: unclosed/recovery shapes.
+//
+// These shapes break the parse: `door as ` (no target name yet),
+// `motorStatus as dev` (typed but not terminated), `isA T<sm as st` (no
+// closing `>;`). They exist in their own fixture because cold-open V2b
+// recovery downgrades all nested-state indexing in the same file to
+// depth-1; fixture 136 hosts the closed cases that need full depth.
+
+statemachine deviceStatus { Idle {} Running {} }
+
+trait T1 { status {} }
+
+class HostA {
+  status { On {} Off {} }
+  // referenced_statemachine target — class-local SM offered; no leaks.
+  door as /*@refsm_class_local*/
+}
+
+class HostB {
+  // referenced_statemachine target — top-level standalone SM, blank + typed.
+  motorStatus as /*@refsm_top_blank*/dev/*@refsm_top_typed*/
+}
+
+class HostC {
+  status { S {} T2 {} }
+  // trait_sm_binding first segment — blank + typed.
+  isA T1<sm as /*@tsb_blank*/st/*@tsb_typed*/
+}

@@ -87,8 +87,14 @@
 (trace_statement (trace_entity_call) @scope.trace_attribute_method)
 (trace_postfix "record" . (identifier) @scope.trace_attribute_method)
 
-; referenced_statemachine definition — offer statemachine names from enclosing class
-(referenced_statemachine definition: (identifier) @scope.statemachine)
+; referenced_statemachine definition — offer statemachine names from enclosing
+; class plus top-level standalone statemachines (topic 055).
+(referenced_statemachine definition: (identifier) @scope.referenced_sm_target)
+
+; trait_sm_binding value — offer statemachine names (first segment) and states
+; in the bound SM (subsequent dotted segments). Disambiguation between first and
+; non-first identifier happens in completionAnalysis.ts.
+(trait_sm_binding value: (qualified_name (identifier) @scope.trait_sm_binding_target))
 
 ; depend java.util.* — suppress (not a symbol reference)
 (depend_statement) @scope.suppress
