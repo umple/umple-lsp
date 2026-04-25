@@ -5206,8 +5206,10 @@ const TEST_CASES: TestCase[] = [
       { type: "completion_kinds", at: "bare_mult_end", expect: null },
       // Case 3 — enumerated_attribute transition arrow → positive recovery
       { type: "completion_kinds", at: "enum_attr_transition", expect: "transition_target" },
-      // Case 4 — broken method param-list start
-      { type: "completion_kinds", at: "paren_open", expect: null },
+      // Case 4 — broken method param-list start. Topic 052 item 4 turned
+      // this from a topic-050 suppress into a positive parameter-type
+      // completion scope.
+      { type: "completion_kinds", at: "paren_open", expect: "param_type_typed_prefix" },
       // Case 5 — Java annotation
       { type: "completion_kinds", at: "annotation_at", expect: null },
       // Case 6 — malformed dash-identifier (three cursor positions)
@@ -5238,12 +5240,44 @@ const TEST_CASES: TestCase[] = [
       // Positive: `isA X,|` routes to the typed-prefix scope (type-only),
       // not class_body's 50 raw keywords.
       { type: "completion_kinds", at: "stage1_isa_comma",   expect: "isa_typed_prefix" },
-      // Suppress: param-decl comma. No popup until param-type narrowing
-      // ships as a future positive scope.
-      { type: "completion_kinds", at: "stage1_param_comma", expect: null },
+      // Topic 052 item 4 — param-decl comma is now a positive parameter-
+      // type completion scope (was null/suppressed via topic 050).
+      { type: "completion_kinds", at: "stage1_param_comma", expect: "param_type_typed_prefix" },
       // Negative: association sibling-slot comma must NOT become
       // isa_typed_prefix — it's a separate slot with its own scope.
       { type: "completion_kinds", at: "stage1_assoc_comma", expect: "association_type" },
+
+      // ─── Topic 052 item 4 — parameter-type completion ─────────────────
+      // Five positive shapes route to the new scalar; param-name slot
+      // remains suppressed.
+      { type: "completion_kinds", at: "param_blank_first",   expect: "param_type_typed_prefix" },
+      { type: "completion_kinds", at: "param_typed_first",   expect: "param_type_typed_prefix" },
+      { type: "completion_kinds", at: "param_builtin_first", expect: "param_type_typed_prefix" },
+      { type: "completion_kinds", at: "param_blank_cont",    expect: "param_type_typed_prefix" },
+      { type: "completion_kinds", at: "param_typed_cont",    expect: "param_type_typed_prefix" },
+      { type: "completion_kinds", at: "param_name_slot",     expect: null },
+      // Includes built-ins (excluding void) and class-likes; excludes raw
+      // keyword junk and `void`.
+      {
+        type: "completion_includes",
+        at: "param_blank_first",
+        expect: ["Integer", "String", "Boolean", "Person", "Other"],
+      },
+      {
+        type: "completion_excludes",
+        at: "param_blank_first",
+        expect: ["void", "ERROR", "namespace", "class", "isA"],
+      },
+      {
+        type: "completion_includes",
+        at: "param_blank_cont",
+        expect: ["Person", "Integer"],
+      },
+      {
+        type: "completion_excludes",
+        at: "param_blank_cont",
+        expect: ["void", "ERROR"],
+      },
     ],
   },
 ];

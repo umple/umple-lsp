@@ -134,7 +134,7 @@ export interface CompletionInfo {
   /** Operators the parser expects at this position. */
   operators: string[];
   /** Which symbol kinds to offer, or null for none. */
-  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "trace_state" | "trace_method" | "trace_state_method" | "trace_attribute" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | "top_level" | "class_body" | "trait_body" | "interface_body" | "assoc_class_body" | "mixset_body" | "statemachine_body" | "state_body" | "filter_body" | "transition_target" | "userstory_body" | "usecase_body" | "association_multiplicity" | "association_type" | "association_typed_prefix" | "association_arrow" | "isa_typed_prefix" | "decl_type_typed_prefix" | "return_type_typed_prefix" | "code_injection_method" | "filter_include_target" | null;
+  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "trace_state" | "trace_method" | "trace_state_method" | "trace_attribute" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | "top_level" | "class_body" | "trait_body" | "interface_body" | "assoc_class_body" | "mixset_body" | "statemachine_body" | "state_body" | "filter_body" | "transition_target" | "userstory_body" | "usecase_body" | "association_multiplicity" | "association_type" | "association_typed_prefix" | "association_arrow" | "isa_typed_prefix" | "decl_type_typed_prefix" | "return_type_typed_prefix" | "code_injection_method" | "filter_include_target" | "param_type_typed_prefix" | null;
   /** True if cursor is at a definition-name position (suppress all). */
   isDefinitionName: boolean;
   /** True if cursor is inside a comment. */
@@ -191,6 +191,11 @@ export function analyzeCompletion(
     return { ...empty, isComment: true };
   }
 
+  // Pre-compute prevLeaf — needed by both the suppression ladder
+  // (`isInsideMethodParamListStart` distinguishes param-type slots from
+  // suppress positions using prevLeaf) and the rest of the analyzer.
+  const earlyPrevLeaf = findPreviousLeaf(tree, content, line, column);
+
   // --- Topic 050: contexts where any popup would be wrong ────────────────
   // Each guard returns `empty` (symbolKinds=null, keywords=[], operators=[])
   // so completionBuilder shows nothing. Order matters: java_annotation
@@ -198,7 +203,7 @@ export function analyzeCompletion(
   // structural ones (param-list, attribute initializer) before the textual
   // identifier-fragment guard.
   if (nodeAtCursor && isInsideJavaAnnotation(nodeAtCursor)) return empty;
-  if (nodeAtCursor && isInsideMethodParamListStart(nodeAtCursor)) return empty;
+  if (nodeAtCursor && isInsideMethodParamListStart(nodeAtCursor, earlyPrevLeaf)) return empty;
   if (nodeAtCursor && isInsideAttributeInitializer(nodeAtCursor)) return empty;
   if (isInsideMalformedDashIdentifier(content, line, column, nodeAtCursor)) return empty;
   if (nodeAtCursor && isBareCompleteMultiplicityAtEnd(nodeAtCursor, content, line, column)) return empty;
@@ -227,7 +232,7 @@ export function analyzeCompletion(
   }
 
   // --- LookaheadIterator for keywords ---
-  const prevLeaf = findPreviousLeaf(tree, content, line, column);
+  const prevLeaf = earlyPrevLeaf;
   const stateId = prevLeaf
     ? prevLeaf.nextParseState
     : (nodeAtCursor?.parseState ?? 0);
@@ -423,6 +428,15 @@ export function analyzeCompletion(
     )
   ) {
     symbolKinds = "return_type_typed_prefix";
+  }
+
+  // Topic 052 item 4 — parameter-type completion. Three positive shapes
+  // covered by isInsideMethodParamTypeSlot (blank `(`, single-id param,
+  // blank continuation after `,`). The matching topic-050 suppressors
+  // already step aside via the same predicate, so this assignment is the
+  // sole authority for those positions.
+  if (nodeAtCursor && isInsideMethodParamTypeSlot(nodeAtCursor, prevLeaf)) {
+    symbolKinds = "param_type_typed_prefix";
   }
 
   if (
@@ -1051,53 +1065,131 @@ function isInsideJavaAnnotation(node: SyntaxNode): boolean {
 }
 
 /**
- * Cursor sits inside a method param list. Three recovery shapes covered:
- *   1. clean parse: ancestor is `param_list` or `param` (e.g. cursor on
- *      `,` between two complete params, or inside an in-progress param)
- *   2. broken `(` start: cursor is `(` whose parent is ERROR, with a
- *      `type_name` and identifier earlier in the ERROR (the `void f(|`
- *      shape codex mapped during topic 050)
- *   3. trailing-comma broken: cursor is `,` whose parent is ERROR sibling
- *      of `param_list` under `method_declaration` (the `void f(int a,|)`
- *      shape — comma after a complete param, no following param yet)
+ * Cursor sits inside a method param list at a NON-completable position
+ * (param-name slot, or whitespace after a complete param). Topic 052
+ * item 4 narrowed this from "any position inside param list" to "only
+ * positions that are NOT a parameter-type slot" — type slots route to
+ * `param_type_typed_prefix` via `isInsideMethodParamTypeSlot` instead.
  *
- * Suppress in all three until parameter-type narrowing ships as a future
- * topic. Keep the comma case narrow (must be inside method_declaration)
- * so it doesn't eat unrelated comma-based completions like
- * `implementsReq R1,` or `isA A,`.
+ * Now suppresses ONLY:
+ *   - cursor on a param's NAME identifier (param has both type_name and
+ *     identifier; cursor is on the second one)
+ *   - cursor in `param_list` whitespace (no param ancestor)
+ *
+ * The two old broken-recovery shapes (`void f(|` no-closing-paren / `,`
+ * in ERROR sibling of param_list) are now handled positively by
+ * `isInsideMethodParamTypeSlot` and pre-empt this suppressor.
  */
-function isInsideMethodParamListStart(node: SyntaxNode): boolean {
-  // Shape 1 — direct ancestor is param_list / param.
+function isInsideMethodParamListStart(
+  node: SyntaxNode,
+  prevLeaf: SyntaxNode | null = null,
+): boolean {
+  // If this is a param-type slot, the positive scope handles it; do NOT
+  // suppress.
+  if (isInsideMethodParamTypeSlot(node, prevLeaf)) return false;
+
+  // Otherwise, only suppress when cursor is genuinely inside a param ancestor
+  // at a non-type-slot position (the param-name slot after a full
+  // type_name + identifier pair) or inside param_list whitespace.
   let n: SyntaxNode | null = node;
   while (n) {
-    if (n.type === "param_list" || n.type === "param") return true;
+    if (n.type === "param") {
+      let hasTypeName = false;
+      let hasIdentifier = false;
+      for (let i = 0; i < n.childCount; i++) {
+        const c = n.child(i);
+        if (!c) continue;
+        if (c.type === "type_name") hasTypeName = true;
+        if (c.type === "identifier") hasIdentifier = true;
+      }
+      // Suppress only when the param has both type_name and identifier
+      // (cursor on the name slot). Single-identifier params are type-slots
+      // and have already returned false above via isInsideMethodParamTypeSlot.
+      return hasTypeName && hasIdentifier;
+    }
+    if (n.type === "param_list") {
+      // Cursor in param_list whitespace after a complete param — suppress.
+      return true;
+    }
+    if (n.type === "method_declaration" || n.type === "class_definition" ||
+        n.type === "source_file") break;
     n = n.parent;
   }
-  // Shape 2 — broken `(` start.
-  if (node.type === "(" && node.parent?.type === "ERROR") {
-    const err = node.parent;
-    let hasTypeName = false;
-    let hasName = false;
-    for (let i = 0; i < err.childCount; i++) {
-      const c = err.child(i);
-      if (!c) continue;
-      if (c.type === "type_name") hasTypeName = true;
-      if (c.type === "identifier" && hasTypeName) hasName = true;
-    }
-    if (hasTypeName && hasName) {
-      let p: SyntaxNode | null = err.parent;
-      while (p) {
-        if (CLASS_LIKE_DEF_TYPES.has(p.type)) return true;
-        if (p.type === "source_file") return false;
-        p = p.parent;
+  return false;
+}
+
+/**
+ * Topic 052 item 4 — cursor sits at a parameter-type slot inside a method
+ * declaration. Three recovery shapes:
+ *
+ *   1. Blank first slot `void f(|)` — cursor at `(` whose parent is
+ *      `method_declaration`. No `param_list` formed yet.
+ *   2. Typed inside single-identifier param `void f(P|)` /
+ *      `void f(int a, P|)` — cursor on an `identifier` whose parent is
+ *      `param`, and the param has only one identifier child (no separate
+ *      type_name yet). The single identifier is the type-being-typed.
+ *   3. Blank continuation `void f(int a, |)` — cursor sits between `,`
+ *      (in ERROR sibling of param_list) and `)`. Detection: prevLeaf is
+ *      `,` whose parent ERROR is a sibling of param_list under
+ *      method_declaration.
+ *
+ * Returns true if any of these match. Caller sets
+ * `symbolKinds = "param_type_typed_prefix"`.
+ */
+function isInsideMethodParamTypeSlot(
+  node: SyntaxNode,
+  prevLeaf: SyntaxNode | null = null,
+): boolean {
+  // Shape 1 — cursor at `(` of method_declaration. Two parse states:
+  //   1a. clean: `void f() {}` — `(` directly under method_declaration.
+  //   1b. broken: `void f(` (no closing) — the entire method shape lives
+  //       under an ERROR. The ERROR contains a `type_name` (return type),
+  //       identifier (method name), and `(`. This is the topic-050
+  //       broken-`(` shape, now redirected from suppress to positive.
+  if (node.type === "(") {
+    if (node.parent?.type === "method_declaration") return true;
+    if (node.parent?.type === "ERROR") {
+      const err = node.parent;
+      let hasTypeName = false;
+      let hasNameAfterTypeName = false;
+      for (let i = 0; i < err.childCount; i++) {
+        const c = err.child(i);
+        if (!c) continue;
+        if (c.id === node.id) break;
+        if (c.type === "type_name") hasTypeName = true;
+        if (c.type === "identifier" && hasTypeName) hasNameAfterTypeName = true;
+      }
+      if (hasTypeName && hasNameAfterTypeName) {
+        // Confirm class-like ancestor.
+        let p: SyntaxNode | null = err.parent;
+        while (p) {
+          if (CLASS_LIKE_DEF_TYPES.has(p.type)) return true;
+          if (p.type === "source_file") return false;
+          p = p.parent;
+        }
       }
     }
   }
-  // Shape 3 — trailing-comma broken `void f(int a,|)`. nodeAtCursor is `,`,
-  // parent is ERROR, ERROR's parent is method_declaration (sibling of the
-  // `param_list` that holds the complete params before the `,`).
-  if (node.type === "," && node.parent?.type === "ERROR") {
-    const err = node.parent;
+  // Shape 2 — cursor on an identifier inside a single-identifier param.
+  if (node.type === "identifier") {
+    const param = node.parent;
+    if (param?.type === "param") {
+      let typeNameCount = 0;
+      let idCount = 0;
+      for (let i = 0; i < param.childCount; i++) {
+        const c = param.child(i);
+        if (!c) continue;
+        if (c.type === "type_name") typeNameCount++;
+        if (c.type === "identifier") idCount++;
+      }
+      // Single identifier, no type_name → cursor is on the in-progress
+      // type token.
+      return typeNameCount === 0 && idCount === 1;
+    }
+  }
+  // Shape 3 — cursor after a comma in the ERROR-sibling-of-param_list shape.
+  if (prevLeaf?.type === "," && prevLeaf.parent?.type === "ERROR") {
+    const err = prevLeaf.parent;
     if (err.parent?.type === "method_declaration") return true;
   }
   return false;
@@ -1359,6 +1451,7 @@ function resolveCompletionScope(
   if (kindStr === "return_type_typed_prefix") return "return_type_typed_prefix";
   if (kindStr === "code_injection_method") return "code_injection_method";
   if (kindStr === "filter_include_target") return "filter_include_target";
+  if (kindStr === "param_type_typed_prefix") return "param_type_typed_prefix";
   if (kindStr === "association_arrow") return "association_arrow";
   if (kindStr === "none") return null;
 

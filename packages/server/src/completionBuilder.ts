@@ -694,6 +694,18 @@ export function buildSemanticCompletionItems(
     });
     return items;
   }
+
+  // Topic 052 item 4 — method parameter-type slot. Built-ins (excluding
+  // `void`) + class / interface / trait / enum. Same shape as
+  // decl_type_typed_prefix but on a distinct scalar so divergence is
+  // contained.
+  if (symbolKinds === "param_type_typed_prefix") {
+    return buildTypeCompletionItems(symbolIndex, reachableFiles, {
+      kinds: ["class", "interface", "trait", "enum"],
+      includeBuiltins: true,
+      excludeVoid: true,
+    });
+  }
   if (symbolKinds === "trace_state_method" && info.enclosingClass) {
     const items: CompletionItem[] = [];
     const seen = new Set<string>();

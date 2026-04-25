@@ -138,3 +138,38 @@ class StageOneParamComma {
 class StageOneAssocComma {
   1 -> * Person,/*@stage1_assoc_comma*/
 }
+
+
+// ─── Topic 052 item 4 — parameter-type completion ────────────────────────
+
+// Blank first param slot `void f(|)` — clean parse, cursor at `(`.
+class ItemFourBlankFirst {
+  void f(/*@param_blank_first*/) {}
+}
+
+// Typed-prefix in single-id param `void f(P|)`.
+class ItemFourTypedFirst {
+  void f(P/*@param_typed_first*/) {}
+}
+
+// Built-in typed-prefix `void f(Int|)`.
+class ItemFourBuiltinFirst {
+  void f(Int/*@param_builtin_first*/) {}
+}
+
+// Blank continuation after comma `void f(int a, |)`.
+class ItemFourBlankCont {
+  void f(int a, /*@param_blank_cont*/) {}
+}
+
+// Typed-prefix continuation `void f(int a, P|)`.
+class ItemFourTypedCont {
+  void f(int a, P/*@param_typed_cont*/) {}
+}
+
+// Negative: param-name slot `void f(int a|)` — cursor on `a` of a fully-
+// formed param. Must remain suppressed (null) — nothing useful to
+// autocomplete on a param name.
+class ItemFourParamName {
+  void f(int a/*@param_name_slot*/) {}
+}
