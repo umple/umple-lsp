@@ -7093,6 +7093,241 @@ async function main() {
     }
   }
 
+  // ── Topic 056 — quick-fix code actions ───────────────────────────────────
+  // Pure tests against `buildQuickFixActions()` from `src/codeActions.ts`.
+  // No LSP transport, no compiler invocation; we hand-craft Diagnostics that
+  // mirror what `parseUmpleJsonDiagnostics()` produces.
+  {
+    const { buildQuickFixActions } = require("../src/codeActions");
+    const { TextDocument } = require("vscode-languageserver-textdocument");
+    const {
+      DiagnosticSeverity,
+      Range,
+      Position,
+    } = require("vscode-languageserver/node");
+
+    const URI = "file:///tmp/code_actions_probe.ump";
+    const SOURCE = "umple";
+
+    function makeDoc(text: string): any {
+      return TextDocument.create(URI, "umple", 1, text);
+    }
+    function makeDiag(line: number, lineText: string, code: string, severity = DiagnosticSeverity.Warning, message?: string, source: string = SOURCE) {
+      const startCol = lineText.search(/\S/);
+      return {
+        severity,
+        range: Range.create(
+          Position.create(line, startCol === -1 ? 0 : startCol),
+          Position.create(line, lineText.length),
+        ),
+        message: message ?? `${code}: Attribute or Association syntax could not be processed`,
+        source,
+        code,
+      };
+    }
+
+    type Case = {
+      name: string;
+      text: string;
+      diagLine: number;
+      code: string;
+      message?: string;
+      severity?: any;
+      source?: string;
+      expectActions: number;
+      expectInsertCol?: number;
+    };
+
+    const cases: Case[] = [
+      // Positive — five W1007 shapes that need `;`.
+      { name: "attribute (Integer x)", text: "class A {\n  Integer x\n  String y;\n}\n", diagLine: 1, code: "W1007", expectActions: 1, expectInsertCol: 11 },
+      { name: "attribute (hello world)", text: "class A {\n  hello world\n}\n", diagLine: 1, code: "W1007", expectActions: 1, expectInsertCol: 13 },
+      { name: "isA list", text: "class P {}\nclass A {\n  isA P\n}\n", diagLine: 2, code: "W1007", expectActions: 1, expectInsertCol: 7 },
+      { name: "implementsReq list", text: "req R1 userStory {}\nclass A {\n  implementsReq R1\n}\n", diagLine: 2, code: "W1007", expectActions: 1, expectInsertCol: 18 },
+      { name: "inline association", text: "class B {}\nclass A {\n  1 -- * B b\n}\n", diagLine: 2, code: "W1007", expectActions: 1, expectInsertCol: 12 },
+      { name: "interface method signature", text: "interface I {\n  void m()\n}\n", diagLine: 1, code: "W1007", expectActions: 1, expectInsertCol: 10 },
+
+      // Trailing line comment — insert before the `//`, after trimming
+      // trailing whitespace.
+      { name: "trailing line comment", text: "class A {\n  Integer x  // note\n}\n", diagLine: 1, code: "W1007", expectActions: 1, expectInsertCol: 11 },
+
+      // Negative — class-body method signature: `void m();` is still W1007.
+      { name: "class-body method signature (codex edge)", text: "class A {\n  void m()\n}\n", diagLine: 1, code: "W1007", expectActions: 0 },
+
+      // Negative — expression line.
+      { name: "expression operator (foo + bar)", text: "class A {\n  foo + bar\n}\n", diagLine: 1, code: "W1007", expectActions: 0 },
+
+      // Negative — already terminated (defensive).
+      { name: "already terminated", text: "class A {\n  Integer x;\n}\n", diagLine: 1, code: "W1007", expectActions: 0 },
+
+      // Negative — comment-only line.
+      { name: "comment-only line", text: "class A {\n  // not a statement\n}\n", diagLine: 1, code: "W1007", expectActions: 0 },
+
+      // Negative — unrelated diagnostic codes.
+      { name: "W50 unrelated", text: "class A {\n  status { S { e -> Missing; } }\n}\n", diagLine: 1, code: "W50", expectActions: 0 },
+      { name: "E1503 unrelated", text: "class A {\n  } extra\n}\n", diagLine: 1, code: "E1503", severity: DiagnosticSeverity.Error, expectActions: 0 },
+      { name: "E1502 deferred (filter)", text: "class C {}\nfilter F {\n  include C\n}\n", diagLine: 2, code: "E1502", severity: DiagnosticSeverity.Error, expectActions: 0 },
+
+      // Negative — imported-file message.
+      { name: "imported-file diagnostic", text: 'use "Other.ump";\nclass A {}\n', diagLine: 0, code: "W1007", message: "In imported file (Other.ump:3): W1007: Attribute or Association syntax could not be processed", expectActions: 0 },
+
+      // Negative — non-umple source.
+      { name: "non-umple source", text: "class A {\n  Integer x\n}\n", diagLine: 1, code: "W1007", source: "other-linter", expectActions: 0 },
+
+      // Negative — diagnostic line out of range.
+      { name: "diag line out of range", text: "class A {}\n", diagLine: 99, code: "W1007", expectActions: 0 },
+
+      // Negative — codex follow-up: structural keyword as first token. The
+      // attribute classifier used to accept these because they're "two
+      // bare identifiers", but `class B;` / `state S;` becomes a W131
+      // attribute warning rather than recovering the user's intent.
+      { name: "structural keyword `class B` (codex edge)", text: "class A {\n  class B\n}\n", diagLine: 1, code: "W1007", expectActions: 0 },
+      { name: "structural keyword `state S` (codex edge)", text: "class A {\n  state S\n}\n", diagLine: 1, code: "W1007", expectActions: 0 },
+      { name: "structural keyword `interface I`", text: "class A {\n  interface I\n}\n", diagLine: 1, code: "W1007", expectActions: 0 },
+      { name: "structural keyword `trait T`", text: "class A {\n  trait T\n}\n", diagLine: 1, code: "W1007", expectActions: 0 },
+
+      // Negative — codex follow-up: arrow without multiplicity. `foo -> bar;`
+      // fires E3607 (port-name resolution), so the semicolon doesn't fix
+      // the diagnostic. Real associations always include a multiplicity.
+      { name: "arrow without multiplicity `foo -> bar` (codex edge)", text: "class A {\n  foo -> bar\n}\n", diagLine: 1, code: "W1007", expectActions: 0 },
+
+      // Positive — a second association shape (codex confirmed clean).
+      { name: "association `1 -> * B`", text: "class B {}\nclass A {\n  1 -> * B\n}\n", diagLine: 2, code: "W1007", expectActions: 1, expectInsertCol: 10 },
+    ];
+
+    for (const c of cases) {
+      const testName = `code_action.semicolon: ${c.name}`;
+      try {
+        const doc = makeDoc(c.text);
+        const lineText = c.text.split("\n")[c.diagLine] ?? "";
+        const diag = makeDiag(
+          c.diagLine,
+          lineText,
+          c.code,
+          c.severity ?? DiagnosticSeverity.Warning,
+          c.message,
+          c.source ?? SOURCE,
+        );
+        const actions = buildQuickFixActions(doc, [diag]);
+        if (actions.length !== c.expectActions) {
+          throw new Error(
+            `expected ${c.expectActions} action(s), got ${actions.length}: ${actions.map((a: any) => a.title).join(", ")}`,
+          );
+        }
+        if (c.expectActions === 1) {
+          const action = actions[0];
+          if (action.title !== "Add missing semicolon") {
+            throw new Error(`unexpected title: ${action.title}`);
+          }
+          if (action.kind !== "quickfix") {
+            throw new Error(`unexpected kind: ${action.kind}`);
+          }
+          const edits = action.edit?.changes?.[URI];
+          if (!edits || edits.length !== 1) {
+            throw new Error(`expected 1 edit, got ${edits?.length ?? 0}`);
+          }
+          const e = edits[0];
+          if (e.newText !== ";") {
+            throw new Error(`unexpected newText: ${JSON.stringify(e.newText)}`);
+          }
+          if (c.expectInsertCol !== undefined) {
+            if (
+              e.range.start.line !== c.diagLine ||
+              e.range.start.character !== c.expectInsertCol ||
+              e.range.end.line !== c.diagLine ||
+              e.range.end.character !== c.expectInsertCol
+            ) {
+              throw new Error(
+                `expected insert at (${c.diagLine},${c.expectInsertCol}), got (${e.range.start.line},${e.range.start.character})-(${e.range.end.line},${e.range.end.character})`,
+              );
+            }
+          }
+        }
+        console.log(`  PASS  ${testName}`);
+        passed++;
+      } catch (e: any) {
+        console.log(`  FAIL  ${testName}: ${e.message}`);
+        failed++;
+      }
+    }
+
+    // Brace-nearby context: ensure interface detection doesn't accidentally
+    // treat method signatures inside non-interface blocks as positive.
+    {
+      const testName = "code_action.semicolon: brace-nearby class wraps interface (negative)";
+      try {
+        const text = "class Outer {\n  // Outer's method\n  void m()\n}\ninterface I {}\n";
+        const doc = makeDoc(text);
+        const lineText = text.split("\n")[2];
+        const diag = makeDiag(2, lineText, "W1007");
+        const actions = buildQuickFixActions(doc, [diag]);
+        if (actions.length !== 0) {
+          throw new Error(`expected 0 actions, got ${actions.length}: ${actions.map((a: any) => a.title).join(", ")}`);
+        }
+        console.log(`  PASS  ${testName}`);
+        passed++;
+      } catch (e: any) {
+        console.log(`  FAIL  ${testName}: ${e.message}`);
+        failed++;
+      }
+    }
+
+    // Positive smoke: interface body across surrounding class still wins.
+    {
+      const testName = "code_action.semicolon: interface inside file with class (positive)";
+      try {
+        const text = "class Outer {\n  Integer x;\n}\ninterface I {\n  void m()\n}\n";
+        const doc = makeDoc(text);
+        const lineText = text.split("\n")[4];
+        const diag = makeDiag(4, lineText, "W1007");
+        const actions = buildQuickFixActions(doc, [diag]);
+        if (actions.length !== 1) {
+          throw new Error(`expected 1 action, got ${actions.length}`);
+        }
+        console.log(`  PASS  ${testName}`);
+        passed++;
+      } catch (e: any) {
+        console.log(`  FAIL  ${testName}: ${e.message}`);
+        failed++;
+      }
+    }
+
+    // Code-field discrimination: `buildQuickFixActions` must dispatch on
+    // `Diagnostic.code` (set by parseUmpleJsonDiagnostics in server.ts).
+    // Verify by feeding two diagnostics with the SAME range/source/message
+    // shape but different codes — only the W1007 one should produce an
+    // action, even though their text content is otherwise identical.
+    {
+      const testName = "code_action.code_dispatch: buildQuickFixActions dispatches on Diagnostic.code";
+      try {
+        const text = "class A {\n  Integer x\n}\n";
+        const doc = makeDoc(text);
+        const lineText = text.split("\n")[1];
+        const diagW1007 = makeDiag(1, lineText, "W1007");
+        const diagW50 = { ...makeDiag(1, lineText, "W50"), severity: DiagnosticSeverity.Warning };
+        const both = buildQuickFixActions(doc, [diagW1007, diagW50]);
+        if (both.length !== 1) {
+          throw new Error(`expected 1 action, got ${both.length}`);
+        }
+        if (both[0].diagnostics?.[0].code !== "W1007") {
+          throw new Error(`action attached to wrong diag: ${both[0].diagnostics?.[0].code}`);
+        }
+        // Same diagnostic but with code stripped → no action.
+        const stripped = { ...diagW1007 };
+        delete (stripped as any).code;
+        const noCode = buildQuickFixActions(doc, [stripped]);
+        if (noCode.length !== 0) {
+          throw new Error(`expected 0 actions when code is missing, got ${noCode.length}`);
+        }
+        console.log(`  PASS  ${testName}`);
+        passed++;
+      } catch (e: any) {
+        console.log(`  FAIL  ${testName}: ${e.message}`);
+        failed++;
+      }
+    }
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }

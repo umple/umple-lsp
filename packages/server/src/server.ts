@@ -5,6 +5,8 @@ import * as path from "path";
 import * as zlib from "zlib";
 import { fileURLToPath, pathToFileURL } from "url";
 import {
+  CodeAction,
+  CodeActionKind,
   CompletionItem,
   CompletionItemKind,
   createConnection,
@@ -27,6 +29,7 @@ import {
   ShowMessageNotification,
 } from "vscode-languageserver/node";
 import { TextDocument } from "vscode-languageserver-textdocument";
+import { buildQuickFixActions } from "./codeActions";
 import {
   symbolIndex,
   UseStatementWithPosition,
@@ -400,6 +403,13 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
       hoverProvider: true,
       documentSymbolProvider: true,
       documentFormattingProvider: true,
+      // Topic 056 — quick-fix code actions (currently only `Add missing
+      // semicolon`; gated on diagnostic.code === W1007 plus a
+      // shape-whitelist classifier).
+      codeActionProvider: {
+        codeActionKinds: [CodeActionKind.QuickFix],
+        resolveProvider: false,
+      },
     },
   };
 });
@@ -1241,6 +1251,14 @@ connection.onDocumentFormatting(async (params) => {
   ];
 });
 
+// Topic 056 — quick-fix code actions. Pure logic lives in `codeActions.ts`;
+// this handler just routes the diagnostics the client already received.
+connection.onCodeAction(async (params): Promise<CodeAction[]> => {
+  const document = getDocument(params.textDocument.uri);
+  if (!document) return [];
+  return buildQuickFixActions(document, params.context.diagnostics);
+});
+
 function scheduleValidation(document: TextDocument): void {
   const uriKey = normalizeUri(document.uri);
   const existing = pendingValidations.get(uriKey);
@@ -1884,6 +1902,7 @@ function parseUmpleJsonDiagnostics(
             ),
             message,
             source: "umple",
+            ...(errorCode ? { code: errorCode } : {}),
           });
         }
         continue;
@@ -1895,13 +1914,11 @@ function parseUmpleJsonDiagnostics(
       const firstNonSpace = lineText.search(/\S/);
       const startChar = firstNonSpace === -1 ? 0 : firstNonSpace;
 
-      const details = [
-        result.errorCode
-          ? (severity === DiagnosticSeverity.Warning ? "W" : "E") +
-            result.errorCode
-          : undefined,
-        result.message,
-      ].filter(Boolean);
+      const errorCode = result.errorCode
+        ? (severity === DiagnosticSeverity.Warning ? "W" : "E") +
+          result.errorCode
+        : undefined;
+      const details = [errorCode, result.message].filter(Boolean);
 
       diagnostics.push({
         severity,
@@ -1911,6 +1928,7 @@ function parseUmpleJsonDiagnostics(
         ),
         message: details.join(": "),
         source: "umple",
+        ...(errorCode ? { code: errorCode } : {}),
       });
     }
 
