@@ -356,6 +356,26 @@ export class SemanticTestHelper {
   }
 
   /**
+   * Get completion items at a position with client snippet capability advertised.
+   * Used by snippet regression tests; production server gates this on the
+   * `textDocument.completion.completionItem.snippetSupport` capability bit.
+   */
+  completionItemsWithSnippets(
+    content: string,
+    line: number,
+    col: number,
+    reachable: Set<string>,
+  ): CompletionItem[] {
+    const info = this.si.getCompletionInfo(content, line, col);
+    if (info.isComment || info.isDefinitionName || info.symbolKinds === "suppress") {
+      return [];
+    }
+    const symbolKinds = info.symbolKinds === "use_path" ? null : info.symbolKinds;
+    if (!symbolKinds) return [];
+    return buildSemanticCompletionItems(info, symbolKinds, this.si, reachable, true);
+  }
+
+  /**
    * Get hover markdown for a symbol at a position.
    */
   hoverAt(

@@ -9,6 +9,8 @@ import * as path from "path";
 import { SemanticTestHelper, MarkerPosition, DeclSpec } from "./helpers";
 import { resolveTraitSmEventLocations } from "../src/traitSmEventResolver";
 import { stripLayoutTail } from "../src/tokenTypes";
+import { CompletionItemKind, InsertTextFormat } from "vscode-languageserver/node";
+import { ALL_SNIPPETS } from "../src/snippets";
 
 // ── Assertion types ──────────────────────────────────────────────────────────
 
@@ -6509,6 +6511,502 @@ async function main() {
     } catch (e: any) {
       console.log(`  FAIL  ${testName}: ${e.message}`);
       failed++;
+    }
+  }
+
+  // ── Snippet regression block (topic 054) ───────────────────────────────────
+  // Verifies per-scope emission, capability gating, shape (kind / format /
+  // insertText / filterText), and the negative scopes that must stay snippet-free.
+  {
+    const snippetCases: Array<{
+      scope: string;
+      src: string;
+      line: number;
+      col: number;
+      expectedLabels: string[];
+    }> = [
+      {
+        scope: "top_level",
+        src: "\n",
+        line: 0,
+        col: 0,
+        expectedLabels: [
+          "class block",
+          "interface block",
+          "trait block",
+          "association block",
+          "statemachine (top-level)",
+          "filter block",
+          "req userStory",
+          "req useCase",
+          "use file",
+        ],
+      },
+      {
+        scope: "class_body",
+        src: "class C {\n  \n}\n",
+        line: 1,
+        col: 2,
+        expectedLabels: [
+          "attribute (typed)",
+          "method",
+          "isA inheritance",
+          "inline association",
+          "state machine",
+          "enum attribute",
+          "implementsReq link",
+          "before method",
+          "after method",
+        ],
+      },
+      {
+        scope: "trait_body",
+        src: "trait T {\n  \n}\n",
+        line: 1,
+        col: 2,
+        expectedLabels: [
+          "attribute (typed)",
+          "method",
+          "isA inheritance",
+          "inline association",
+          "state machine",
+          "enum attribute",
+          "implementsReq link",
+          "before method",
+          "after method",
+        ],
+      },
+      {
+        scope: "assoc_class_body",
+        src: "associationClass A {\n  \n}\n",
+        line: 1,
+        col: 2,
+        expectedLabels: [
+          "attribute (typed)",
+          "isA inheritance",
+          "inline association",
+          "enum attribute",
+          "implementsReq link",
+        ],
+      },
+      {
+        scope: "interface_body",
+        src: "interface I {\n  \n}\n",
+        line: 1,
+        col: 2,
+        expectedLabels: ["const declaration", "method signature"],
+      },
+      {
+        scope: "statemachine_body",
+        src: "statemachine SM {\n  \n}\n",
+        line: 1,
+        col: 2,
+        expectedLabels: ["state", "final state"],
+      },
+      {
+        scope: "state_body",
+        src: "class C {\n  status {\n    S {\n      \n    }\n  }\n}\n",
+        line: 3,
+        col: 6,
+        expectedLabels: [
+          "state",
+          "final state",
+          "transition",
+          "guarded transition",
+          "entry activity",
+          "exit activity",
+          "do activity",
+        ],
+      },
+      {
+        scope: "filter_body",
+        src: "filter F {\n  \n}\n",
+        line: 1,
+        col: 2,
+        expectedLabels: [
+          "include statement",
+          "includeFilter statement",
+          "namespace statement",
+          "hops block",
+        ],
+      },
+      {
+        scope: "userstory_body",
+        src: "req R userStory {\n  \n}\n",
+        line: 1,
+        col: 2,
+        expectedLabels: ["who tag", "when tag", "what tag", "why tag"],
+      },
+      {
+        scope: "usecase_body",
+        src: "req UC useCase {\n  \n}\n",
+        line: 1,
+        col: 2,
+        expectedLabels: [
+          "who tag",
+          "when tag",
+          "what tag",
+          "why tag",
+          "userStep block",
+          "systemResponse block",
+        ],
+      },
+    ];
+
+    const snippetByLabel = new Map(ALL_SNIPPETS.map((s) => [s.label, s]));
+    const snippetTmp = "/tmp/snippet_regression.ump";
+    const snippetReach = new Set<string>([snippetTmp]);
+
+    // Positive: every expected label is present, with correct shape.
+    for (const c of snippetCases) {
+      const testName = `snippets.positive: scope=${c.scope}`;
+      try {
+        helper.si.indexFile(snippetTmp, c.src);
+        const items = helper.completionItemsWithSnippets(
+          c.src,
+          c.line,
+          c.col,
+          snippetReach,
+        );
+        const snippetItems = items.filter(
+          (i) => i.kind === CompletionItemKind.Snippet,
+        );
+        // Exact-set equality on label set
+        const got = new Set(snippetItems.map((i) => i.label));
+        const want = new Set(c.expectedLabels);
+        if (got.size !== want.size || ![...want].every((l) => got.has(l))) {
+          throw new Error(
+            `expected snippet labels ${JSON.stringify([...want].sort())}, got ${JSON.stringify([...got].sort())}`,
+          );
+        }
+        // Shape: kind, format, insertText, filterText match the registry entry.
+        for (const item of snippetItems) {
+          const entry = snippetByLabel.get(item.label as string);
+          if (!entry) {
+            throw new Error(`unexpected label ${item.label} not in registry`);
+          }
+          if (item.kind !== CompletionItemKind.Snippet) {
+            throw new Error(`label ${item.label} kind ${item.kind} not Snippet`);
+          }
+          if (item.insertTextFormat !== InsertTextFormat.Snippet) {
+            throw new Error(
+              `label ${item.label} insertTextFormat ${item.insertTextFormat} not Snippet`,
+            );
+          }
+          if (item.insertText !== entry.insertText) {
+            throw new Error(
+              `label ${item.label} insertText mismatch:\n  want: ${entry.insertText}\n  got:  ${item.insertText}`,
+            );
+          }
+          if (item.filterText !== entry.filterText) {
+            throw new Error(
+              `label ${item.label} filterText ${item.filterText} != ${entry.filterText}`,
+            );
+          }
+          if (
+            typeof item.sortText !== "string" ||
+            !item.sortText.startsWith("z9_snippet_")
+          ) {
+            throw new Error(
+              `label ${item.label} sortText ${item.sortText} missing z9_snippet_ prefix`,
+            );
+          }
+        }
+        console.log(`  PASS  ${testName}`);
+        passed++;
+      } catch (e: any) {
+        console.log(`  FAIL  ${testName}: ${e.message}`);
+        failed++;
+      }
+    }
+
+    // Capability disabled: every positive scope must yield zero snippet items.
+    for (const c of snippetCases) {
+      const testName = `snippets.capability_disabled: scope=${c.scope}`;
+      try {
+        helper.si.indexFile(snippetTmp, c.src);
+        const items = helper.completionItems(
+          c.src,
+          c.line,
+          c.col,
+          snippetReach,
+        );
+        const snippetItems = items.filter(
+          (i) => i.kind === CompletionItemKind.Snippet,
+        );
+        if (snippetItems.length !== 0) {
+          throw new Error(
+            `expected 0 snippet items with snippetSupport=false, got ${snippetItems.length}: ${snippetItems.map((i) => i.label).join(", ")}`,
+          );
+        }
+        console.log(`  PASS  ${testName}`);
+        passed++;
+      } catch (e: any) {
+        console.log(`  FAIL  ${testName}: ${e.message}`);
+        failed++;
+      }
+    }
+
+    // Negative: scopes where no snippet should ever appear.
+    const negativeCases: Array<{ name: string; src: string; line: number; col: number }> = [
+      { name: "method body (suppress)", src: "class C {\n  void m() { \n  }\n}\n", line: 1, col: 14 },
+      { name: "isa typed prefix", src: "class C {\n  isA P\n}\n", line: 1, col: 7 },
+      { name: "comment", src: "// blah\n", line: 0, col: 5 },
+      { name: "attribute typed name slot", src: "class C {\n  Integer x\n}\n", line: 1, col: 11 },
+      { name: "method param-list", src: "class C {\n  void m(\n  ) {}\n}\n", line: 1, col: 9 },
+      { name: "definition name (class C|)", src: "class C\n", line: 0, col: 7 },
+      { name: "java annotation (@|)", src: "class C {\n  @\n  void m() {}\n}\n", line: 1, col: 3 },
+    ];
+    for (const c of negativeCases) {
+      const testName = `snippets.negative: ${c.name}`;
+      try {
+        helper.si.indexFile(snippetTmp, c.src);
+        const items = helper.completionItemsWithSnippets(
+          c.src,
+          c.line,
+          c.col,
+          snippetReach,
+        );
+        const snippetItems = items.filter(
+          (i) => i.kind === CompletionItemKind.Snippet,
+        );
+        if (snippetItems.length !== 0) {
+          throw new Error(
+            `expected 0 snippet items, got ${snippetItems.length}: ${snippetItems.map((i) => i.label).join(", ")}`,
+          );
+        }
+        console.log(`  PASS  ${testName}`);
+        passed++;
+      } catch (e: any) {
+        console.log(`  FAIL  ${testName}: ${e.message}`);
+        failed++;
+      }
+    }
+
+    // Registry sanity: no two snippet entries share both label + scope.
+    {
+      const testName = "snippets.registry: unique label per scope";
+      try {
+        const seen = new Map<string, string>();
+        for (const entry of ALL_SNIPPETS) {
+          for (const scope of entry.scopes) {
+            const key = `${scope}::${entry.label}`;
+            if (seen.has(key)) {
+              throw new Error(
+                `duplicate label "${entry.label}" in scope "${scope}"`,
+              );
+            }
+            seen.set(key, entry.label);
+          }
+        }
+        console.log(`  PASS  ${testName}`);
+        passed++;
+      } catch (e: any) {
+        console.log(`  FAIL  ${testName}: ${e.message}`);
+        failed++;
+      }
+    }
+
+    // ── Compiler validation: every default expansion must compile clean. ────
+    // Each snippet's $N placeholders are replaced with their default text,
+    // wrapped in a per-scope scaffold that pre-declares any referenced
+    // identifiers (parent class / association target / req / filter target),
+    // and fed to `umplesync.jar -generate nothing`. Any diagnostic line
+    // (errorCode / severity / Error / Warning) fails the assertion.
+    {
+      const fs = require("fs");
+      const os = require("os");
+      const { spawnSync } = require("child_process");
+      const jarPath = path.resolve(
+        __dirname,
+        "../../umplesync.jar",
+      );
+      const haveJar = fs.existsSync(jarPath);
+      const javaProbe = spawnSync("java", ["-version"], { stdio: "ignore" });
+      const haveJava = javaProbe.status === 0;
+      if (!haveJar || !haveJava) {
+        console.log(
+          `  SKIP  snippets.compiler_validation: ${haveJar ? "" : "umplesync.jar missing"}${!haveJar && !haveJava ? "; " : ""}${haveJava ? "" : "java not on PATH"}`,
+        );
+      } else {
+        const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "snippet-validate-"));
+        // Pre-create a sibling .ump file referenced by the "use file" snippet.
+        fs.writeFileSync(path.join(tmpDir, "file.ump"), "// stub\n", "utf8");
+
+        const expandDefaults = (insertText: string): string => {
+          // Replace ${N:default} → default ; ${N} → empty ; $N (no braces) → empty
+          let s = insertText.replace(/\$\{\d+:([^{}]*)\}/g, "$1");
+          s = s.replace(/\$\{\d+\}/g, "");
+          s = s.replace(/\$\d+/g, "");
+          return s;
+        };
+
+        // Per-snippet scaffold extras keyed by snippet label. These satisfy
+        // references that the snippet's default expansion makes to identifiers
+        // outside the snippet body itself (e.g., `before methodName` requires
+        // `methodName` to be a real method on the wrapper class).
+        const classBodyExtras = (label: string): string => {
+          if (label === "before method" || label === "after method") {
+            return "  void methodName() { }\n";
+          }
+          return "";
+        };
+        const stateBodyExtras = (label: string): string => {
+          if (label === "transition" || label === "guarded transition") {
+            return "    NextState { }\n";
+          }
+          return "";
+        };
+        const buildScaffold = (
+          scope: string,
+          body: string,
+          label: string,
+        ): string => {
+          switch (scope) {
+            case "top_level":
+              return [
+                "class LeftClass {}",
+                "class RightClass {}",
+                "class ClassName {}",
+                "class OtherClass {}",
+                "class ParentClass {}",
+                "filter OtherFilter { include ClassName; }",
+                "req R1 userStory { what { x } }",
+                body,
+                "",
+              ].join("\n");
+            case "class_body":
+            case "assoc_class_body": {
+              const extras = classBodyExtras(label);
+              const wrapper = scope === "assoc_class_body"
+                ? `class LeftEnd {}\nclass RightEnd {}\nassociationClass Wrap {\n  * LeftEnd l;\n  * RightEnd r;\n${extras}${body}\n}\n`
+                : `class Wrap {\n${extras}${body}\n}\n`;
+              return [
+                "class ParentClass {}",
+                "class OtherClass {}",
+                "req R1 userStory { what { x } }",
+                wrapper,
+              ].join("\n");
+            }
+            case "trait_body":
+              return [
+                "trait ParentClass {}",
+                "class OtherClass {}",
+                "req R1 userStory { what { x } }",
+                `trait Wrap {\n${classBodyExtras(label)}${body}\n}\n`,
+              ].join("\n");
+            case "interface_body":
+              return `interface IfaceWrap {\n${body}\n}\n`;
+            case "statemachine_body":
+              return `class Wrap {\n  status {\n${body}\n  }\n}\n`;
+            case "state_body":
+              return `class Wrap {\n  status {\n    S {\n${body}\n    }\n${stateBodyExtras(label)}  }\n}\n`;
+            case "filter_body":
+              return [
+                "class ClassName {}",
+                "filter OtherFilter { include ClassName; }",
+                `filter FilterWrap {\n${body}\n}\n`,
+              ].join("\n");
+            case "userstory_body":
+              return `req ReqWrap userStory {\n${body}\n}\n`;
+            case "usecase_body":
+              return `req UcWrap useCase {\n${body}\n}\n`;
+            default:
+              throw new Error(`unknown scope: ${scope}`);
+          }
+        };
+
+        const diagnosticRegex = /"errorCode"|"severity"|^Error|^Warning/m;
+
+        // Captures stdout AND stderr regardless of exit status — umplesync.jar
+        // exits 0 even when it writes parser diagnostics to stderr. Returns the
+        // diagnostic blob if any line matches the regex; null otherwise.
+        const runUmpleSync = (filePath: string): string | null => {
+          const result = spawnSync(
+            "java",
+            ["-jar", jarPath, "-generate", "nothing", filePath],
+            {
+              encoding: "utf8",
+              maxBuffer: 16 * 1024 * 1024,
+            },
+          );
+          const stdout = result.stdout ? String(result.stdout) : "";
+          const stderr = result.stderr ? String(result.stderr) : "";
+          const combined = `${stdout}\n${stderr}`;
+          if (result.error) {
+            return `compile failed to spawn: ${result.error.message}`;
+          }
+          if (diagnosticRegex.test(combined)) {
+            return combined.trim();
+          }
+          // Non-zero exit with no diagnostic line still counts as failure.
+          if (result.status !== 0) {
+            return combined.trim() || `non-zero exit: ${result.status}`;
+          }
+          return null;
+        };
+
+        // ── Self-check: prove the validator catches stderr-only diagnostics ──
+        // Known invalid input: `filter F { hops 2; }` triggers errorCode 1502
+        // and the JSON is written to stderr while the process exits 0.
+        // If this self-check fails, the validator is missing diagnostics —
+        // skip the per-snippet pass to avoid silent green.
+        let validatorSelfCheckOk = true;
+        {
+          const testName = "snippets.compiler_validation: self-check (stderr capture)";
+          try {
+            const probeFile = path.join(tmpDir, "_self_check.ump");
+            fs.writeFileSync(probeFile, "filter F { hops 2; }\n", "utf8");
+            const diag = runUmpleSync(probeFile);
+            if (!diag) {
+              throw new Error(
+                "validator did not detect known-invalid `filter F { hops 2; }` " +
+                  "(stderr likely missed)",
+              );
+            }
+            console.log(`  PASS  ${testName}`);
+            passed++;
+          } catch (e: any) {
+            validatorSelfCheckOk = false;
+            console.log(`  FAIL  ${testName}: ${e.message}`);
+            failed++;
+          }
+        }
+
+        let snippetIndex = 0;
+        for (const entry of ALL_SNIPPETS) {
+          if (!validatorSelfCheckOk) break;
+          for (const scope of entry.scopes) {
+            const testName = `snippets.compiler_validation: ${scope} :: ${entry.label}`;
+            try {
+              const expanded = expandDefaults(entry.insertText);
+              const wrapped = buildScaffold(scope, expanded, entry.label);
+              const tmpFile = path.join(
+                tmpDir,
+                `snip_${snippetIndex++}.ump`,
+              );
+              fs.writeFileSync(tmpFile, wrapped, "utf8");
+              const diag = runUmpleSync(tmpFile);
+              if (diag) {
+                throw new Error(
+                  `compiler diagnostic on default expansion:\n--- file ---\n${wrapped}\n--- diag ---\n${diag}`,
+                );
+              }
+              console.log(`  PASS  ${testName}`);
+              passed++;
+            } catch (e: any) {
+              console.log(`  FAIL  ${testName}: ${e.message}`);
+              failed++;
+            }
+          }
+        }
+
+        try {
+          fs.rmSync(tmpDir, { recursive: true, force: true });
+        } catch {
+          /* ignore */
+        }
+      }
     }
   }
 

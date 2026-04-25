@@ -16,7 +16,27 @@ import {
 } from "vscode-languageserver/node";
 import { SymbolIndex, SymbolEntry, SymbolKind, CompletionInfo } from "./symbolIndex";
 import { BUILTIN_TYPES } from "./keywords";
+import { getSnippetsForScope, snippetEntryToItem } from "./snippets";
 import * as path from "path";
+
+/**
+ * Topic 054 — emit snippet completion items for the given scope when the
+ * client advertised snippet support. No-op for typed-prefix / suppress /
+ * symbol-only scopes (they have no snippet entries registered).
+ */
+function appendSnippetsForScope(
+  items: CompletionItem[],
+  seen: Set<string>,
+  scope: string | null,
+  snippetSupport: boolean,
+): void {
+  if (!snippetSupport) return;
+  for (const entry of getSnippetsForScope(scope)) {
+    if (seen.has(entry.label)) continue;
+    seen.add(entry.label);
+    items.push(snippetEntryToItem(entry));
+  }
+}
 
 // ── Curated top-level construct keywords ───────────────────────────────────
 // Derived from the grammar's _definition rule (grammar.js lines 66-92).
@@ -386,13 +406,17 @@ export function buildSemanticCompletionItems(
   symbolKinds: CompletionInfo["symbolKinds"],
   symbolIndex: SymbolIndex,
   reachableFiles: Set<string>,
+  snippetSupport: boolean = false,
 ): CompletionItem[] {
   // Top-level scope: curated keywords only, no raw lookahead or symbols.
   if (symbolKinds === "top_level") {
-    return TOP_LEVEL_KEYWORDS.map((kw) => ({
+    const tlItems: CompletionItem[] = TOP_LEVEL_KEYWORDS.map((kw) => ({
       label: kw,
       kind: CompletionItemKind.Keyword,
     }));
+    const tlSeen = new Set<string>(TOP_LEVEL_KEYWORDS);
+    appendSnippetsForScope(tlItems, tlSeen, "top_level", snippetSupport);
+    return tlItems;
   }
 
   // Class-body scope: curated keywords + built-in types + type symbols.
@@ -412,6 +436,7 @@ export function buildSemanticCompletionItems(
     appendSymbolsOfKinds(cbItems, cbSeen, symbolIndex, reachableFiles, {
       kinds: ["class", "interface", "trait", "enum"],
     });
+    appendSnippetsForScope(cbItems, cbSeen, "class_body", snippetSupport);
     return cbItems;
   }
 
@@ -432,6 +457,7 @@ export function buildSemanticCompletionItems(
     appendSymbolsOfKinds(tbItems, tbSeen, symbolIndex, reachableFiles, {
       kinds: ["class", "interface", "trait", "enum"],
     });
+    appendSnippetsForScope(tbItems, tbSeen, "trait_body", snippetSupport);
     return tbItems;
   }
 
@@ -452,6 +478,7 @@ export function buildSemanticCompletionItems(
     appendSymbolsOfKinds(ibItems, ibSeen, symbolIndex, reachableFiles, {
       kinds: ["class", "interface", "trait", "enum"],
     });
+    appendSnippetsForScope(ibItems, ibSeen, "interface_body", snippetSupport);
     return ibItems;
   }
 
@@ -472,15 +499,19 @@ export function buildSemanticCompletionItems(
     appendSymbolsOfKinds(abItems, abSeen, symbolIndex, reachableFiles, {
       kinds: ["class", "interface", "trait", "enum"],
     });
+    appendSnippetsForScope(abItems, abSeen, "assoc_class_body", snippetSupport);
     return abItems;
   }
 
   // Filter-body scope: curated filter-statement starters only.
   if (symbolKinds === "filter_body") {
-    return FILTER_BODY_KEYWORDS.map((kw) => ({
+    const fbItems: CompletionItem[] = FILTER_BODY_KEYWORDS.map((kw) => ({
       label: kw,
       kind: CompletionItemKind.Keyword,
     }));
+    const fbSeen = new Set<string>(FILTER_BODY_KEYWORDS);
+    appendSnippetsForScope(fbItems, fbSeen, "filter_body", snippetSupport);
+    return fbItems;
   }
 
   // Trace entity scope: scoped attrs/methods only, no raw keywords.
@@ -601,6 +632,7 @@ export function buildSemanticCompletionItems(
         container: info.enclosingStateMachine,
       });
     }
+    appendSnippetsForScope(smItems, smSeen, "statemachine_body", snippetSupport);
     return smItems;
   }
 
@@ -626,6 +658,7 @@ export function buildSemanticCompletionItems(
         container: info.enclosingStateMachine,
       });
     }
+    appendSnippetsForScope(sbItems, sbSeen, "state_body", snippetSupport);
     return sbItems;
   }
 
@@ -741,10 +774,13 @@ export function buildSemanticCompletionItems(
 
   // Structured userStory body — curated tag starters only.
   if (symbolKinds === "userstory_body") {
-    return USER_STORY_BODY_STARTERS.map((kw) => ({
+    const usItems: CompletionItem[] = USER_STORY_BODY_STARTERS.map((kw) => ({
       label: kw,
       kind: CompletionItemKind.Keyword,
     }));
+    const usSeen = new Set<string>(USER_STORY_BODY_STARTERS);
+    appendSnippetsForScope(usItems, usSeen, "userstory_body", snippetSupport);
+    return usItems;
   }
 
   // Partial inline association — arrow slot after the left multiplicity
@@ -827,10 +863,13 @@ export function buildSemanticCompletionItems(
 
   // Structured useCase body — userStoryTags plus useCaseStep starters.
   if (symbolKinds === "usecase_body") {
-    return USE_CASE_BODY_STARTERS.map((kw) => ({
+    const ucItems: CompletionItem[] = USE_CASE_BODY_STARTERS.map((kw) => ({
       label: kw,
       kind: CompletionItemKind.Keyword,
     }));
+    const ucSeen = new Set<string>(USE_CASE_BODY_STARTERS);
+    appendSnippetsForScope(ucItems, ucSeen, "usecase_body", snippetSupport);
+    return ucItems;
   }
 
   // implementsReq scope — symbol-only, no keywords/operators. The req_implementation

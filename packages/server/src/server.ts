@@ -325,7 +325,16 @@ const DEFAULT_UMPLESYNC_TIMEOUT_MS = 30000;
 // Track in-flight validations so we can abort stale ones
 const inFlightValidations = new Map<string, AbortController>();
 
+// Topic 054 — captured during initialize from
+// `params.capabilities.textDocument.completion.completionItem.snippetSupport`.
+// Snippet items are emitted only when this is true. Clients without snippet
+// support keep the pre-topic-054 keyword/symbol completion shape.
+let clientSnippetSupport = false;
+
 connection.onInitialize((params: InitializeParams): InitializeResult => {
+  clientSnippetSupport =
+    params.capabilities.textDocument?.completion?.completionItem?.snippetSupport ===
+    true;
   const initOptions = params.initializationOptions as
     | {
         umpleSyncJarPath?: string;
@@ -688,6 +697,7 @@ connection.onCompletion(async (params): Promise<CompletionItem[]> => {
     symbolKinds,
     symbolIndex,
     reachableFiles,
+    clientSnippetSupport,
   );
 
   // Merge use_path items (if any) with semantic items, deduplicating
