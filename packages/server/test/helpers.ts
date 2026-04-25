@@ -337,6 +337,83 @@ export class SemanticTestHelper {
   }
 
   /**
+   * Topic 059 — get implementation locations for the trait at the cursor.
+   * Mirrors the production handler: resolve cursor → require exactly one
+   * trait symbol → walk `findTraitImplementers` over the reachable scope.
+   * Returns deduplicated declaration locations. Empty array on
+   * non-trait or zero/multiple-trait resolution.
+   */
+  implementationsAt(
+    filePath: string,
+    content: string,
+    line: number,
+    col: number,
+    reachable: Set<string>,
+  ): RefLocation[] {
+    const resolved = this.resolve(filePath, content, line, col, reachable);
+    if (!resolved) return [];
+    const traitSymbols = resolved.symbols.filter((s: SymbolEntry) => s.kind === "trait");
+    if (traitSymbols.length !== 1) return [];
+    const trait = traitSymbols[0];
+    const implementers = this.si.findTraitImplementers(trait.name, reachable);
+    return implementers.map((s: SymbolEntry) => ({
+      file: s.file,
+      line: s.line,
+      column: s.column,
+    }));
+  }
+
+  /**
+   * Topic 059 — production-shaped find-implementations with reverse-
+   * importer discovery and lazy indexing. Mirrors `connection.onImplementation`
+   * in `server.ts`:
+   *   1. Resolve cursor → require exactly one trait symbol.
+   *   2. Compute reverse importers for the trait's declaration files.
+   *   3. Lazily index any reverse importers not yet indexed (using
+   *      `fileContents` as the disk-shadow source).
+   *   4. Add trait files + reverse importers to the search scope.
+   *   5. Call `findTraitImplementers` over the unioned scope.
+   *
+   * Used by `use_graph_implementations` assertions to prove the cross-
+   * file path goes through reverse-importer discovery (which is what the
+   * production server does) rather than a pre-populated reachable set.
+   */
+  implementationsAtWithReverseImporters(
+    filePath: string,
+    content: string,
+    line: number,
+    col: number,
+    reachable: Set<string>,
+    fileContents: Map<string, string>,
+  ): RefLocation[] {
+    const resolved = this.resolve(filePath, content, line, col, reachable);
+    if (!resolved) return [];
+    const traitSymbols = resolved.symbols.filter((s: SymbolEntry) => s.kind === "trait");
+    if (traitSymbols.length !== 1) return [];
+    const trait = traitSymbols[0];
+
+    const traitFiles = new Set([path.normalize(trait.file)]);
+    const fullScope = new Set<string>(reachable);
+    for (const f of traitFiles) fullScope.add(f);
+
+    const reverseImporters = this.si.getReverseImporters(traitFiles);
+    for (const f of reverseImporters) {
+      if (!this.si.isFileIndexed(f)) {
+        const c = fileContents.get(f);
+        if (c) this.si.indexFile(f, c);
+      }
+      fullScope.add(f);
+    }
+
+    const implementers = this.si.findTraitImplementers(trait.name, fullScope);
+    return implementers.map((s: SymbolEntry) => ({
+      file: s.file,
+      line: s.line,
+      column: s.column,
+    }));
+  }
+
+  /**
    * Get completion items at a position. Uses the real production builder.
    */
   completionItems(

@@ -1,0 +1,39 @@
+// Topic 059 — Find Implementations on traits.
+//
+// Given a trait, the LSP returns class/trait declarations that implement
+// it via `isA`, both directly and transitively. Interfaces are excluded
+// as implementers AND the traversal does NOT descend through them — so a
+// class whose isA chain only reaches the trait via an interface does not
+// count.
+
+trait /*@trait_decl_Stringable*/Stringable {}
+
+trait /*@trait_decl_Loggable*/Loggable {
+  isA /*@isa_use_Loggable_in_Stringable*/Stringable;
+}
+
+class /*@class_decl_Person*/Person {
+  isA /*@isa_use_Person_in_Stringable*/Stringable;
+}
+
+class /*@class_decl_Logger*/Logger {
+  isA Loggable;
+}
+
+interface /*@iface_decl_Renderable*/Renderable {
+  isA Stringable;
+}
+
+class /*@class_decl_ViaIgnoredInterface*/ViaIgnoredInterface {
+  isA Renderable;
+}
+
+class A {}
+class B {}
+
+associationClass /*@ac_decl_Membership*/Membership {
+  1 A -- * B;
+  isA Stringable;
+}
+
+class /*@class_decl_Plain*/Plain {}

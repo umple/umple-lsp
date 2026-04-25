@@ -397,6 +397,10 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
       },
       definitionProvider: true,
       referencesProvider: true,
+      // Topic 059 — `Go to Implementations` for traits. Returns
+      // class/trait declarations that implement the trait via `isA`,
+      // both directly and transitively (interfaces excluded).
+      implementationProvider: true,
       renameProvider: {
         prepareProvider: true,
       },
@@ -934,6 +938,60 @@ function isUnambiguousRename(symbols: SymbolEntry[]): boolean {
   const name = symbols[0].name;
   return symbols.every((s) => s.name === name);
 }
+
+// ── Find Implementations (topic 059) ─────────────────────────────────────────
+// Returns class/trait declarations that implement a trait via `isA`, both
+// directly and transitively. Cursor must resolve to exactly one trait
+// symbol; non-trait targets return [].
+
+connection.onImplementation(async (params) => {
+  const document = getDocument(params.textDocument.uri);
+  if (!document || !symbolIndexReady) return [];
+
+  const docPath = getDocumentFilePath(document);
+  if (!docPath) return [];
+
+  const resolved = resolveSymbolAtPosition(
+    docPath,
+    document.getText(),
+    params.position.line,
+    params.position.character,
+  );
+  if (!resolved) return [];
+
+  const traitSymbols = resolved.symbols.filter((s) => s.kind === "trait");
+  if (traitSymbols.length !== 1) return [];
+  const trait = traitSymbols[0];
+
+  // Same scope model as find-references: declaration files + forward
+  // import closure + reverse importers, lazily indexed.
+  const reachable = ensureImportsIndexed(docPath, document.getText());
+  const traitFiles = new Set([path.normalize(trait.file)]);
+  for (const f of traitFiles) reachable.add(f);
+  const reverseImporters = symbolIndex.getReverseImporters(traitFiles);
+  for (const f of reverseImporters) {
+    if (!symbolIndex.isFileIndexed(f)) {
+      try {
+        const content = fs.readFileSync(f, "utf8");
+        symbolIndex.indexFile(f, content);
+      } catch {
+        continue;
+      }
+    }
+    reachable.add(f);
+  }
+
+  const implementers = symbolIndex.findTraitImplementers(trait.name, reachable);
+  return implementers.map((sym) =>
+    Location.create(
+      pathToFileURL(sym.file).toString(),
+      Range.create(
+        Position.create(sym.line, sym.column),
+        Position.create(sym.endLine, sym.endColumn),
+      ),
+    ),
+  );
+});
 
 connection.onPrepareRename(async (params) => {
   const document = getDocument(params.textDocument.uri);

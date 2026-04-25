@@ -37,6 +37,39 @@ interface RefsAssertion {
   expectAt: string[]; // marker names expected in results
 }
 
+interface ImplementationsAssertion {
+  type: "implementations";
+  at: string; // marker name where the cursor sits (trait decl or isA use)
+  // Topic 059 — exact set of expected implementer markers (declaration sites).
+  expectAt: string[];
+  // Optional list of markers that must NOT appear (e.g., interfaces and
+  // classes that only inherit through interfaces).
+  excludeAt?: string[];
+  // Cross-file fixtures may need implementer markers in a different file.
+  // Default is the cursor's fixture; override by passing the fixture name.
+  expectFixture?: string;
+}
+
+interface ImplementationsEmptyAssertion {
+  type: "implementations_empty";
+  at: string;
+}
+
+interface UseGraphImplementationsAssertion {
+  // Topic 059 — production-shaped cross-file find-implementations test.
+  // The trait file is fully indexed (added to `reachable`); the importer
+  // file is loaded WITHOUT indexing, only its use-graph edges are
+  // injected. The runner mirrors the server handler: resolve cursor,
+  // compute reverse importers, lazy-index them from a `fileContents`
+  // map, then call `findTraitImplementers`. This pins the
+  // reverse-importer discovery path that `onImplementation` relies on.
+  type: "use_graph_implementations";
+  targetFixture: string;
+  importerFixture: string;
+  at: string; // cursor marker — must live in `targetFixture`
+  expectAt: string[]; // exact set of implementer markers
+}
+
 interface RefsExcludeAssertion {
   type: "refs_exclude";
   decl: DeclSpec;
@@ -119,7 +152,10 @@ type Assertion =
   | ParseCleanAssertion
   | ParseHasErrorAssertion
   | SymbolCountAssertion
-  | RecoveredSymbolAssertion;
+  | RecoveredSymbolAssertion
+  | ImplementationsAssertion
+  | ImplementationsEmptyAssertion
+  | UseGraphImplementationsAssertion;
 
 interface ParseCleanAssertion {
   type: "parse_clean";
@@ -5383,6 +5419,92 @@ const TEST_CASES: TestCase[] = [
       { type: "completion_includes", at: "tsb_typed", expect: ["status"] },
     ],
   },
+
+  // 138: Topic 059 — Find Implementations on traits. Cursor on a trait
+  // declaration name OR an `isA T` reference identifier should return
+  // every class/trait declaration that implements the trait via `isA`,
+  // both directly and transitively. Interfaces are excluded as
+  // implementers AND the traversal does NOT descend through them.
+  {
+    name: "138 trait_implementations: find implementations of a trait via isA",
+    fixtures: ["138_trait_implementations.ump"],
+    assertions: [
+      // Cursor on the trait declaration name → full implementer set.
+      {
+        type: "implementations",
+        at: "trait_decl_Stringable",
+        expectAt: [
+          "trait_decl_Loggable",          // direct trait isA
+          "class_decl_Person",            // direct class isA
+          "class_decl_Logger",            // transitive: Logger → Loggable → Stringable
+          "ac_decl_Membership",           // direct assoc-class isA (kind=class internally)
+        ],
+        excludeAt: [
+          "iface_decl_Renderable",          // interface — excluded
+          "class_decl_ViaIgnoredInterface", // not traversed through interface
+          "class_decl_Plain",               // no isA at all
+        ],
+      },
+
+      // Same set when cursor is on an `isA Stringable` reference inside
+      // a class body (use-site).
+      {
+        type: "implementations",
+        at: "isa_use_Person_in_Stringable",
+        expectAt: [
+          "trait_decl_Loggable",
+          "class_decl_Person",
+          "class_decl_Logger",
+          "ac_decl_Membership",
+        ],
+        excludeAt: [
+          "iface_decl_Renderable",
+          "class_decl_ViaIgnoredInterface",
+          "class_decl_Plain",
+        ],
+      },
+
+      // Same set when cursor is on `isA Stringable` inside another trait.
+      {
+        type: "implementations",
+        at: "isa_use_Loggable_in_Stringable",
+        expectAt: [
+          "trait_decl_Loggable",
+          "class_decl_Person",
+          "class_decl_Logger",
+          "ac_decl_Membership",
+        ],
+      },
+
+      // Negative: cursor on a non-trait symbol (a class declaration) returns [].
+      { type: "implementations_empty", at: "class_decl_Person" },
+      // Negative: cursor on a class with no isA at all returns [].
+      { type: "implementations_empty", at: "class_decl_Plain" },
+    ],
+  },
+
+  // 139: Topic 059 — cross-file trait implementations via reverse-
+  // importer discovery. Production-shaped test (mirrors the topic-25
+  // `use_graph_refs` pattern): only the trait-decl fixture is fully
+  // indexed; the importer fixture is loaded with `loadWithoutIndexing`,
+  // its use-graph edges are injected, and the production-shaped helper
+  // then computes reverse importers, lazy-indexes them, and runs
+  // `findTraitImplementers`. This pins the server-handler scoping path,
+  // not just the lower-level `findTraitImplementers` call with both
+  // files already reachable.
+  {
+    name: "139 trait_impl_xfile: cross-file implementations via reverse importers + lazy indexing",
+    fixtures: ["139_trait_impl_xfile.ump"],
+    assertions: [
+      {
+        type: "use_graph_implementations",
+        targetFixture: "139_trait_impl_xfile.ump",
+        importerFixture: "139b_trait_impl_xfile_user.ump",
+        at: "xfile_trait_decl",
+        expectAt: ["xfile_impl_Shape"],
+      },
+    ],
+  },
 ];
 
 // ── Runner ───────────────────────────────────────────────────────────────────
@@ -5628,6 +5750,79 @@ function runAssertion(
     return { ok: true, message: "" };
   }
 
+  if (assertion.type === "implementations") {
+    const src = findMarker(assertion.at);
+    if (!src) return { ok: false, message: `marker @${assertion.at} not found` };
+    const impls = helper.implementationsAt(
+      src.filePath, src.content, src.pos.line, src.pos.col, reachable,
+    );
+
+    // No-duplicates: every (file,line,column) appears at most once.
+    const seen = new Set<string>();
+    for (const r of impls) {
+      const key = `${r.file}:${r.line}:${r.column}`;
+      if (seen.has(key)) {
+        return { ok: false, message: `implementations @${assertion.at}: duplicate location ${key}` };
+      }
+      seen.add(key);
+    }
+
+    // Exact-set check: the set of (file,line) keys returned by
+    // findTraitImplementers must equal the set produced by resolving
+    // expectAt markers. Off-by-one extras (e.g., an unintended `class A`)
+    // are caught here even if they are not listed in `excludeAt`.
+    const expectedKeys = new Set<string>();
+    const expectedDescriptions: string[] = [];
+    for (const markerName of assertion.expectAt) {
+      const target = findMarker(markerName);
+      if (!target) return { ok: false, message: `expected marker @${markerName} not found` };
+      const key = `${target.filePath}:${target.pos.line}`;
+      expectedKeys.add(key);
+      expectedDescriptions.push(`@${markerName} (${path.basename(target.filePath)}:${target.pos.line})`);
+    }
+    const gotKeys = new Set(impls.map((r) => `${r.file}:${r.line}`));
+    const gotDescriptions = impls.map((r) => `${path.basename(r.file)}:${r.line}`);
+
+    const missing = [...expectedKeys].filter((k) => !gotKeys.has(k));
+    const extra = [...gotKeys].filter((k) => !expectedKeys.has(k));
+    if (missing.length > 0 || extra.length > 0) {
+      return {
+        ok: false,
+        message: `implementations @${assertion.at}: expected exact set {${expectedDescriptions.join(", ")}}, got {${gotDescriptions.join(", ")}}; missing=[${missing.join(", ")}] extra=[${extra.join(", ")}]`,
+      };
+    }
+
+    // Optional explicit-negative excludes (kept for clearer failure messages
+    // on semantically-meaningful absences like interface filtering).
+    for (const markerName of assertion.excludeAt ?? []) {
+      const target = findMarker(markerName);
+      if (!target) return { ok: false, message: `excluded marker @${markerName} not found` };
+      const key = `${target.filePath}:${target.pos.line}`;
+      if (gotKeys.has(key)) {
+        return {
+          ok: false,
+          message: `implementations @${assertion.at}: @${markerName} (line ${target.pos.line}) should NOT appear in implementations`,
+        };
+      }
+    }
+    return { ok: true, message: "" };
+  }
+
+  if (assertion.type === "implementations_empty") {
+    const src = findMarker(assertion.at);
+    if (!src) return { ok: false, message: `marker @${assertion.at} not found` };
+    const impls = helper.implementationsAt(
+      src.filePath, src.content, src.pos.line, src.pos.col, reachable,
+    );
+    if (impls.length !== 0) {
+      return {
+        ok: false,
+        message: `implementations_empty @${assertion.at}: expected 0, got ${impls.length}`,
+      };
+    }
+    return { ok: true, message: "" };
+  }
+
   if (assertion.type === "refs") {
     const refs = helper.findRefs(assertion.decl, reachable);
     for (const markerName of assertion.expectAt) {
@@ -5758,6 +5953,59 @@ function runAssertion(
           message: `completion_kinds @${assertion.at}: expected [${expected.join(", ")}], got [${(actual as string[]).join(", ")}]`,
         };
       }
+    }
+    return { ok: true, message: "" };
+  }
+
+  if (assertion.type === "use_graph_implementations") {
+    const targetInfo = files.get(assertion.targetFixture);
+    if (!targetInfo) return { ok: false, message: `target fixture ${assertion.targetFixture} not found` };
+
+    const importerFiles = helper.loadWithoutIndexing(assertion.importerFixture);
+    const importerInfo = importerFiles.get(assertion.importerFixture);
+    if (!importerInfo) return { ok: false, message: `importer fixture ${assertion.importerFixture} not found` };
+
+    files.set(assertion.importerFixture, importerInfo);
+    helper.injectUseGraphEdges(importerInfo.path, importerInfo.content);
+
+    const fileContents = new Map<string, string>();
+    for (const [, f] of files) fileContents.set(f.path, f.content);
+
+    const cursorMarker = targetInfo.markers.get(assertion.at);
+    if (!cursorMarker) return { ok: false, message: `marker @${assertion.at} not found in target fixture` };
+
+    const impls = helper.implementationsAtWithReverseImporters(
+      targetInfo.path,
+      targetInfo.content,
+      cursorMarker.line,
+      cursorMarker.col,
+      reachable,
+      fileContents,
+    );
+
+    // Exact-set check by (file,line).
+    const expectedKeys = new Set<string>();
+    const expectedDescriptions: string[] = [];
+    for (const markerName of assertion.expectAt) {
+      let target: { filePath: string; pos: MarkerPosition } | null = null;
+      for (const f of files.values()) {
+        const pos = f.markers.get(markerName);
+        if (pos) { target = { filePath: f.path, pos }; break; }
+      }
+      if (!target) return { ok: false, message: `marker @${markerName} not found` };
+      expectedKeys.add(`${target.filePath}:${target.pos.line}`);
+      expectedDescriptions.push(`@${markerName} (${path.basename(target.filePath)}:${target.pos.line})`);
+    }
+    const gotKeys = new Set(impls.map((r) => `${r.file}:${r.line}`));
+    const gotDescriptions = impls.map((r) => `${path.basename(r.file)}:${r.line}`);
+
+    const missing = [...expectedKeys].filter((k) => !gotKeys.has(k));
+    const extra = [...gotKeys].filter((k) => !expectedKeys.has(k));
+    if (missing.length > 0 || extra.length > 0) {
+      return {
+        ok: false,
+        message: `use_graph_implementations: expected exact set {${expectedDescriptions.join(", ")}}, got {${gotDescriptions.join(", ")}}; missing=[${missing.join(", ")}] extra=[${extra.join(", ")}]`,
+      };
     }
     return { ok: true, message: "" };
   }

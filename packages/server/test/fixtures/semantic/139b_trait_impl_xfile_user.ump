@@ -1,0 +1,10 @@
+// Topic 059 — cross-file user of the trait declared in
+// `139_trait_impl_xfile.ump`. The reverse-importer scoping must surface
+// `Shape` as an implementation of `Drawable` even though they live in
+// separate files.
+
+use 139_trait_impl_xfile.ump;
+
+class /*@xfile_impl_Shape*/Shape {
+  isA Drawable;
+}

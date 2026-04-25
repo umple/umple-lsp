@@ -1,0 +1,4 @@
+// Topic 059 — Find Implementations cross-file. Defines the trait that
+// `139b_trait_impl_xfile_user.ump` imports and implements.
+
+trait /*@xfile_trait_decl*/Drawable {}

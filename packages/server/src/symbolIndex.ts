@@ -360,6 +360,61 @@ export class SymbolIndex {
     return this.isAGraph.get(className) ?? [];
   }
 
+  /**
+   * Topic 059 — find all class/trait declarations that implement (`isA`) a
+   * given trait, walking the isA graph forward both directly and
+   * transitively.
+   *
+   * Per codex review: interfaces are excluded as implementers and the
+   * traversal does NOT descend through them. The compiler treats
+   * `interface I { isA T; }` followed by `class C { isA I; }` as `C`
+   * implementing `I`, not `T` — so we mirror that semantic.
+   *
+   * Returns deduplicated declaration symbols (class / trait, where
+   * `associationClass` is internally stored as kind=`class`) filtered to
+   * `reachableFiles`.
+   */
+  findTraitImplementers(
+    traitName: string,
+    reachableFiles: Set<string>,
+  ): SymbolEntry[] {
+    const result: SymbolEntry[] = [];
+    const seenSymbols = new Set<string>();
+    const visitedNames = new Set<string>([traitName]);
+    const queue: string[] = [traitName];
+
+    while (queue.length > 0) {
+      const target = queue.shift()!;
+      for (const [child, parents] of this.isAGraph) {
+        if (visitedNames.has(child)) continue;
+        if (!parents.includes(target)) continue;
+
+        const decls = this.getSymbols({
+          name: child,
+          kind: ["class", "trait"],
+        }).filter((s) => reachableFiles.has(path.normalize(s.file)));
+
+        // If `child` is only declared as an interface (or has no
+        // class/trait declaration at all), skip it AND do not enqueue
+        // it for transitive traversal — the compiler treats the
+        // interface->trait edge as semantically dropped for
+        // implementation lookups.
+        if (decls.length === 0) continue;
+
+        visitedNames.add(child);
+        queue.push(child);
+
+        for (const s of decls) {
+          const key = `${s.file}:${s.line}:${s.column}`;
+          if (seenSymbols.has(key)) continue;
+          seenSymbols.add(key);
+          result.push(s);
+        }
+      }
+    }
+    return result;
+  }
+
   private collectFromContainerChain(
     container: string,
     kindSet: Set<SymbolKind> | null,
