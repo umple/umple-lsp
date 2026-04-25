@@ -1,0 +1,52 @@
+name: CI
+
+# Runs the same `npm test` a developer runs locally:
+#   1. `npm run compile` — builds the tree-sitter grammar + WASM and
+#      compiles the server TypeScript.
+#   2. `npm test -w packages/server` — runs the semantic suite. The
+#      snippet compiler-validation block (~57 assertions) only fires
+#      when both Java and `packages/server/umplesync.jar` are available,
+#      so this workflow installs both. Without them the suite still
+#      passes, but with materially weaker coverage — see topic 054 for
+#      the rationale.
+#
+# No package-lock.json is tracked in this repo, so we use `npm install`
+# (not `npm ci`). If that changes, swap to `npm ci`.
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Build + test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up Java 17 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install npm dependencies
+        run: npm install
+
+      - name: Download umplesync.jar (for snippet compiler validation)
+        run: npm run download-jar
+
+      - name: Run tests
+        run: npm test
