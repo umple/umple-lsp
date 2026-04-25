@@ -328,7 +328,13 @@ export function analyzeCompletion(
   if (prevLeaf?.type === "isA" && prevLeaf.parent?.type === "ERROR") {
     const errorParent = prevLeaf.parent.parent;
     if (errorParent && CLASS_LIKE_TYPES.has(errorParent.type)) {
-      symbolKinds = ["class", "interface", "trait"];
+      // Topic 052 item 1 — route blank `isA |` through the same scalar
+      // scope used by `isA P|` (typed prefix) and `isA T,|` (comma
+      // continuation). The array form fell through to the fallback path
+      // and emitted built-ins + `void`, none of which are valid `isA`
+      // parents. The scalar takes the symbol-only builder branch that
+      // returns class / interface / trait symbols only.
+      symbolKinds = "isa_typed_prefix";
     }
   }
 

@@ -871,10 +871,13 @@ const TEST_CASES: TestCase[] = [
     name: "12A completion_fallback: zero-identifier scope detection",
     fixtures: ["12_completion_fallback.ump"],
     assertions: [
+      // Topic 052 item 1 — blank `isA |` now routes to the same scalar
+      // scope as typed-prefix and comma continuation (was the array form,
+      // which leaked built-ins + `void` through the fallback path).
       {
         type: "completion_kinds",
         at: "isA_empty",
-        expect: ["class", "interface", "trait"],
+        expect: "isa_typed_prefix",
       },
       {
         type: "completion_kinds",
@@ -4752,12 +4755,26 @@ const TEST_CASES: TestCase[] = [
         expect: ["Person", "Parent", "Printable", "Plantable"],
       },
 
-      // Blank-slot `isA |` must keep existing behavior (array-form via the
-      // prevLeaf.type==="isA" branch), not isa_typed_prefix.
+      // Topic 052 item 1 — blank `isA |` now uses the same scalar scope
+      // as typed-prefix / comma continuation. The old array form leaked
+      // built-ins and `void` through the fallback path; the scalar takes
+      // the symbol-only builder branch.
       {
         type: "completion_kinds",
         at: "isa_blank",
-        expect: ["class", "interface", "trait"],
+        expect: "isa_typed_prefix",
+      },
+      // Blank `isA |` final completion list must include user-defined
+      // class-like symbols and exclude built-ins / `void` / enum names.
+      {
+        type: "completion_includes",
+        at: "isa_blank",
+        expect: ["Person", "Parent", "Printable", "Plantable"],
+      },
+      {
+        type: "completion_excludes",
+        at: "isa_blank",
+        expect: ["String", "Integer", "Boolean", "void", "Color"],
       },
 
       // Negative regressions — trait SM angle-bracket positions must NOT
