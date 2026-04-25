@@ -8,7 +8,27 @@ class IsATest {
 
 class BeforeTest {
   void ping() {}
+  void pong() {}
   before /*@before_empty*/
+}
+
+// Topic 052 item 2 — typed-prefix + `after` parity.
+class BeforeTypedTest {
+  void ping() {}
+  void pong() {}
+  before p/*@before_typed*/
+}
+
+class AfterTest {
+  void ping() {}
+  void pong() {}
+  after /*@after_empty*/
+}
+
+class AfterTypedTest {
+  void ping() {}
+  void pong() {}
+  after p/*@after_typed*/
 }
 
 class ArrowTest {

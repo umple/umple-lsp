@@ -134,7 +134,7 @@ export interface CompletionInfo {
   /** Operators the parser expects at this position. */
   operators: string[];
   /** Which symbol kinds to offer, or null for none. */
-  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "trace_state" | "trace_method" | "trace_state_method" | "trace_attribute" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | "top_level" | "class_body" | "trait_body" | "interface_body" | "assoc_class_body" | "mixset_body" | "statemachine_body" | "state_body" | "filter_body" | "transition_target" | "userstory_body" | "usecase_body" | "association_multiplicity" | "association_type" | "association_typed_prefix" | "association_arrow" | "isa_typed_prefix" | "decl_type_typed_prefix" | "return_type_typed_prefix" | null;
+  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "trace_state" | "trace_method" | "trace_state_method" | "trace_attribute" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | "top_level" | "class_body" | "trait_body" | "interface_body" | "assoc_class_body" | "mixset_body" | "statemachine_body" | "state_body" | "filter_body" | "transition_target" | "userstory_body" | "usecase_body" | "association_multiplicity" | "association_type" | "association_typed_prefix" | "association_arrow" | "isa_typed_prefix" | "decl_type_typed_prefix" | "return_type_typed_prefix" | "code_injection_method" | null;
   /** True if cursor is at a definition-name position (suppress all). */
   isDefinitionName: boolean;
   /** True if cursor is inside a comment. */
@@ -431,7 +431,12 @@ export function analyzeCompletion(
   ) {
     const errorParent = prevLeaf.parent.parent;
     if (errorParent && CLASS_LIKE_TYPES.has(errorParent.type)) {
-      symbolKinds = ["method"];
+      // Topic 052 item 2 — route blank `before |` / `after |` and the
+      // typed-prefix `before p|` cases through a method-symbol-only scalar
+      // scope. The array form fell through to the fallback path and
+      // emitted ~177 LookaheadIterator keywords (ERROR, namespace, Java,
+      // ...) ahead of the actual method symbols.
+      symbolKinds = "code_injection_method";
     }
   }
 
@@ -1308,6 +1313,7 @@ function resolveCompletionScope(
   if (kindStr === "isa_typed_prefix") return "isa_typed_prefix";
   if (kindStr === "decl_type_typed_prefix") return "decl_type_typed_prefix";
   if (kindStr === "return_type_typed_prefix") return "return_type_typed_prefix";
+  if (kindStr === "code_injection_method") return "code_injection_method";
   if (kindStr === "association_arrow") return "association_arrow";
   if (kindStr === "none") return null;
 

@@ -667,6 +667,21 @@ export function buildSemanticCompletionItems(
     });
     return items;
   }
+  // Topic 052 item 2 — `before |` / `after |` / `before p|` / `after p|`
+  // code-injection slot. Method symbols of the enclosing class with
+  // inheritance, no built-ins, no LookaheadIterator keywords. Same shape
+  // as trace_method but kept on a distinct scalar for semantic clarity
+  // (and to leave room for `around` etc. later).
+  if (symbolKinds === "code_injection_method" && info.enclosingClass) {
+    const items: CompletionItem[] = [];
+    const seen = new Set<string>();
+    appendSymbolsOfKinds(items, seen, symbolIndex, reachableFiles, {
+      kinds: ["method"],
+      container: info.enclosingClass,
+      inherited: true,
+    });
+    return items;
+  }
   if (symbolKinds === "trace_state_method" && info.enclosingClass) {
     const items: CompletionItem[] = [];
     const seen = new Set<string>();

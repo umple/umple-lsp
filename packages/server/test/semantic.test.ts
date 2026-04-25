@@ -879,10 +879,63 @@ const TEST_CASES: TestCase[] = [
         at: "isA_empty",
         expect: "isa_typed_prefix",
       },
+      // Topic 052 item 2 — `before |` / `after |` route through the
+      // scalar `code_injection_method` scope (was the array form, which
+      // leaked ~177 LookaheadIterator keywords through the fallback path).
+      // Final completion list must be method-symbols-only — no ERROR /
+      // namespace / Java / built-ins / `void`.
       {
         type: "completion_kinds",
         at: "before_empty",
-        expect: ["method"],
+        expect: "code_injection_method",
+      },
+      {
+        type: "completion_includes",
+        at: "before_empty",
+        expect: ["ping", "pong"],
+      },
+      {
+        type: "completion_excludes",
+        at: "before_empty",
+        expect: ["ERROR", "namespace", "Java", "Integer", "void", "isA"],
+      },
+      // Typed-prefix `before p|` shares the same scalar scope.
+      {
+        type: "completion_kinds",
+        at: "before_typed",
+        expect: "code_injection_method",
+      },
+      {
+        type: "completion_includes",
+        at: "before_typed",
+        expect: ["ping", "pong"],
+      },
+      // `after |` parity.
+      {
+        type: "completion_kinds",
+        at: "after_empty",
+        expect: "code_injection_method",
+      },
+      {
+        type: "completion_includes",
+        at: "after_empty",
+        expect: ["ping", "pong"],
+      },
+      // `after p|` typed-prefix parity.
+      {
+        type: "completion_kinds",
+        at: "after_typed",
+        expect: "code_injection_method",
+      },
+      {
+        type: "completion_includes",
+        at: "after_typed",
+        expect: ["ping", "pong"],
+      },
+      {
+        type: "completion_excludes",
+        at: "after_typed",
+        expect: ["ERROR", "namespace", "Java", "Integer", "void"],
       },
       {
         type: "completion_kinds",
