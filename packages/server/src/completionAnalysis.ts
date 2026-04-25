@@ -207,6 +207,7 @@ export function analyzeCompletion(
   if (nodeAtCursor && isInsideAttributeInitializer(nodeAtCursor)) return empty;
   if (isInsideMalformedDashIdentifier(content, line, column, nodeAtCursor)) return empty;
   if (nodeAtCursor && isBareCompleteMultiplicityAtEnd(nodeAtCursor, content, line, column)) return empty;
+  if (nodeAtCursor && isInsideBrokenMethodNameSlot(nodeAtCursor)) return empty;
 
   // --- Extract prefix from the token at cursor ---
   let prefix = "";
@@ -841,6 +842,22 @@ export function analyzeCompletion(
     if (traitName) {
       symbolKinds = "trait_sm_op_sm";
       traitSmContext = { traitName };
+    }
+  }
+  // Topic 053 — `isA T<-|` / `isA T<+|` recovery shape parses as a flat
+  // ERROR under class_definition (no isa_declaration / type_list ancestor),
+  // so the helpers above don't reach the trait name. Recover from the
+  // ERROR's child sequence directly. Bare `isA T<|` (no -/+ marker yet)
+  // suppresses to avoid the class_body keyword leak.
+  if (!traitSmContext && nodeAtCursor) {
+    const recovered = recoverTraitSmOpFromIsAError(nodeAtCursor);
+    if (recovered) {
+      if (recovered.mode === "op") {
+        symbolKinds = "trait_sm_op_sm";
+        traitSmContext = { traitName: recovered.traitName };
+      } else {
+        symbolKinds = "suppress";
+      }
     }
   }
   if (!traitSmContext && prevLeaf?.type === ".") {
@@ -1607,6 +1624,99 @@ function isInsideTraitSmOpContext(node: SyntaxNode): boolean {
     }
     if (n.type === "class_definition" || n.type === "source_file") return false;
     n = n.parent;
+  }
+  return false;
+}
+
+/**
+ * Topic 053 — `isA T<` recovery shapes parse as a flat ERROR under
+ * class_definition (no `isa_declaration` / `type_list` / `type_name`
+ * ancestor). Returns the matched recovery info if the ERROR shape is
+ * `[isA, qualified_name(trait), <, ...rest]` AND cursor sits at/after
+ * the `<`. The `mode` field tells the caller whether we have a
+ * trait-SM operation marker (`-` / `+`) or just the bare `<`.
+ */
+function recoverTraitSmOpFromIsAError(
+  nodeAtCursor: SyntaxNode,
+): { traitName: string; mode: "op" | "bare" } | null {
+  // Bail when cursor is already inside a formed `trait_sm_binding` —
+  // the parse has progressed past the `T<` recovery shape and the user
+  // is editing a deeper position (e.g. `isA T<sm as S|`). Existing
+  // logic for those positions should run.
+  let walk: SyntaxNode | null = nodeAtCursor;
+  while (walk) {
+    if (walk.type === "trait_sm_binding") return null;
+    if (walk.type === "ERROR") break;
+    walk = walk.parent;
+  }
+  // Find the enclosing ERROR.
+  let err: SyntaxNode | null = nodeAtCursor;
+  while (err && err.type !== "ERROR") err = err.parent;
+  if (!err) return null;
+  // Must sit directly under a class-like container.
+  let p: SyntaxNode | null = err.parent;
+  let inClassLike = false;
+  while (p) {
+    if (CLASS_LIKE_DEF_TYPES.has(p.type)) { inClassLike = true; break; }
+    if (p.type === "source_file") break;
+    p = p.parent;
+  }
+  if (!inClassLike) return null;
+  // Walk children: find the [isA, qualified_name, <] prefix BEFORE cursor.
+  let sawIsA = false;
+  let traitName: string | undefined;
+  let sawAngle = false;
+  let sawOpMarker = false;
+  for (let i = 0; i < err.childCount; i++) {
+    const c = err.child(i);
+    if (!c || c.isExtra) continue;
+    if (c.startIndex >= nodeAtCursor.startIndex && c.id !== nodeAtCursor.id) break;
+    if (c.type === "isA") { sawIsA = true; continue; }
+    if (sawIsA && !traitName && c.type === "qualified_name") {
+      const lastId = c.namedChild(c.namedChildCount - 1);
+      if (lastId?.type === "identifier") traitName = lastId.text;
+      continue;
+    }
+    if (sawIsA && traitName && c.type === "<") { sawAngle = true; continue; }
+    if (sawAngle && (c.type === "-" || c.type === "+")) { sawOpMarker = true; continue; }
+  }
+  if (!sawIsA || !traitName || !sawAngle) return null;
+  return { traitName, mode: sawOpMarker ? "op" : "bare" };
+}
+
+/**
+ * Topic 053 — broken method-name slot in a class body when the method has
+ * no `{}` body. Parses as `class_definition < ERROR < [type_name,
+ * identifier(name), (, )]`. Cursor on the name identifier is the broken
+ * equivalent of `void method|() {}` which is normally caught by
+ * isAtAttributeNamePosition. Suppress.
+ */
+function isInsideBrokenMethodNameSlot(node: SyntaxNode): boolean {
+  if (node.type !== "identifier") return false;
+  const err = node.parent;
+  if (err?.type !== "ERROR") return false;
+  // ERROR's children must include type_name BEFORE this identifier, and
+  // `(` after — confirms the method-shape recovery.
+  let sawTypeName = false;
+  let sawNameAfterTypeName = false;
+  let sawOpenParenAfterName = false;
+  for (let i = 0; i < err.childCount; i++) {
+    const c = err.child(i);
+    if (!c || c.isExtra) continue;
+    if (c.type === "type_name") sawTypeName = true;
+    else if (c.id === node.id) {
+      if (sawTypeName) sawNameAfterTypeName = true;
+    } else if (c.type === "(") {
+      if (sawNameAfterTypeName) sawOpenParenAfterName = true;
+    }
+  }
+  if (!sawNameAfterTypeName || !sawOpenParenAfterName) return false;
+  // Confirm class-like container.
+  let p: SyntaxNode | null = err.parent;
+  while (p) {
+    if (CLASS_LIKE_DEF_TYPES.has(p.type)) return true;
+    if (p.type === "source_file") return false;
+    p = p.parent;
   }
   return false;
 }

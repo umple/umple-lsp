@@ -372,13 +372,16 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
         // Stage-1 trigger expansion (topic 051 item 1).
         //   "/"  use-path completion inside `use "..."`
         //   "."  qualified names, dotted state paths
-        //   "-"  association arrow start (`1 -|`)
+        //   "-"  association arrow start (`1 -|`); trait-SM op marker
         //   ">"  association arrow finish (`1 ->|` → multiplicity slot);
         //        transition-target flow after `->`
         //   "*"  association right-multiplicity / type slot (`1 -> *|`)
-        //   ","  isA / implementsReq continuation (`isA A, |`)
-        // Deferred: "<", "@", "(" — lower immediate value, higher churn.
-        triggerCharacters: ["/", ".", "-", ">", "*", ","],
+        //   ","  isA / implementsReq / param continuation
+        // Stage-2 (topic 053):
+        //   "<"  association arrow `1 <|`; trait-SM op recovery `isA T<-|`
+        //   "@"  Java annotation (suppressed); aggregation `1 <@|`
+        //   "("  parameter-type slot at method (param-type completion)
+        triggerCharacters: ["/", ".", "-", ">", "*", ",", "<", "@", "("],
       },
       definitionProvider: true,
       referencesProvider: true,

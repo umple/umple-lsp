@@ -4886,11 +4886,15 @@ const TEST_CASES: TestCase[] = [
 
       // Negative regressions — trait SM angle-bracket positions must NOT
       // become isa_typed_prefix. The prevLeaf gate (`<` / `as`) rules them
-      // out even when the enclosing ERROR still holds an `isA` keyword.
+      // out. Topic 053 narrows the `isA T<sm|` mid-typing position from
+      // `class_body` (47-keyword leak) to `suppress` via the new
+      // `recoverTraitSmOpFromIsAError` helper. The `isA T<sm as S|`
+      // position is still on the existing class_body fallback (cursor is
+      // inside a formed trait_sm_binding, which the helper hard-stops on).
       {
         type: "completion_kinds",
         at: "trait_sm_inner_typed",
-        expect: "class_body",
+        expect: "suppress",
       },
       {
         type: "completion_kinds",
@@ -5278,6 +5282,20 @@ const TEST_CASES: TestCase[] = [
         at: "param_blank_cont",
         expect: ["void", "ERROR"],
       },
+
+      // ─── Topic 053 — deferred trigger expansion (<, @, () support ───
+      // Bare `isA T<|` → suppress (the helper detects ERROR shape with
+      // [isA, qualified_name, <] and no -/+ marker).
+      { type: "completion_kinds", at: "topic053_isa_lt_bare", expect: "suppress" },
+      // `isA T<-|` / `isA T<+|` → trait_sm_op_sm via the new ERROR
+      // recovery helper (the existing isInsideTraitAngleBrackets walk
+      // misses because there's no isa_declaration ancestor in the broken
+      // parse).
+      { type: "completion_kinds", at: "topic053_isa_minus", expect: "trait_sm_op_sm" },
+      { type: "completion_kinds", at: "topic053_isa_plus",  expect: "trait_sm_op_sm" },
+      // Broken `void method|()` (no body) → null via the new
+      // isInsideBrokenMethodNameSlot guard.
+      { type: "completion_kinds", at: "topic053_broken_method_name", expect: null },
     ],
   },
 ];

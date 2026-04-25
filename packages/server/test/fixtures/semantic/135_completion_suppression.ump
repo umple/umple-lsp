@@ -173,3 +173,29 @@ class ItemFourTypedCont {
 class ItemFourParamName {
   void f(int a/*@param_name_slot*/) {}
 }
+
+
+// ─── Topic 053 — deferred trigger expansion (<, @, () support ───────────
+
+trait T053 {
+  sm { s1 {} }
+}
+
+// `isA T<|` bare — suppress (no positive completion yet, just the angle).
+class TopicFiftyThreeBareLT {
+  isA T053</*@topic053_isa_lt_bare*/
+}
+
+// `isA T<-|` / `isA T<+|` — positive trait-SM op recovery.
+class TopicFiftyThreeMinusOp {
+  isA T053<-/*@topic053_isa_minus*/
+}
+
+class TopicFiftyThreePlusOp {
+  isA T053<+/*@topic053_isa_plus*/
+}
+
+// `void method|()` (no body) — suppress via broken-method-name guard.
+class TopicFiftyThreeBrokenMethod {
+  void method/*@topic053_broken_method_name*/()
+}
