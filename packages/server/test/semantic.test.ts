@@ -7166,7 +7166,11 @@ async function main() {
       // Negative — unrelated diagnostic codes.
       { name: "W50 unrelated", text: "class A {\n  status { S { e -> Missing; } }\n}\n", diagLine: 1, code: "W50", expectActions: 0 },
       { name: "E1503 unrelated", text: "class A {\n  } extra\n}\n", diagLine: 1, code: "E1503", severity: DiagnosticSeverity.Error, expectActions: 0 },
-      { name: "E1502 deferred (filter)", text: "class C {}\nfilter F {\n  include C\n}\n", diagLine: 2, code: "E1502", severity: DiagnosticSeverity.Error, expectActions: 0 },
+      // Topic 057 lifted the E1502 defer — block-scan now identifies the
+      // `include C` line and emits an action targeting it. Even when the
+      // diagnostic line is the include line itself (rather than the filter
+      // header), the block-scan still locates a single candidate.
+      { name: "E1502 filter include (now supported)", text: "class C {}\nfilter F {\n  include C\n}\n", diagLine: 2, code: "E1502", severity: DiagnosticSeverity.Error, expectActions: 1, expectInsertCol: 11 },
 
       // Negative — imported-file message.
       { name: "imported-file diagnostic", text: 'use "Other.ump";\nclass A {}\n', diagLine: 0, code: "W1007", message: "In imported file (Other.ump:3): W1007: Attribute or Association syntax could not be processed", expectActions: 0 },
@@ -7318,6 +7322,171 @@ async function main() {
         const noCode = buildQuickFixActions(doc, [stripped]);
         if (noCode.length !== 0) {
           throw new Error(`expected 0 actions when code is missing, got ${noCode.length}`);
+        }
+        console.log(`  PASS  ${testName}`);
+        passed++;
+      } catch (e: any) {
+        console.log(`  FAIL  ${testName}: ${e.message}`);
+        failed++;
+      }
+    }
+  }
+
+  // ── Topic 057 — code-action follow-ups ──────────────────────────────────
+  // Item 1: W1006 transition shapes; Item 2: E1502 filter block-scan;
+  // Item 3: default-value attribute extension. Same pure-test harness as
+  // topic 056 but with new code dispatch and the new classifier paths.
+  {
+    const { buildQuickFixActions } = require("../src/codeActions");
+    const { TextDocument } = require("vscode-languageserver-textdocument");
+    const {
+      DiagnosticSeverity,
+      Range,
+      Position,
+    } = require("vscode-languageserver/node");
+
+    const URI = "file:///tmp/code_actions_057.ump";
+    const SOURCE = "umple";
+
+    function makeDoc(text: string): any {
+      return TextDocument.create(URI, "umple", 1, text);
+    }
+    function makeDiag(line: number, lineText: string, code: string, severity = DiagnosticSeverity.Warning, source: string = SOURCE) {
+      const startCol = lineText.search(/\S/);
+      return {
+        severity,
+        range: Range.create(
+          Position.create(line, startCol === -1 ? 0 : startCol),
+          Position.create(line, lineText.length),
+        ),
+        message: `${code}: probe`,
+        source,
+        code,
+      };
+    }
+
+    type Case = {
+      name: string;
+      text: string;
+      diagLine: number;
+      code: string;
+      severity?: any;
+      expectActions: number;
+      expectInsertLine?: number;
+      expectInsertCol?: number;
+    };
+
+    // ── Item 1: W1006 state-machine transitions ─────────────────────────
+    const w1006Cases: Case[] = [
+      // Positive
+      { name: "W1006 simple transition `e -> s2`", text: "class A {\n  sm {\n    s1 {\n      e -> s2\n    }\n  }\n}\n", diagLine: 3, code: "W1006", expectActions: 1, expectInsertLine: 3, expectInsertCol: 13 },
+      { name: "W1006 guarded `e [x>0] -> s2`", text: "class A {\n  Integer x;\n  sm {\n    s1 {\n      e [x>0] -> s2\n    }\n  }\n}\n", diagLine: 4, code: "W1006", expectActions: 1, expectInsertLine: 4, expectInsertCol: 19 },
+      { name: "W1006 action `e / { x = 1; } -> s2`", text: "class A {\n  Integer x;\n  sm {\n    s1 {\n      e / { x = 1; } -> s2\n    }\n  }\n}\n", diagLine: 4, code: "W1006", expectActions: 1, expectInsertLine: 4, expectInsertCol: 26 },
+      { name: "W1006 dotted RHS `e -> Outer.Inner`", text: "class A {\n  sm {\n    s1 {\n      e -> Outer.Inner\n    }\n  }\n}\n", diagLine: 3, code: "W1006", expectActions: 1, expectInsertLine: 3, expectInsertCol: 22 },
+
+      // Negative
+      { name: "W1006 incomplete `e ->`", text: "class A {\n  sm {\n    s1 {\n      e ->\n    }\n  }\n}\n", diagLine: 3, code: "W1006", expectActions: 0 },
+      { name: "W1006 random content", text: "class A {\n  sm {\n    s1 {\n      unrecognized stuff here\n    }\n  }\n}\n", diagLine: 3, code: "W1006", expectActions: 0 },
+      { name: "W1006 already terminated", text: "class A {\n  sm {\n    s1 {\n      e -> s2;\n    }\n  }\n}\n", diagLine: 3, code: "W1006", expectActions: 0 },
+      { name: "W1006 trailing comma", text: "class A {\n  sm {\n    s1 {\n      e -> s2,\n    }\n  }\n}\n", diagLine: 3, code: "W1006", expectActions: 0 },
+    ];
+
+    // ── Item 3: W1007 default-value attribute ───────────────────────────
+    const w1007DefaultCases: Case[] = [
+      // Positive
+      { name: "default-value Integer = number", text: "class A {\n  Integer x = 5\n}\n", diagLine: 1, code: "W1007", expectActions: 1, expectInsertLine: 1, expectInsertCol: 15 },
+      { name: 'default-value String = "Bob"', text: 'class A {\n  String name = "Bob"\n}\n', diagLine: 1, code: "W1007", expectActions: 1, expectInsertLine: 1, expectInsertCol: 21 },
+      { name: "default-value Boolean = true", text: "class A {\n  Boolean active = true\n}\n", diagLine: 1, code: "W1007", expectActions: 1, expectInsertLine: 1, expectInsertCol: 23 },
+      { name: "default-value Integer = otherAttr", text: "class A {\n  Integer y;\n  Integer x = y\n}\n", diagLine: 2, code: "W1007", expectActions: 1, expectInsertLine: 2, expectInsertCol: 15 },
+      { name: "default-value String = string with space", text: 'class A {\n  String name = "Bob Smith"\n}\n', diagLine: 1, code: "W1007", expectActions: 1, expectInsertLine: 1, expectInsertCol: 27 },
+
+      // Negative
+      { name: "default-value expression RHS `a + b`", text: "class A {\n  Integer x = a + b\n}\n", diagLine: 1, code: "W1007", expectActions: 0 },
+      { name: "default-value generic type `List<String> names`", text: "class A {\n  List<String> names\n}\n", diagLine: 1, code: "W1007", expectActions: 0 },
+      { name: "default-value paren RHS `f()`", text: "class A {\n  Integer x = f()\n}\n", diagLine: 1, code: "W1007", expectActions: 0 },
+    ];
+
+    for (const c of [...w1006Cases, ...w1007DefaultCases]) {
+      const testName = `code_action.057: ${c.name}`;
+      try {
+        const doc = makeDoc(c.text);
+        const lineText = c.text.split("\n")[c.diagLine] ?? "";
+        const diag = makeDiag(c.diagLine, lineText, c.code, c.severity ?? DiagnosticSeverity.Warning);
+        const actions = buildQuickFixActions(doc, [diag]);
+        if (actions.length !== c.expectActions) {
+          throw new Error(`expected ${c.expectActions} actions, got ${actions.length}: ${actions.map((a: any) => a.title).join(", ")}`);
+        }
+        if (c.expectActions === 1) {
+          const e = actions[0].edit?.changes?.[URI]?.[0];
+          if (!e) throw new Error("no edit attached");
+          if (
+            (c.expectInsertLine !== undefined && e.range.start.line !== c.expectInsertLine) ||
+            (c.expectInsertCol !== undefined && e.range.start.character !== c.expectInsertCol)
+          ) {
+            throw new Error(`expected insert at (${c.expectInsertLine},${c.expectInsertCol}), got (${e.range.start.line},${e.range.start.character})`);
+          }
+          if (e.newText !== ";") throw new Error(`unexpected newText: ${JSON.stringify(e.newText)}`);
+        }
+        console.log(`  PASS  ${testName}`);
+        passed++;
+      } catch (e: any) {
+        console.log(`  FAIL  ${testName}: ${e.message}`);
+        failed++;
+      }
+    }
+
+    // ── Item 2: E1502 filter block-scan ─────────────────────────────────
+    // The diagnostic's reported line is the filter HEADER. The action must
+    // edit the unterminated statement INSIDE the block, and only when
+    // exactly one candidate exists.
+    const e1502Cases: Case[] = [
+      // Positive — diag at filter header, edit at inner statement.
+      { name: "E1502 single `include C` (diag at header)", text: "class C {}\nfilter F {\n  include C\n}\n", diagLine: 1, code: "E1502", severity: DiagnosticSeverity.Error, expectActions: 1, expectInsertLine: 2, expectInsertCol: 11 },
+      { name: "E1502 single `includeFilter G`", text: "filter G {}\nfilter F {\n  includeFilter G\n}\n", diagLine: 1, code: "E1502", severity: DiagnosticSeverity.Error, expectActions: 1, expectInsertLine: 2, expectInsertCol: 17 },
+      { name: "E1502 single `namespace x.y`", text: "filter F {\n  namespace x.y\n}\n", diagLine: 0, code: "E1502", severity: DiagnosticSeverity.Error, expectActions: 1, expectInsertLine: 1, expectInsertCol: 15 },
+      { name: "E1502 dotted namespace `foo.bar.baz`", text: "filter F {\n  namespace foo.bar.baz\n}\n", diagLine: 0, code: "E1502", severity: DiagnosticSeverity.Error, expectActions: 1, expectInsertLine: 1, expectInsertCol: 23 },
+
+      // Negative — multiple unterminated candidates → ambiguous.
+      { name: "E1502 multiple unterminated candidates", text: "class C {}\nfilter F {\n  include C\n  namespace x.y\n}\n", diagLine: 1, code: "E1502", severity: DiagnosticSeverity.Error, expectActions: 0 },
+
+      // Negative — the bad shape isn't a missing-semicolon issue.
+      { name: "E1502 unrelated `bogus X`", text: "filter F {\n  bogus X\n}\n", diagLine: 0, code: "E1502", severity: DiagnosticSeverity.Error, expectActions: 0 },
+
+      // Negative — already terminated; classifier rejects.
+      { name: "E1502 already terminated", text: "class C {}\nfilter F {\n  include C;\n}\n", diagLine: 1, code: "E1502", severity: DiagnosticSeverity.Error, expectActions: 0 },
+
+      // Negative — `hops { … }` is a clean construct; even if a stale
+      // E1502 arrived, no semicolon-fix candidate is found.
+      { name: "E1502 hops block (defensive)", text: "filter F {\n  hops { super 1; sub 1; association 1; }\n}\n", diagLine: 0, code: "E1502", severity: DiagnosticSeverity.Error, expectActions: 0 },
+
+      // Codex follow-up: nested `hops { include C }` must not trigger.
+      // Compiler still raises E1502 even after appending `;` to the inner
+      // `include C`, so the action is unsafe.
+      { name: "E1502 nested hops with include (codex edge)", text: "class C {}\nfilter F {\n  hops {\n    include C\n  }\n}\n", diagLine: 1, code: "E1502", severity: DiagnosticSeverity.Error, expectActions: 0 },
+
+      // Codex optional follow-up: legitimate top-level `include C` still
+      // gets the action even when a sibling `hops { … }` block lives in
+      // the same filter body. Proves the depth tracker doesn't over-block.
+      { name: "E1502 top-level include alongside hops", text: "class C {}\nfilter F {\n  hops { super 1; sub 1; association 1; }\n  include C\n}\n", diagLine: 1, code: "E1502", severity: DiagnosticSeverity.Error, expectActions: 1, expectInsertLine: 3, expectInsertCol: 11 },
+    ];
+
+    for (const c of e1502Cases) {
+      const testName = `code_action.057: ${c.name}`;
+      try {
+        const doc = makeDoc(c.text);
+        const lineText = c.text.split("\n")[c.diagLine] ?? "";
+        const diag = makeDiag(c.diagLine, lineText, c.code, c.severity ?? DiagnosticSeverity.Warning);
+        const actions = buildQuickFixActions(doc, [diag]);
+        if (actions.length !== c.expectActions) {
+          throw new Error(`expected ${c.expectActions} actions, got ${actions.length}: ${actions.map((a: any) => a.title).join(", ")}`);
+        }
+        if (c.expectActions === 1) {
+          const e = actions[0].edit?.changes?.[URI]?.[0];
+          if (!e) throw new Error("no edit attached");
+          if (e.range.start.line !== c.expectInsertLine || e.range.start.character !== c.expectInsertCol) {
+            throw new Error(`expected insert at (${c.expectInsertLine},${c.expectInsertCol}), got (${e.range.start.line},${e.range.start.character})`);
+          }
+          if (e.newText !== ";") throw new Error(`unexpected newText: ${JSON.stringify(e.newText)}`);
         }
         console.log(`  PASS  ${testName}`);
         passed++;

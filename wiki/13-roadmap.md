@@ -4,7 +4,7 @@ A snapshot of what's shipping, what's known to be gappy, and where future studen
 
 ## Currently shipping
 
-- LSP server: go-to-def, find-refs, rename, hover, completion, diagnostics, document symbols, formatting, diagram navigation
+- LSP server: go-to-def, find-refs, rename, hover, completion, diagnostics, document symbols, formatting, diagram navigation, code actions (`Add missing semicolon` quick-fix for W1006/W1007/E1502 — see "Code actions" below)
 - Tree-sitter grammar: most real Umple syntax including structured req bodies (userStory / useCase) and implementsReq across all entity types
 - Editor extensions: VS Code (digized.umple), Zed (umple.zed), Neovim (umple.nvim), BBEdit (codeless module), IntelliJ (LSP4IJ + TextMate)
 - CI: auto-PR for grammar/highlights changes from umple-lsp into umple.zed
@@ -65,15 +65,28 @@ If you find a new array-fallback leak, treat it the same way: convert to a scala
 
 ### Code actions
 
-We don't expose any. Common LSP code actions worth adding:
+`Add missing semicolon` quick-fix shipped in topics 056 and 057. Coverage:
 
-- "Add `;` after this statement"
+- W1007 (class-content): `isA …`, `implementsReq …`, inline association (multiplicity + arrow + identifier), interface method signature (only when the cursor is inside an `interface` body), attribute declaration including simple default-value forms (`Integer x = 5`, `String name = "Bob"`).
+- W1006 (state-machine): single-line transitions (`e -> s2`), guarded transitions (`e [g] -> s2`), action transitions (`e / { … } -> s2`), dotted-state RHS (`e -> Outer.Inner`).
+- E1502 (filter-body): `include`, `includeFilter`, `namespace` statements. The diagnostic line points at the filter header, so the action scans the filter block and emits an edit only when exactly one unterminated candidate exists.
+
+Deliberate defers (documented for future contributors):
+
+- Generic-type collection attributes (`List<String> names`) — appending `;` clears W1007 but introduces W46 (collection-template-type style warning), so the quick-fix isn't a clean win.
+- Random W1006 / E1502 lines that don't match a known statement shape (`unrecognized stuff here`, filter `bogus X`, incomplete `e ->`).
+- `hops { … }` filter blocks — already clean syntax; appending `;` would BREAK them.
+- Multiple unterminated filter statements in the same block — E1502 doesn't tell us which one to fix, so we emit no action rather than guess.
+- Java action bodies with nested `{ … { … } … }` braces inside a transition — single-line classifier rejects nested braces; rare in practice.
+
+Future code-action ideas (not yet implemented):
+
 - "Rename to camelCase / PascalCase to match convention"
 - "Convert this attribute to an `enum`"
 - "Extract this state's body to a substate"
 - "Inline this `use file.ump` (paste contents inline)"
 
-Each is a `textDocument/codeAction` handler in `server.ts` with logic to compute the edit.
+Pattern for new actions: extend `packages/server/src/codeActions.ts` with a new `Diagnostic.code` branch + shape classifier. Keep the module pure — no compiler invocation, no LSP transport.
 
 ### Inlay hints
 
@@ -118,9 +131,8 @@ This wiki lives in `wiki/` in the repo. GitHub also has a separate "Wiki" featur
 Pulled from the conversation history + general LSP best practice:
 
 1. **Find-implementations on traits** — distinct from find-refs; specifically traits' isA chain.
-2. **Quick-fix for missing `;`** — already have W-1502 detection via diagnostics; offer the fix as a code action.
-3. **Live diagram refresh on save** — currently the VS Code diagram updates on file save; could update on debounced edit.
-4. **Symbol search across workspace** — `workspace/symbol` LSP request not currently implemented.
+2. **Live diagram refresh on save** — currently the VS Code diagram updates on file save; could update on debounced edit.
+3. **Symbol search across workspace** — `workspace/symbol` LSP request not currently implemented.
 
 Each of these is a focused topic: spec the scope, get codex review, implement, test, commit. The ~5 day cadence we hit during topics 038–044 is comfortable for one of these per cycle.
 
