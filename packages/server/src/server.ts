@@ -54,7 +54,10 @@ import {
   normalizeTopLevelBlankLines,
   reindentEmbeddedCode,
 } from "./formatter";
-import { COMPLETION_TRIGGER_CHARACTERS } from "./completionTriggers";
+import {
+  COMPLETION_TRIGGER_CHARACTERS,
+  shouldServeWhitespaceTriggeredCompletion,
+} from "./completionTriggers";
 
 // Handle CLI flags before opening the LSP connection. Editor integrations
 // always spawn the server with `--stdio` and never pass these flags, so the
@@ -662,6 +665,12 @@ connection.onCompletion(async (params): Promise<CompletionItem[]> => {
     return [];
   }
   if (info.symbolKinds === "suppress") {
+    return [];
+  }
+  if (
+    params.context?.triggerCharacter === " " &&
+    !shouldServeWhitespaceTriggeredCompletion(info.symbolKinds)
+  ) {
     return [];
   }
 

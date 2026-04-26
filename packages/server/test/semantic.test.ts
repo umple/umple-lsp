@@ -11,7 +11,10 @@ import { resolveTraitSmEventLocations } from "../src/traitSmEventResolver";
 import { stripLayoutTail } from "../src/tokenTypes";
 import { CompletionItemKind, InsertTextFormat } from "vscode-languageserver/node";
 import { ALL_SNIPPETS } from "../src/snippets";
-import { COMPLETION_TRIGGER_CHARACTERS } from "../src/completionTriggers";
+import {
+  COMPLETION_TRIGGER_CHARACTERS,
+  shouldServeWhitespaceTriggeredCompletion,
+} from "../src/completionTriggers";
 
 // ── Assertion types ──────────────────────────────────────────────────────────
 
@@ -6821,6 +6824,22 @@ async function main() {
       }
       if (new Set(actual).size !== actual.length) {
         throw new Error(`Trigger characters contain duplicates: [${actual.join(", ")}]`);
+      }
+      if (!shouldServeWhitespaceTriggeredCompletion("association_type")) {
+        throw new Error("Whitespace trigger should be served for association_type");
+      }
+      if (!shouldServeWhitespaceTriggeredCompletion("association_multiplicity")) {
+        throw new Error("Whitespace trigger should be served for association_multiplicity");
+      }
+      const requirementSlot = ["requirement"] as ["requirement"];
+      if (!shouldServeWhitespaceTriggeredCompletion(requirementSlot)) {
+        throw new Error("Whitespace trigger should be served for requirement slots");
+      }
+      if (shouldServeWhitespaceTriggeredCompletion("class_body")) {
+        throw new Error("Whitespace trigger should not serve broad class_body completions");
+      }
+      if (shouldServeWhitespaceTriggeredCompletion("top_level")) {
+        throw new Error("Whitespace trigger should not serve broad top_level completions");
       }
 
       console.log(`  PASS  ${testName}`);
