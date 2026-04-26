@@ -54,6 +54,7 @@ import {
   normalizeTopLevelBlankLines,
   reindentEmbeddedCode,
 } from "./formatter";
+import { COMPLETION_TRIGGER_CHARACTERS } from "./completionTriggers";
 
 // Handle CLI flags before opening the LSP connection. Editor integrations
 // always spawn the server with `--stdio` and never pass these flags, so the
@@ -393,7 +394,10 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
         //   "<"  association arrow `1 <|`; trait-SM op recovery `isA T<-|`
         //   "@"  Java annotation (suppressed); aggregation `1 <@|`
         //   "("  parameter-type slot at method (param-type completion)
-        triggerCharacters: ["/", ".", "-", ">", "*", ",", "<", "@", "("],
+        // Topic 063:
+        //   " "  retrigger after structural whitespace slots (`1 |`,
+        //        `1 -> |`, `1 -> * |`, `implementsReq |`)
+        triggerCharacters: [...COMPLETION_TRIGGER_CHARACTERS],
       },
       definitionProvider: true,
       referencesProvider: true,

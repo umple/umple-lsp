@@ -11,6 +11,7 @@ import { resolveTraitSmEventLocations } from "../src/traitSmEventResolver";
 import { stripLayoutTail } from "../src/tokenTypes";
 import { CompletionItemKind, InsertTextFormat } from "vscode-languageserver/node";
 import { ALL_SNIPPETS } from "../src/snippets";
+import { COMPLETION_TRIGGER_CHARACTERS } from "../src/completionTriggers";
 
 // ── Assertion types ──────────────────────────────────────────────────────────
 
@@ -6794,6 +6795,32 @@ async function main() {
       const info2 = helper.si.getCompletionInfo(contentNewline, 0, 7);
       if (info2.symbolKinds !== "use_path") {
         throw new Error(`With newline: expected "use_path", got ${JSON.stringify(info2.symbolKinds)}`);
+      }
+
+      console.log(`  PASS  ${testName}`);
+      passed++;
+    } catch (e: any) {
+      console.log(`  FAIL  ${testName}: ${e.message}`);
+      failed++;
+    }
+  }
+
+  // ── LSP completion trigger-character contract ──────────────────────────
+  // These are advertised during initialize. The server can compute the right
+  // items at these slots, but editors only auto-popup if they ask after the
+  // character was typed.
+  {
+    const testName = "completion_triggers: advertise structural retriggers";
+    try {
+      const expected = ["/", ".", "-", ">", "*", ",", "<", "@", "(", " "];
+      const actual: string[] = [...COMPLETION_TRIGGER_CHARACTERS];
+      for (const ch of expected) {
+        if (!actual.includes(ch)) {
+          throw new Error(`Missing trigger character ${JSON.stringify(ch)} in [${actual.join(", ")}]`);
+        }
+      }
+      if (new Set(actual).size !== actual.length) {
+        throw new Error(`Trigger characters contain duplicates: [${actual.join(", ")}]`);
       }
 
       console.log(`  PASS  ${testName}`);
