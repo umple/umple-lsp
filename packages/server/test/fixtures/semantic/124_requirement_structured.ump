@@ -21,6 +21,12 @@ req /*@def_uc2*/UC2 usecase {
   Customer checks out items and the system calculates the total.
 }
 
+req /*@def_uc_idless*/UC_IDLESS useCase {
+  who { User }
+  userStep { enters credentials }
+  systemResponse { grants access }
+}
+
 req /*@def_plain*/R1 {
   Plain body with no language keyword — opaque content.
 }
@@ -39,4 +45,9 @@ req /*@def_uc_partial*/UC_PARTIAL useCase {
   systemResponse
   systemResponse 99
   who
+}
+
+class Account {
+  implementsReq /*@use_uc_idless*/UC_IDLESS;
+  implementsReq /*@complete_idless*/R1;
 }

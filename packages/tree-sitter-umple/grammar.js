@@ -456,28 +456,21 @@ module.exports = grammar({
 
     _req_tag_body: ($) => seq("{", optional($.req_tag_content), "}"),
 
-    // Step id and body are each optional so `userStep`, `userStep 1`, and the
-    // full `userStep 1 { ... }` all parse structurally.
+    // Step id and body are each optional so `userStep`, `userStep 1`,
+    // `userStep { ... }`, and the full `userStep 1 { ... }` all parse
+    // structurally.
     req_user_step: ($) =>
       seq(
         "userStep",
-        optional(
-          seq(
-            field("id", $.req_step_id),
-            optional($._req_tag_body),
-          ),
-        ),
+        optional(field("id", $.req_step_id)),
+        optional($._req_tag_body),
       ),
 
     req_system_response: ($) =>
       seq(
         "systemResponse",
-        optional(
-          seq(
-            field("id", $.req_step_id),
-            optional($._req_tag_body),
-          ),
-        ),
+        optional(field("id", $.req_step_id)),
+        optional($._req_tag_body),
       ),
 
     // Step ids can be numeric or alphanumeric: 1, 1a, step-one. Identifier-

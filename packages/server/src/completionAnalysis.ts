@@ -745,12 +745,16 @@ export function analyzeCompletion(
     }
   }
 
-  // --- Partial inline association completion ---
-  // While the user is mid-typing an association inside a class-like body:
-  //   `1 -> |`       → ERROR wraps (multiplicity)(arrow) — offer a right-
-  //                    multiplicity curated list (1 / * / 0..1 / 1..* / 0..*).
-  //   `1 -> * |`     → ERROR wraps (multiplicity)(arrow)(multiplicity) — offer
+  // --- Partial association completion ---
+  // While the user is mid-typing an inline association inside a class-like body:
+  //   `1 -> |`       -> ERROR wraps (multiplicity)(arrow); offer right-
+  //                    multiplicities (1 / * / 0..1 / 1..* / 0..*).
+  //   `1 -> * |`     -> ERROR wraps (multiplicity)(arrow)(multiplicity); offer
   //                    class symbols for the right_type slot.
+  // Standalone association blocks have a left_type slot after the left
+  // multiplicity:
+  //   `association { 1 | }` -> offer class names, not arrows.
+  //   `association { 1 Other | }` -> offer arrows.
   // Once the user starts typing the type identifier the parser forms a full
   // `association_inline`, and the existing (association_inline) @scope.* in
   // completions.scm takes over. This fallback only fires while the partial is
@@ -762,36 +766,51 @@ export function analyzeCompletion(
   // $.arrow, association_definition doesn't), and prevLeaf can land inside a
   // multiplicity token or on the multiplicity node itself depending on width.
   {
-    const CLASS_LIKE_ASSOC_CONTAINERS = new Set<string>([
+    const INLINE_ASSOC_CONTAINERS = new Set<string>([
       "class_definition", "trait_definition", "interface_definition",
       "association_class_definition", "mixset_definition",
-      "association_definition",
     ]);
     const ASSOC_SM_STOPS = new Set<string>([
       "state_machine", "statemachine_definition", "state", "transition",
     ]);
 
-    const enclosingIsClassLike = (node: SyntaxNode | null): boolean => {
+    const associationCompletionMode = (node: SyntaxNode | null): "inline" | "standalone" | null => {
       let n = node;
       while (n) {
-        if (ASSOC_SM_STOPS.has(n.type)) return false;
-        if (CLASS_LIKE_ASSOC_CONTAINERS.has(n.type)) return true;
-        if (n.type === "source_file") return false;
-        n = n.parent;
-      }
-      return false;
-    };
-
-    const findEnclosingError = (n: SyntaxNode | null): SyntaxNode | null => {
-      while (n) {
-        if (n.type === "ERROR") return n;
+        if (ASSOC_SM_STOPS.has(n.type)) return null;
+        if (n.type === "association_definition") return "standalone";
+        if (INLINE_ASSOC_CONTAINERS.has(n.type)) return "inline";
+        if (n.type === "source_file") return null;
         n = n.parent;
       }
       return null;
     };
 
+    const findEnclosingError = (n: SyntaxNode | null): SyntaxNode | null => {
+      let found: SyntaxNode | null = null;
+      while (n) {
+        if (n.type === "ERROR") found = n;
+        n = n.parent;
+      }
+      return found;
+    };
+
+    const pushErrorFlattenedChildren = (node: SyntaxNode, out: SyntaxNode[]): void => {
+      if (node.type !== "ERROR") {
+        if (!node.isExtra) out.push(node);
+        return;
+      }
+      for (let i = 0; i < node.childCount; i++) {
+        const c = node.child(i);
+        if (c && (!c.isExtra || c.type === "ERROR")) {
+          pushErrorFlattenedChildren(c, out);
+        }
+      }
+    };
+
     const errorNode = prevLeaf ? findEnclosingError(prevLeaf) : null;
-    if (prevLeaf && errorNode && enclosingIsClassLike(errorNode)) {
+    const assocMode = errorNode ? associationCompletionMode(errorNode) : null;
+    if (prevLeaf && errorNode && assocMode) {
       // Anchor classification on prevLeaf's position within the ERROR's non-
       // extras children. Multiple in-progress associations in the same block
       // (`association { 1 ->\n 1 -> *\n 0..1 -> 1..* }`) collapse into one
@@ -811,6 +830,8 @@ export function analyzeCompletion(
       // Letter-leading identifiers DON'T count, so `e ->` in class body
       // (attribute-shaped, no multiplicity) stays on class_body.
       const isArrow = (c: SyntaxNode) => c.type === "arrow" || c.type === "->";
+      const isLetterLeadingId = (c: SyntaxNode) =>
+        c.type === "identifier" && /^[A-Za-z_]/.test(c.text);
       const mightBeMult = (c: SyntaxNode) =>
         c.type === "multiplicity" ||
         c.type === "*" ||
@@ -821,7 +842,9 @@ export function analyzeCompletion(
       const children: SyntaxNode[] = [];
       for (let i = 0; i < errorNode.childCount; i++) {
         const c = errorNode.child(i);
-        if (c && !c.isExtra) children.push(c);
+        if (c && (!c.isExtra || c.type === "ERROR")) {
+          pushErrorFlattenedChildren(c, children);
+        }
       }
 
       let prevIdx = -1;
@@ -842,34 +865,82 @@ export function analyzeCompletion(
         let segStart = 0;
         for (let i = prevIdx - 1; i >= 0; i--) {
           if (children[i].type === ";") { segStart = i + 1; break; }
+          if (children[i].endPosition.row < prevLeaf.startPosition.row) {
+            segStart = i + 1;
+            break;
+          }
         }
         const segment = children.slice(segStart, prevIdx + 1);
         const segArrowIdxInSeg = segment.findIndex(isArrow);
         const prevInSeg = segment.length - 1; // prevIdx in segment terms
 
-        if (isArrow(segment[prevInSeg])) {
-          // Slot 1: cursor IS an arrow → right-multiplicity slot.
+        const contentLines = content.split("\n");
+        let cursorOffset = 0;
+        for (let li = 0; li < line; li++) cursorOffset += contentLines[li].length + 1;
+        cursorOffset += column;
+        const last = segment[prevInSeg];
+        const onlyOneCompleteMultAtCursor =
+          segment.length === 1 &&
+          last.type === "multiplicity" &&
+          last.endIndex === cursorOffset;
+
+        if (assocMode === "standalone") {
+          const leftSide =
+            segArrowIdxInSeg >= 0
+              ? segment.slice(0, segArrowIdxInSeg)
+              : segment;
+          const hasLeftMult = leftSide.some(mightBeMult);
+          const hasLeftType = leftSide.some(isLetterLeadingId);
+
+          if (isArrow(last)) {
+            // Standalone slot 2: `1 Other -> |` needs right multiplicity.
+            if (hasLeftMult && hasLeftType) {
+              symbolKinds = "association_multiplicity";
+            } else if (hasLeftMult) {
+              // Recovery for malformed `association { 1 -> | }`: the left
+              // type is still the missing piece.
+              symbolKinds = "association_type";
+            }
+          } else if (segArrowIdxInSeg >= 0 && hasLeftMult && hasLeftType) {
+            // Standalone slot 3: `1 Other -> * |` needs right type.
+            const child = segment[prevInSeg];
+            symbolKinds = isLetterLeadingId(child)
+              ? "association_typed_prefix"
+              : "association_type";
+          } else if (hasLeftMult && hasLeftType) {
+            // Standalone slot 1b: `1 Other |` or `1 Other -|` needs arrow.
+            symbolKinds = "association_arrow";
+          } else {
+            // Standalone slot 1a: `1 |` needs a left type, not an arrow.
+            const PARTIAL_ARROW_TYPES = new Set(["-", "<", ">", "@"]);
+            const partial =
+              mightBeMult(last) ||
+              PARTIAL_ARROW_TYPES.has(last.type) ||
+              last.type === "req_free_text_punct";
+            if (partial && hasLeftMult && !onlyOneCompleteMultAtCursor) {
+              symbolKinds = "association_type";
+            }
+          }
+        } else if (isArrow(segment[prevInSeg])) {
+          // Inline slot 1: cursor IS an arrow -> right-multiplicity slot.
           if (segment.slice(0, prevInSeg).some(mightBeMult)) {
             symbolKinds = "association_multiplicity";
           }
         } else if (segArrowIdxInSeg >= 0
                    && segment.slice(0, segArrowIdxInSeg).some(mightBeMult)) {
-          // Slot 2: arrow appears before prevLeaf in the segment → right-type
+          // Inline slot 2: arrow appears before prevLeaf in the segment -> right-type
           // slot. typed-prefix vs blank-multiplicity disambiguation matches
           // topic 043's heuristic.
           const child = segment[prevInSeg];
-          const isLetterLeadingId =
-            child.type === "identifier" && /^[A-Za-z_]/.test(child.text);
-          symbolKinds = isLetterLeadingId
+          symbolKinds = isLetterLeadingId(child)
             ? "association_typed_prefix"
             : "association_type";
         } else {
-          // Slot 0: no arrow in this segment yet. If prevLeaf is mult-like
-          // OR a partial-arrow character (`-`, `<`, `>`, `@`,
+          // Inline slot 0: no arrow in this segment yet. If prevLeaf is
+          // mult-like OR a partial-arrow character (`-`, `<`, `>`, `@`,
           // `req_free_text_punct` for things like `<@`), AND the segment has
-          // a mult-like → arrow slot.
+          // a mult-like -> arrow slot.
           const PARTIAL_ARROW_TYPES = new Set(["-", "<", ">", "@"]);
-          const last = segment[prevInSeg];
           const partial =
             mightBeMult(last) ||
             PARTIAL_ARROW_TYPES.has(last.type) ||
@@ -879,14 +950,6 @@ export function analyzeCompletion(
           // association. Without intervening whitespace there's no arrow
           // intent. `1 |` (cursor after a space) still fires because the
           // cursor offset is past the digit token's end.
-          const contentLines = content.split("\n");
-          let cursorOffset = 0;
-          for (let li = 0; li < line; li++) cursorOffset += contentLines[li].length + 1;
-          cursorOffset += column;
-          const onlyOneCompleteMultAtCursor =
-            segment.length === 1 &&
-            last.type === "multiplicity" &&
-            last.endIndex === cursorOffset;
           if (partial && segment.some(mightBeMult) && !onlyOneCompleteMultAtCursor) {
             symbolKinds = "association_arrow";
           }
@@ -906,11 +969,14 @@ export function analyzeCompletion(
       /^[A-Za-z_]/.test(nodeAtCursor.text)
     ) {
       const errAnc = findEnclosingError(nodeAtCursor);
-      if (errAnc && enclosingIsClassLike(errAnc)) {
+      const typedAssocMode = errAnc ? associationCompletionMode(errAnc) : null;
+      if (errAnc && typedAssocMode) {
         // Sanity: ERROR contains an arrow with a mult-like before it (i.e.
-        // we're really in an association right-side identifier slot, not
-        // some unrelated identifier under a recovery ERROR).
+        // we're really in an association type identifier slot, not some
+        // unrelated identifier under a recovery ERROR).
         const isArrow2 = (c: SyntaxNode) => c.type === "arrow" || c.type === "->";
+        const isLetterLeadingId2 = (c: SyntaxNode) =>
+          c.type === "identifier" && /^[A-Za-z_]/.test(c.text);
         const mightBeMult2 = (c: SyntaxNode) =>
           c.type === "multiplicity" ||
           c.type === "*" ||
@@ -920,17 +986,49 @@ export function analyzeCompletion(
         const errChildren: SyntaxNode[] = [];
         for (let i = 0; i < errAnc.childCount; i++) {
           const c = errAnc.child(i);
-          if (c && !c.isExtra) errChildren.push(c);
+          if (c && (!c.isExtra || c.type === "ERROR")) {
+            pushErrorFlattenedChildren(c, errChildren);
+          }
         }
-        let arrowSeen = false;
-        let multSeen = false;
-        for (const c of errChildren) {
-          if (c.id === nodeAtCursor.id) break;
-          if (isArrow2(c)) arrowSeen = true;
-          if (!arrowSeen && mightBeMult2(c)) multSeen = true;
+
+        let typedIdx = -1;
+        for (let i = 0; i < errChildren.length; i++) {
+          const c = errChildren[i];
+          if (
+            c.id === nodeAtCursor.id ||
+            (c.startIndex <= nodeAtCursor.startIndex && nodeAtCursor.endIndex <= c.endIndex)
+          ) {
+            typedIdx = i;
+            break;
+          }
         }
-        if (arrowSeen && multSeen) {
-          symbolKinds = "association_typed_prefix";
+        if (typedIdx >= 0) {
+          let segStart = 0;
+          for (let i = typedIdx - 1; i >= 0; i--) {
+            if (errChildren[i].type === ";") { segStart = i + 1; break; }
+            if (errChildren[i].endPosition.row < nodeAtCursor.startPosition.row) {
+              segStart = i + 1;
+              break;
+            }
+          }
+          const typedSegment = errChildren.slice(segStart, typedIdx + 1);
+          const arrowIdx = typedSegment.findIndex(isArrow2);
+
+          if (typedAssocMode === "standalone" && arrowIdx < 0) {
+            // Left_type typed prefix: `association { 1 O| }`.
+            if (typedSegment.slice(0, -1).some(mightBeMult2)) {
+              symbolKinds = "association_typed_prefix";
+            }
+          } else if (arrowIdx >= 0) {
+            const beforeArrow = typedSegment.slice(0, arrowIdx);
+            const hasLeftMult = beforeArrow.some(mightBeMult2);
+            const hasLeftType =
+              typedAssocMode === "inline" ||
+              beforeArrow.some(isLetterLeadingId2);
+            if (hasLeftMult && hasLeftType) {
+              symbolKinds = "association_typed_prefix";
+            }
+          }
         }
       }
     }

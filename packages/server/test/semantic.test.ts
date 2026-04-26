@@ -4130,11 +4130,13 @@ const TEST_CASES: TestCase[] = [
         type: "parse_clean",
         fixture: "124_requirement_structured.ump",
       },
-      // All seven requirements are indexed (five positive + two negative-holder reqs)
+      // All eight requirements are indexed, including the useCase whose
+      // userStep/systemResponse bodies omit numeric step ids.
       { type: "symbol_count", fixture: "124_requirement_structured.ump", name: "US1", kind: "requirement", expect: 1 },
       { type: "symbol_count", fixture: "124_requirement_structured.ump", name: "US2", kind: "requirement", expect: 1 },
       { type: "symbol_count", fixture: "124_requirement_structured.ump", name: "UC1", kind: "requirement", expect: 1 },
       { type: "symbol_count", fixture: "124_requirement_structured.ump", name: "UC2", kind: "requirement", expect: 1 },
+      { type: "symbol_count", fixture: "124_requirement_structured.ump", name: "UC_IDLESS", kind: "requirement", expect: 1 },
       { type: "symbol_count", fixture: "124_requirement_structured.ump", name: "R1",  kind: "requirement", expect: 1 },
       { type: "symbol_count", fixture: "124_requirement_structured.ump", name: "US_BARE",    kind: "requirement", expect: 1 },
       { type: "symbol_count", fixture: "124_requirement_structured.ump", name: "UC_PARTIAL", kind: "requirement", expect: 1 },
@@ -4171,6 +4173,18 @@ const TEST_CASES: TestCase[] = [
         type: "hover_output",
         at: "def_uc2",
         expectContains: ["UC2", "useCase"],
+      },
+      // ID-less userStep/systemResponse bodies are valid narrative steps.
+      // They should not index bogus step symbols or drop the parent requirement.
+      {
+        type: "goto_def",
+        at: "use_uc_idless",
+        expect: [{ at: "def_uc_idless" }],
+      },
+      {
+        type: "completion_includes",
+        at: "complete_idless",
+        expect: ["UC_IDLESS"],
       },
       {
         type: "hover_excludes",
@@ -4222,7 +4236,7 @@ const TEST_CASES: TestCase[] = [
       {
         type: "document_symbols",
         fixture: "124_requirement_structured.ump",
-        expectRoots: ["US1", "US2", "UC1", "UC2", "R1", "US_BARE", "UC_PARTIAL"],
+        expectRoots: ["US1", "US2", "UC1", "UC2", "UC_IDLESS", "R1", "US_BARE", "UC_PARTIAL", "Account"],
         expectChild: { parent: "UC1", child: "1" },
       },
     ],
@@ -4564,21 +4578,23 @@ const TEST_CASES: TestCase[] = [
     ],
   },
 
-  // 130: Phase 042 — partial inline association completion.
+  // 130: Phase 042 — partial association completion.
   // Probes the two slot-specific scopes the completionAnalysis fallback
   // surfaces while the parser is still inside an ERROR for a mid-typed
-  // association. Also pins the negative boundaries: class-body stays
-  // class_body when no association is being typed; state-body `e ->` still
-  // routes to transition_target, not association_multiplicity.
+  // association. Also pins standalone association blocks, where the slot
+  // after left multiplicity is left_type rather than arrow. Negative
+  // boundaries: class-body stays class_body when no association is being
+  // typed; state-body `e ->` still routes to transition_target.
   {
-    name: "130 assoc_partial_completion: multiplicity + type slot completion for partial `<mult> -> <mult>`",
+    name: "130 assoc_partial_completion: inline and standalone partial association slots",
     fixtures: [
       "130_assoc_partial_completion.ump",
       "130b_assoc_partial_slots.ump",
     ],
     assertions: [
-      // Completed fixture must still parse clean — proves the completed
-      // `association_inline` path is unaffected.
+      // Completed fixture must still parse clean — proves completed
+      // `association_inline` and standalone `association_member` paths are
+      // unaffected.
       { type: "parse_clean", fixture: "130_assoc_partial_completion.ump" },
 
       // Neighbors in the completed fixture — class symbols must be indexed
@@ -4658,9 +4674,9 @@ const TEST_CASES: TestCase[] = [
         expect: "transition_target",
       },
 
-      // Cascade — top-level `association { }` block with three partial
-      // associations collapsed into one ERROR. All three slots must still
-      // classify correctly despite the sprawling child list.
+      // Cascade — top-level `association { }` block with three standalone
+      // partial associations collapsed into one ERROR. All three slots must
+      // still classify correctly despite the sprawling child list.
       {
         type: "completion_kinds",
         at: "assoc_block_after_arrow",
@@ -4725,8 +4741,8 @@ const TEST_CASES: TestCase[] = [
         ],
       },
 
-      // Assoc-block case: parser produces ERROR; nodeAtCursor-based fallback
-      // inside completionAnalysis classifies the typed prefix.
+      // Assoc-block right_type case: parser produces ERROR; nodeAtCursor-based
+      // fallback inside completionAnalysis classifies the typed prefix.
       {
         type: "completion_kinds",
         at: "assoc_block_typed_prefix",
@@ -4742,6 +4758,25 @@ const TEST_CASES: TestCase[] = [
         at: "assoc_block_typed_prefix",
         expect: [
           "namespace", "Java", "ERROR", "class", "trait", "isA",
+        ],
+      },
+      // Assoc-block left_type case: after the left multiplicity, class names
+      // are valid; arrows are not yet valid.
+      {
+        type: "completion_kinds",
+        at: "assoc_block_left_type_typed",
+        expect: "association_typed_prefix",
+      },
+      {
+        type: "completion_includes",
+        at: "assoc_block_left_type_typed",
+        expect: ["Other", "Thing"],
+      },
+      {
+        type: "completion_excludes",
+        at: "assoc_block_left_type_typed",
+        expect: [
+          "namespace", "Java", "ERROR", "class", "trait", "isA", "->",
         ],
       },
 
@@ -4786,7 +4821,44 @@ const TEST_CASES: TestCase[] = [
         expect: "association_arrow",
       },
 
-      // Top-level association block — same arrow slot.
+      // Top-level association block — after only the left multiplicity, offer
+      // the missing left type. This is the standalone association shape:
+      // `association { 1 | }`.
+      {
+        type: "completion_kinds",
+        at: "assoc_block_left_type_blank",
+        expect: "association_type",
+      },
+      {
+        type: "completion_includes",
+        at: "assoc_block_left_type_blank",
+        expect: ["Other", "Thing", "C"],
+      },
+      {
+        type: "completion_excludes",
+        at: "assoc_block_left_type_blank",
+        expect: ["--", "->", "<@>-", "trait", "class", "ERROR"],
+      },
+      // Malformed standalone recovery: `association { 1 -> | }` is missing
+      // the left type, so keep offering class names instead of accepting the
+      // arrow as a valid slot advance.
+      {
+        type: "completion_kinds",
+        at: "assoc_block_missing_left_type",
+        expect: "association_type",
+      },
+      {
+        type: "completion_includes",
+        at: "assoc_block_missing_left_type",
+        expect: ["Other", "Thing", "C"],
+      },
+      {
+        type: "completion_excludes",
+        at: "assoc_block_missing_left_type",
+        expect: ["--", "->", "<@>-", "trait", "class", "ERROR"],
+      },
+
+      // Top-level association block — after the left type, offer arrows.
       {
         type: "completion_kinds",
         at: "assoc_block_arrow_blank",
@@ -4796,6 +4868,69 @@ const TEST_CASES: TestCase[] = [
         type: "completion_includes",
         at: "assoc_block_arrow_blank",
         expect: ["--", "->", "<@>-"],
+      },
+      {
+        type: "completion_kinds",
+        at: "assoc_block_arrow_dash",
+        expect: "association_arrow",
+      },
+      {
+        type: "completion_includes",
+        at: "assoc_block_arrow_dash",
+        expect: ["--", "->"],
+      },
+      {
+        type: "completion_excludes",
+        at: "assoc_block_arrow_dash",
+        expect: ["Other", "Thing", "class", "ERROR"],
+      },
+
+      // Standalone cascade after a complete member — no prior arrow/right
+      // type bleed into the next association member.
+      {
+        type: "completion_kinds",
+        at: "assoc_block_cascade_left_type",
+        expect: "association_type",
+      },
+      {
+        type: "completion_includes",
+        at: "assoc_block_cascade_left_type",
+        expect: ["Other", "Thing", "C"],
+      },
+      {
+        type: "completion_excludes",
+        at: "assoc_block_cascade_left_type",
+        expect: ["--", "->", "<@>-", "class", "ERROR"],
+      },
+      {
+        type: "completion_kinds",
+        at: "assoc_block_cascade_arrow_slot",
+        expect: "association_arrow",
+      },
+      {
+        type: "completion_includes",
+        at: "assoc_block_cascade_arrow_slot",
+        expect: ["->", "--"],
+      },
+      {
+        type: "completion_excludes",
+        at: "assoc_block_cascade_arrow_slot",
+        expect: ["Other", "Thing", "class", "ERROR"],
+      },
+      {
+        type: "completion_kinds",
+        at: "assoc_block_cascade_mult_slot",
+        expect: "association_multiplicity",
+      },
+      {
+        type: "completion_includes",
+        at: "assoc_block_cascade_mult_slot",
+        expect: ["1", "*", "0..1"],
+      },
+      {
+        type: "completion_excludes",
+        at: "assoc_block_cascade_mult_slot",
+        expect: ["Other", "Thing", "class", "ERROR"],
       },
 
       // Cascade — second association's left mult after a complete first one

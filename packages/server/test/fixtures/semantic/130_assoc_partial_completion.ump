@@ -13,4 +13,8 @@ class C {
   1 -> * Other;
   /*@class_body_empty*/
 }
+
+association {
+  1 Other -> * Thing;
+}
 /*@top_boundary*/

@@ -30,13 +30,13 @@ class NegState {
   }
 }
 
-// Top-level `association { ... }` block — mixed inline-partial associations
-// cascade into one sprawling ERROR, which is the shape codex's bug repro hit.
+// Top-level `association { ... }` block — mixed partial associations cascade
+// into one sprawling ERROR, which is the shape codex's bug repro hit.
 // All three cursors must still route correctly.
 association {
-  1 -> /*@assoc_block_after_arrow*/
-  1 -> * /*@assoc_block_after_right_mult*/
-  0..1 -> 1..* /*@assoc_block_after_range_mult*/
+  1 Other -> /*@assoc_block_after_arrow*/
+  1 Other -> * /*@assoc_block_after_right_mult*/
+  0..1 Other -> 1..* /*@assoc_block_after_range_mult*/
 }
 
 // Topic 043 — typed-prefix on the right_type identifier. Cursor sits INSIDE
@@ -47,13 +47,16 @@ class ClassBodyTypedPrefix {
 }
 
 association {
-  1 -> * O/*@assoc_block_typed_prefix*/
+  1 Other -> * O/*@assoc_block_typed_prefix*/
 }
 
-// Topic 044 — arrow slot. After the user finishes the left multiplicity but
-// before any arrow is committed, completion must offer only association
-// arrow operators. Covers blank-after-mult and partial-arrow-typed cases,
-// in both class body and association block.
+association {
+  1 O/*@assoc_block_left_type_typed*/
+}
+
+// Topic 044 — arrow slot. Class-body inline associations offer arrows after
+// the left multiplicity. Standalone association blocks offer a left type
+// first, then arrows after that type.
 class ClassBodyArrowSlot {
   1 /*@class_body_arrow_blank*/
 }
@@ -67,7 +70,36 @@ class ClassBodyArrowAggregation {
 }
 
 association {
-  1 /*@assoc_block_arrow_blank*/
+  1 /*@assoc_block_left_type_blank*/
+}
+
+association {
+  1 Other /*@assoc_block_arrow_blank*/
+}
+
+association {
+  1 Other -/*@assoc_block_arrow_dash*/
+}
+
+association {
+  1 -> /*@assoc_block_missing_left_type*/
+}
+
+// Standalone cascade — second member after a completed member. These pin that
+// segment detection does not inherit the prior member's arrow or right type.
+association {
+  1 Other -> * Thing;
+  1 /*@assoc_block_cascade_left_type*/
+}
+
+association {
+  1 Other -> * Thing;
+  1 Other /*@assoc_block_cascade_arrow_slot*/
+}
+
+association {
+  1 Other -> * Thing;
+  1 Other -> /*@assoc_block_cascade_mult_slot*/
 }
 
 // Cascade — second association's left mult after a complete first one.

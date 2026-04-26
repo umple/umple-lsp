@@ -1,5 +1,7 @@
 # Umple LSP
 
+[![CI](https://github.com/umple/umple-lsp/actions/workflows/ci.yml/badge.svg)](https://github.com/umple/umple-lsp/actions/workflows/ci.yml)
+
 A Language Server Protocol implementation for the [Umple](https://www.umple.org) modeling language. Provides IDE features for `.ump` files across multiple editors.
 
 > **📚 Contributors / future maintainers — start at [`wiki/README.md`](wiki/README.md).**

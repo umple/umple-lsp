@@ -4,9 +4,33 @@ What runs automatically and what doesn't, why, and how to maintain it.
 
 ## Workflows
 
+### `umple-lsp/.github/workflows/ci.yml`
+
+Builds and tests the LSP on pull requests to `master`, pushes to `master`, and manual dispatch.
+
+**Trigger:**
+
+```yaml
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+  workflow_dispatch: {}
+```
+
+**Steps (high-level):**
+
+1. Checkout umple-lsp.
+2. Install Node 22.
+3. Install Java 17 because snippet compiler-validation tests invoke `umplesync.jar`.
+4. Run `npm install` (this repo does not track a root lockfile, so CI does not use `npm ci`).
+5. Run `npm run download-jar`.
+6. Run root `npm test`, which rebuilds the grammar/WASM and runs the semantic suite.
+
 ### `umple-lsp/.github/workflows/sync-umple-zed.yml`
 
-The sole automation in this repo. Auto-opens (or updates) a PR on `umple/umple.zed` whenever the grammar or query files change in this repo.
+Auto-opens (or updates) a PR on `umple/umple.zed` whenever the grammar or query files change in this repo.
 
 **Trigger:**
 
@@ -86,7 +110,7 @@ We discussed a "tag-triggered coupled automation" pattern — push a tag like `s
 
 Two reasons you'd add one:
 
-- **Pre-merge CI for umple-lsp itself.** Run tests on PRs and block merge on red. We don't currently have this — `npm test` is run locally before pushes. To add: create `.github/workflows/test.yml` triggering on `pull_request` + `push:branches:[master]`, run `npm install && npm test`.
+- **Additional release or drift automation.** The LSP already has build/test CI and umple.zed sync PR automation. New workflows should cover a distinct release, dependency, or external-sync need.
 - **Auto-bump and PR new dependency versions.** Dependabot can do this without writing a workflow. Configure at `.github/dependabot.yml` (we don't currently use it).
 
 For ANY new workflow:

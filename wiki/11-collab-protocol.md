@@ -1,6 +1,6 @@
 # 11 — Collab protocol with Codex
 
-This project uses a structured **two-agent review workflow** between two AI coding agents (or an agent + a human reviewer). The lead architect agent ("opus") writes implementations; the reviewer agent ("codex") reviews proposals + implementations + commits before they land. Both communicate through a shared file `.collab/channel.md`.
+This project uses a structured **two-agent review workflow** between two AI coding agents (or an agent + a human reviewer). The lead architect role ("opus" in the legacy tmux setup, or a Codex App architect worker in the current setup) writes implementations; the reviewer role ("codex" or `codex-app-coordinator`) reviews proposals + implementations + commits before they land. Durable topic state lives in `.collab/channel.md`.
 
 You inherit:
 
@@ -13,7 +13,7 @@ If future contributors don't use AI agents, the pattern still works as a **struc
 
 ```
 .collab/
-├── agents.json             ← Address book. Names, pane_ids (tmux), roles.
+├── agents.json             ← Address book. Names, transports, pane_ids for tmux agents, roles.
 ├── channel.md              ← One active topic. Append-only during active discussion.
 └── archive/
     ├── 038_*.md            ← Each completed topic preserved for future reference.
@@ -29,7 +29,7 @@ If future contributors don't use AI agents, the pattern still works as a **struc
 The "strict iterative cycle" we settled on:
 
 1. **Codex writes a request** in detail to `channel.md`. Defines scope, expected behavior, required tests, anything off-limits.
-2. **Opus implements only that item.** No commit yet.
+2. **The architect role implements only that item.** No commit yet.
 3. **Opus reports back** in `channel.md` with:
    - files changed
    - what was done
@@ -37,8 +37,8 @@ The "strict iterative cycle" we settled on:
    - any deviations from spec + reasoning
 4. **Codex reviews.** Posts findings in `channel.md`. Either approves or blocks with specific issues.
 5. **Iterate** if blocked — opus addresses, reposts, codex re-reviews. Don't commit during iteration.
-6. **Once codex approves, opus commits immediately** (no extra user confirmation needed in collab mode — this differs from non-collab mode).
-7. **Opus archives** the topic to `.collab/archive/<NNN>_<name>.md`, resets channel to idle.
+6. **Once codex writes `APPROVED TO COMMIT`, the implementer or coordinator commits immediately** (no extra user confirmation needed in strict collab mode — this differs from non-collab mode).
+7. **The implementer or coordinator archives** the topic to `.collab/archive/<NNN>_<name>.md`, resets channel to idle.
 
 The point of the cycle: **catch design + correctness issues before they land in master**. Especially valuable for grammar and completion changes where edge cases bite hard.
 
@@ -72,7 +72,20 @@ sleep 0.1
 tmux send-keys -t %24 Enter             # delayed Enter — prevents key drops
 ```
 
-The full collab skill (general, not project-specific) lives in each agent's own skills directory — `~/.agent-skills/collab/SKILL.md` for Claude Code (opus), `~/.codex/skills/collab/SKILL.md` for Codex CLI. Always read it once when first using the workflow.
+The full collab skill (general, not project-specific) lives in each agent's own skills directory — `~/.agent-skills/collab/SKILL.md` for Claude Code (opus), `~/.codex/skills/collab/SKILL.md` for Codex CLI/App. Always read it once when first using the workflow.
+
+## Codex App delivery
+
+Codex App does not provide tmux-style direct wakeups between separate top-level sessions. The replacement workflow is:
+
+1. Use one main Codex App thread as `codex-app-coordinator`.
+2. The coordinator scopes each item and reviews the final diff.
+3. When the user has asked for strict collab, multi-agent, or delegated work, the coordinator may delegate implementation to an architect worker that follows `CLAUDE.md`.
+4. The worker implements only the scoped item and reports changed files, verification, and deviations.
+5. The coordinator reviews findings-first.
+6. Commit is authorized only when the coordinator writes the exact phrase `APPROVED TO COMMIT`.
+
+`.collab/channel.md` remains useful as the durable audit trail. If a separate Codex App session must participate, write the message to `.collab/channel.md` and have the user tell that session to read it. Do not claim that one Codex App session has awakened another directly.
 
 ## Practical rules from experience
 
@@ -84,7 +97,7 @@ Codex's review catches real bugs. Topics 042 and 043 both had blocker rounds —
 
 ### After approval, commit immediately
 
-Don't wait for additional user confirmation. The collab skill's `feedback-commit-after-codex-approval` rule explicitly supersedes the general "always confirm before committing" default.
+Don't wait for additional user confirmation after the reviewer writes `APPROVED TO COMMIT`. That exact phrase supersedes the general "always confirm before committing" default for the current strict-collab item.
 
 ### Push and publish are separate from commit
 
@@ -116,7 +129,7 @@ The discipline (don't commit before review, isolate one item per cycle, archive 
 
 - **Batching multiple items into one cycle.** If codex requests item 1, do ONLY item 1. Save item 2 for the next cycle. Reduces blast radius and review burden.
 - **Implementing speculatively before review.** Don't write 500 lines then ask codex to review. Propose the design first, get a go-ahead, THEN implement.
-- **Treating codex's "looks good" comments as commit approval.** They're not. Wait for an explicit "Approved. You can commit."
+- **Treating codex's "looks good" comments as commit approval.** They're not. Wait for the exact phrase `APPROVED TO COMMIT`.
 - **Ignoring blockers because tests pass.** Codex's blockers are usually about edge cases tests don't cover. Address them.
 
 ## Where to read more

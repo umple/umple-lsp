@@ -7,7 +7,7 @@ A snapshot of what's shipping, what's known to be gappy, and where future studen
 - LSP server: go-to-def, find-refs, rename, hover, completion, diagnostics, document symbols, formatting, diagram navigation, code actions (`Add missing semicolon` quick-fix for W1006/W1007/E1502 — see "Code actions" below)
 - Tree-sitter grammar: most real Umple syntax including structured req bodies (userStory / useCase) and implementsReq across all entity types
 - Editor extensions: VS Code (digized.umple), Zed (umple.zed), Neovim (umple.nvim), BBEdit (codeless module), IntelliJ (LSP4IJ + TextMate)
-- CI: auto-PR for grammar/highlights changes from umple-lsp into umple.zed
+- CI: build/test workflow for umple-lsp plus auto-PR for grammar/highlights changes from umple-lsp into umple.zed
 
 ## Known grammar gaps
 
@@ -52,6 +52,8 @@ The known array-fallback completion leaks have all been closed:
 - `... as Sm.|` dotted-state continuation in trait binding — topic 055 (`trait_sm_binding_state_target` scalar)
 - parameter-type typed-prefix (`void f(P|)`) — topic 052 (`param_type_typed_prefix` scalar)
 - LSP snippet completion — topic 054 (`packages/server/src/snippets.ts` registry, capability-gated)
+- Find-implementations on traits — topic 059 (`textDocument/implementation` returns direct/transitive class/trait implementers for trait targets)
+- CI build/test workflow — topic 060 (`.github/workflows/ci.yml` runs `npm install`, downloads `umplesync.jar`, and executes root `npm test`)
 
 ### How to add new completion slots
 
@@ -106,9 +108,12 @@ Rename currently scopes to forward-imports + reverse-importers. If your workspac
 
 ## Known tooling gaps
 
-### No CI test runner for umple-lsp
+### CI follow-ups
 
-Tests run locally, not on PR. A `.github/workflows/test.yml` running `npm install && npm test` on every PR + master push would catch regressions before merge. ~10 lines of YAML; we just haven't added it.
+The LSP has PR/push/manual build-test CI now. Remaining optional follow-ups:
+
+- Add dependency caching once a root lockfile policy is settled.
+- Keep the README badge current if workflow filenames change.
 
 ### No automated npm publish
 
@@ -130,9 +135,9 @@ This wiki lives in `wiki/` in the repo. GitHub also has a separate "Wiki" featur
 
 Pulled from the conversation history + general LSP best practice:
 
-1. **Find-implementations on traits** — distinct from find-refs; specifically traits' isA chain.
-2. **Live diagram refresh on save** — currently the VS Code diagram updates on file save; could update on debounced edit.
-3. **Symbol search across workspace** — `workspace/symbol` LSP request not currently implemented.
+1. **Live diagram refresh on edit/save** — VS Code has diagram support; investigate debounce/on-save behavior in `umple.vscode`.
+2. **Symbol search across workspace** — `workspace/symbol` LSP request not currently implemented.
+3. **Extend implementations beyond traits** — possible class subclasses or interface implementers/extensions, but verify Umple compiler semantics first.
 
 Each of these is a focused topic: spec the scope, get codex review, implement, test, commit. The ~5 day cadence we hit during topics 038–044 is comfortable for one of these per cycle.
 
