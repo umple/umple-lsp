@@ -1111,6 +1111,12 @@ module.exports = grammar({
     action_code: ($) =>
       seq("/", repeat1($.more_code)),
 
+    action_invocation: ($) =>
+      choice(
+        seq($.identifier, ";"),
+        seq($.identifier, $.code_block),
+      ),
+
     // code_lang / code_langs: optional target-language tags on code blocks
     // e.g. entry / Java { ... }  or  entry / Java, Cpp { ... }
     code_lang: ($) =>
@@ -1126,7 +1132,7 @@ module.exports = grammar({
       seq(optional($.code_langs), "{", optional($.code_content), "}"),
 
     entry_exit_action: ($) =>
-      seq(choice("entry", "exit"), optional($.guard), "/", repeat1($.more_code)),
+      seq(choice("entry", "exit"), optional($.guard), "/", choice(repeat1($.more_code), $.action_invocation)),
 
     do_activity: ($) => seq("do", repeat1($.more_code)),
 

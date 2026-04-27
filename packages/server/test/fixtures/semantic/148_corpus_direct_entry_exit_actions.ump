@@ -1,0 +1,17 @@
+class LightFixture {
+  bulb {
+    On {
+      entry / doOn;
+      exit / stopMotor { System.out.println("Stopping Motor"); }
+      turnOff -> Off;
+    }
+
+    Off {
+      entry / stopMotor {}
+      turnOn -> On;
+    }
+  }
+
+  public void doOn() {}
+  public void stopMotor() {}
+}

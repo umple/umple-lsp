@@ -778,6 +778,17 @@ const TEST_CASES: TestCase[] = [
     ],
   },
 
+  // 148: Corpus gap — entry/exit actions can invoke a named action directly
+  // after `/`, optionally followed by a code block.
+  {
+    name: "148 corpus: direct entry/exit action calls parse clean",
+    fixtures: ["148_corpus_direct_entry_exit_actions.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "148_corpus_direct_entry_exit_actions.ump" },
+      { type: "symbol_count", fixture: "148_corpus_direct_entry_exit_actions.ump", name: "LightFixture", kind: "class", expect: 1 },
+    ],
+  },
+
   // 15: Formatting smoke test
   {
     name: "15 formatting: indent + skip range",
