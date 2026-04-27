@@ -8,6 +8,10 @@ class ClassBodyAfterArrow {
   1 -> /*@class_body_after_arrow*/
 }
 
+class ClassBodyAfterArrowNoSpace {
+  1 ->/*@class_body_after_arrow_no_space*/
+}
+
 class ClassBodyAfterRightMult {
   1 -> * /*@class_body_after_right_mult*/
 }
@@ -34,11 +38,21 @@ class NegState {
   }
 }
 
+class NegStateNoSpace {
+  status {
+    S1 {
+      f ->/*@state_body_arrow_no_space*/
+    }
+    S2 {}
+  }
+}
+
 // Top-level `association { ... }` block — mixed partial associations cascade
 // into one sprawling ERROR, which is the shape codex's bug repro hit.
 // All three cursors must still route correctly.
 association {
   1 Other -> /*@assoc_block_after_arrow*/
+  1 Other ->/*@assoc_block_after_arrow_no_space*/
   1 Other -> * /*@assoc_block_after_right_mult*/
   1 Other -> */*@assoc_block_after_right_mult_no_space*/
   0..1 Other -> 1..* /*@assoc_block_after_range_mult*/

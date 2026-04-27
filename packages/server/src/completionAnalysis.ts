@@ -203,6 +203,10 @@ export function analyzeCompletion(
   // (`isInsideMethodParamListStart` distinguishes param-type slots from
   // suppress positions using prevLeaf) and the rest of the analyzer.
   const earlyPrevLeaf = findPreviousLeaf(tree, content, line, column);
+  const cursorOffset = offsetAt(content, line, column);
+  if (earlyPrevLeaf?.type === "->" && earlyPrevLeaf.endIndex === cursorOffset) {
+    return empty;
+  }
 
   // --- Topic 050: contexts where any popup would be wrong ────────────────
   // Each guard returns `empty` (symbolKinds=null, keywords=[], operators=[])
@@ -707,7 +711,11 @@ export function analyzeCompletion(
     }
   }
 
-  if (prevLeaf?.type === "->" && prevLeaf.parent?.type === "ERROR") {
+  if (
+    prevLeaf?.type === "->" &&
+    prevLeaf.parent?.type === "ERROR" &&
+    prevLeaf.endIndex < cursorOffset
+  ) {
     let n: SyntaxNode | null = prevLeaf.parent;
     while (n) {
       if (n.type === "state_machine" || n.type === "statemachine_definition") {
@@ -874,10 +882,6 @@ export function analyzeCompletion(
         const segArrowIdxInSeg = segment.findIndex(isArrow);
         const prevInSeg = segment.length - 1; // prevIdx in segment terms
 
-        const contentLines = content.split("\n");
-        let cursorOffset = 0;
-        for (let li = 0; li < line; li++) cursorOffset += contentLines[li].length + 1;
-        cursorOffset += column;
         const last = segment[prevInSeg];
         const onlyOneCompleteMultAtCursor =
           segment.length === 1 &&
@@ -898,7 +902,9 @@ export function analyzeCompletion(
 
           if (isArrow(last)) {
             // Standalone slot 2: `1 Other -> |` needs right multiplicity.
-            if (hasLeftMult && hasLeftType) {
+            if (last.endIndex === cursorOffset) {
+              symbolKinds = null;
+            } else if (hasLeftMult && hasLeftType) {
               symbolKinds = "association_multiplicity";
             } else if (hasLeftMult) {
               // Recovery for malformed `association { 1 -> | }`: the left
@@ -931,7 +937,9 @@ export function analyzeCompletion(
           }
         } else if (isArrow(segment[prevInSeg])) {
           // Inline slot 1: cursor IS an arrow -> right-multiplicity slot.
-          if (segment.slice(0, prevInSeg).some(mightBeMult)) {
+          if (segment[prevInSeg].endIndex === cursorOffset) {
+            symbolKinds = null;
+          } else if (segment.slice(0, prevInSeg).some(mightBeMult)) {
             symbolKinds = "association_multiplicity";
           }
         } else if (segArrowIdxInSeg >= 0
@@ -1670,6 +1678,15 @@ function isBareCompleteMultiplicityAtEnd(
     p = p.parent;
   }
   return false;
+}
+
+function offsetAt(content: string, line: number, column: number): number {
+  const lines = content.split("\n");
+  let offset = 0;
+  for (let i = 0; i < line && i < lines.length; i++) {
+    offset += lines[i].length + 1;
+  }
+  return offset + Math.min(column, lines[line]?.length ?? 0);
 }
 
 function findPreviousLeaf(

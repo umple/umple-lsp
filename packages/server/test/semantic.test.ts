@@ -4626,6 +4626,11 @@ const TEST_CASES: TestCase[] = [
           "namespace", "abstract", "singleton",
         ],
       },
+      {
+        type: "completion_kinds",
+        at: "class_body_after_arrow_no_space",
+        expect: null,
+      },
 
       // Slot 2: right-type after the right multiplicity plus a separating space.
       {
@@ -4682,6 +4687,11 @@ const TEST_CASES: TestCase[] = [
         at: "state_body_arrow",
         expect: "transition_target",
       },
+      {
+        type: "completion_kinds",
+        at: "state_body_arrow_no_space",
+        expect: null,
+      },
 
       // Cascade — top-level `association { }` block with three standalone
       // partial associations collapsed into one ERROR. All three slots must
@@ -4700,6 +4710,11 @@ const TEST_CASES: TestCase[] = [
         type: "completion_excludes",
         at: "assoc_block_after_arrow",
         expect: ["isA", "namespace", "class", "Java", "ERROR"],
+      },
+      {
+        type: "completion_kinds",
+        at: "assoc_block_after_arrow_no_space",
+        expect: null,
       },
       {
         type: "completion_kinds",
@@ -6825,7 +6840,7 @@ async function main() {
   {
     const testName = "completion_triggers: advertise structural retriggers";
     try {
-      const expected = ["/", ".", "-", ">", ",", "<", "@", "(", " "];
+      const expected = ["/", ".", "-", ",", "<", "@", "(", " "];
       const actual: string[] = [...COMPLETION_TRIGGER_CHARACTERS];
       for (const ch of expected) {
         if (!actual.includes(ch)) {
@@ -6837,6 +6852,9 @@ async function main() {
       }
       if (actual.includes("*")) {
         throw new Error("Star should not be advertised as a trigger; class names need a whitespace boundary");
+      }
+      if (actual.includes(">")) {
+        throw new Error("Greater-than should not be advertised as a trigger; next slots need a whitespace boundary");
       }
       if (!shouldServeWhitespaceTriggeredCompletion("association_type")) {
         throw new Error("Whitespace trigger should be served for association_type");

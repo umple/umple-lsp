@@ -8,15 +8,14 @@ import type { CompletionInfo } from "./completionAnalysis";
  * user is typing. Space is intentionally included for Umple's structural slots
  * such as `association { 1 | }`, `1 -> |`, and `1 -> * |`.
  *
- * Deliberately do not advertise "*" as a trigger. In association multiplicity
- * syntax, "*" completes the current multiplicity token; class-name completion
- * should wait until the user types the separating space.
+ * Deliberately do not advertise token-finishing characters such as ">" or
+ * "*". In association syntax, they complete the current arrow/multiplicity
+ * token; next-slot completion should wait until the separating space.
  */
 export const COMPLETION_TRIGGER_CHARACTERS = [
   "/",
   ".",
   "-",
-  ">",
   ",",
   "<",
   "@",
