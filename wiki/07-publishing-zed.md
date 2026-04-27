@@ -33,6 +33,8 @@ src/lib.rs                       ← Rust glue: at extension load, calls
 
 So bumping the `rev` makes Zed pull a different parser.c from umple-lsp; copying highlights.scm makes Zed re-color tokens; new LSP server features arrive via npm without any Zed extension change.
 
+Zed primarily uses its local tree-sitter grammar and `languages/umple/highlights.scm` for highlighting. The server's LSP semantic tokens are still useful as a cross-editor fallback, but Zed highlighting fixes should normally start in `packages/tree-sitter-umple/queries/highlights.scm`; the sync workflow then copies that file into `umple.zed`. Touch `umple.zed` code only when extension loading, npm server download, grammar pinning, or Zed-specific language registration changes.
+
 ## The auto-sync workflow
 
 We have CI in this repo (`.github/workflows/sync-umple-zed.yml`) that automates parts 1 and 2 of the umple.zed update. See [10-ci-automation.md](10-ci-automation.md) for the workflow's full design.
@@ -117,6 +119,8 @@ Hard to test locally without publishing. Two options:
   CARGO_TARGET_DIR=/tmp/umple-zed-target cargo build --release --target wasm32-wasip2
   # success means the Rust glue is compileable. Doesn't test it actually runs.
   ```
+
+For highlighting changes, inspect a `.ump` file visually in the dev extension and confirm `languages/umple/highlights.scm` in `umple.zed` matches the source query in this repo. For server-only semantic-token changes, publish the npm package first; the Zed extension downloads the latest server at runtime.
 
 The `CARGO_TARGET_DIR=/tmp/...` workaround sidesteps an iCloud Drive issue we hit where cargo's `target/` inside iCloud caused multi-hour build hangs. See [12-gotchas.md](12-gotchas.md).
 

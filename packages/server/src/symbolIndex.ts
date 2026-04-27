@@ -21,6 +21,7 @@ export type { SymbolKind, LookupContext, DottedStateRef, StateDefinitionRef, Tok
 export type { SymbolEntry, UseStatementWithPosition, ReferenceLocation } from "./symbolTypes";
 import type { SymbolKind, TokenResult } from "./tokenTypes";
 import type { SymbolEntry, ReferenceLocation, UseStatementWithPosition } from "./symbolTypes";
+import type { HighlightCapture } from "./semanticTokens";
 import { SYMBOL_KINDS_LONGEST_FIRST, stripLayoutTail } from "./tokenTypes";
 import { resolveEnclosingScope, resolveStatePath, stripSmPrefix } from "./treeUtils";
 import { analyzeToken } from "./tokenAnalysis";
@@ -42,6 +43,7 @@ export class SymbolIndex {
   private referencesQuery: Query | null = null;
   private definitionsQuery: Query | null = null;
   private completionsQuery: Query | null = null;
+  private highlightsQuery: Query | null = null;
   private files: Map<string, FileIndex> = new Map();
   private symbolsByContainer: Map<string, SymbolEntry[]> = new Map();
   // Per-file isA relationships (for cleanup when a file is re-indexed)
@@ -91,6 +93,13 @@ export class SymbolIndex {
       if (fs.existsSync(completionsScmPath)) {
         const src = fs.readFileSync(completionsScmPath, "utf-8");
         this.completionsQuery = new TreeSitter.Query(this.language, src);
+      }
+
+      const highlightsScmPath =
+        this.resolveQueryPath(queryDir, "highlights.scm");
+      if (highlightsScmPath) {
+        const src = fs.readFileSync(highlightsScmPath, "utf-8");
+        this.highlightsQuery = new TreeSitter.Query(this.language, src);
       }
 
       this.initialized = true;
@@ -364,6 +373,12 @@ export class SymbolIndex {
    */
   getTree(filePath: string): Tree | null {
     return this.files.get(filePath)?.tree ?? null;
+  }
+
+  getHighlightCaptures(filePath: string): HighlightCapture[] {
+    const tree = this.files.get(filePath)?.tree;
+    if (!tree || !this.highlightsQuery) return [];
+    return this.highlightsQuery.captures(tree.rootNode) as HighlightCapture[];
   }
 
   /** Get the direct isA parents for a class name. */
@@ -907,6 +922,22 @@ export class SymbolIndex {
     } catch {
       return null;
     }
+  }
+
+  private resolveQueryPath(queryDir: string, fileName: string): string | null {
+    const copied = path.join(queryDir, fileName);
+    if (fs.existsSync(copied)) return copied;
+
+    // Developer fallback: package tests can run before `npm run copy-wasm`
+    // creates the server-side query copy.
+    const source = path.resolve(
+      queryDir,
+      "../tree-sitter-umple/queries",
+      fileName,
+    );
+    if (fs.existsSync(source)) return source;
+
+    return null;
   }
 
   private removeFileSymbols(filePath: string): void {

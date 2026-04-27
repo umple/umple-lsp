@@ -74,9 +74,7 @@ For syntax highlighting, register the TextMate grammar via the **TextMate Bundle
 
 ### Why TextMate grammar instead of tree-sitter
 
-IntelliJ has its own native LSP support (commercial editions only) that's incompatible with LSP4IJ. We picked LSP4IJ because it works in Community Edition. Native IntelliJ LSP4IJ doesn't currently use tree-sitter; it leans on LSP semantic tokens. We provide a TextMate grammar as a fallback for token-level syntax highlighting because LSP4IJ doesn't request semantic tokens from us yet.
-
-If/when LSP4IJ supports semantic tokens out of the box, we can drop the TextMate grammar and just emit semantic tokens from the server.
+IntelliJ has its own native LSP support (commercial editions only) that's incompatible with LSP4IJ. We picked LSP4IJ because it works in Community Edition. Native IntelliJ/LSP4IJ does not use tree-sitter directly, so the server now emits LSP semantic tokens from `highlights.scm`. The TextMate grammar remains a fallback for clients or themes that do not consume semantic tokens.
 
 ### Why no rename
 

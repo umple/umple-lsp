@@ -55,6 +55,7 @@ The known array-fallback completion leaks have all been closed:
 - Find-implementations on traits — topic 059 (`textDocument/implementation` returns direct/transitive class/trait implementers for trait targets)
 - CI build/test workflow — topic 060 (`.github/workflows/ci.yml` runs `npm install`, downloads `umplesync.jar`, and executes root `npm test`)
 - Workspace symbol search — topic 061 (`workspace/symbol` returns qualified classes, traits, requirements, state machines, states, methods, attributes, associations, and enums across indexed workspace files)
+- LSP semantic tokens — topic 064 (`textDocument/semanticTokens/full` maps `highlights.scm` captures into an LSP legend for editors that do not load tree-sitter queries directly)
 
 ### How to add new completion slots
 
@@ -80,6 +81,7 @@ Deliberate defers (documented for future contributors):
 - Random W1006 / E1502 lines that don't match a known statement shape (`unrecognized stuff here`, filter `bogus X`, incomplete `e ->`).
 - `hops { … }` filter blocks — already clean syntax; appending `;` would BREAK them.
 - Multiple unterminated filter statements in the same block — E1502 doesn't tell us which one to fix, so we emit no action rather than guess.
+- Association blocks with two standalone ends (`0..2 PersonRole;` + `1 Person;`) — converting that to `0..2 PersonRole -- 1 Person;` is a semantic rewrite, not a likely typo fix.
 - Java action bodies with nested `{ … { … } … }` braces inside a transition — single-line classifier rejects nested braces; rare in practice.
 
 Future code-action ideas (not yet implemented):
@@ -98,10 +100,6 @@ LSP supports inlay hints — small annotations rendered between tokens. Could sh
 - Inferred attribute type for `x = 5;` → `Integer`
 - Multiplicity defaults: `1 -> Foo;` → `1 -> 1 Foo`
 - Trait template parameter substitutions
-
-### Semantic tokens
-
-We rely on tree-sitter for syntax highlighting in editors that load `highlights.scm`. For editors that use LSP semantic tokens (most JetBrains via LSP4IJ), we don't emit any. Adding semantic token support would unify highlighting across editors.
 
 ### Workspace-wide rename safety
 

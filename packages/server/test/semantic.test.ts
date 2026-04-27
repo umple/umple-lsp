@@ -20,6 +20,17 @@ import {
   COMPLETION_TRIGGER_CHARACTERS,
   shouldServeWhitespaceTriggeredCompletion,
 } from "../src/completionTriggers";
+import {
+  buildSemanticTokenEntries,
+  buildSemanticTokens,
+  SemanticTokenEntry,
+  UmpleSemanticTokenModifier,
+  UmpleSemanticTokenType,
+} from "../src/semanticTokens";
+import {
+  LEGACY_UMPLE_DIAGNOSTIC_SOURCE,
+  UMPLE_DIAGNOSTIC_SOURCE,
+} from "../src/diagnosticSources";
 
 // ── Assertion types ──────────────────────────────────────────────────────────
 
@@ -6857,6 +6868,107 @@ async function main() {
     }
   }
 
+  // ── Semantic tokens ─────────────────────────────────────────────────────
+  // Real tree-sitter highlight-query captures, mapped into the LSP semantic
+  // token legend. This pins the server-side highlighting path used by editors
+  // that do not load highlights.scm directly.
+  {
+    const testName = "semantic_tokens: highlight query maps core Umple tokens";
+    try {
+      const filePath = "/tmp/semantic_tokens_probe.ump";
+      const content = [
+        "class Person {",
+        "  Integer age;",
+        "  void setAge(Integer value) { }",
+        "  status {",
+        "    Open { close -> Closed; }",
+        "    Closed {}",
+        "  }",
+        "}",
+        "// comment",
+      ].join("\n");
+      helper.si.indexFile(filePath, content);
+
+      const captures = helper.si.getHighlightCaptures(filePath);
+      const entries = buildSemanticTokenEntries(captures);
+      const encoded = buildSemanticTokens(captures);
+      if (entries.length === 0) {
+        throw new Error("expected semantic token entries, got none");
+      }
+      if (encoded.data.length !== entries.length * 5) {
+        throw new Error(
+          `encoded data length ${encoded.data.length} does not match entry count ${entries.length}`,
+        );
+      }
+
+      const lines = content.split("\n");
+      function tokenText(entry: SemanticTokenEntry): string {
+        return lines[entry.line].slice(
+          entry.character,
+          entry.character + entry.length,
+        );
+      }
+      function hasToken(
+        text: string,
+        type: UmpleSemanticTokenType,
+        modifier?: UmpleSemanticTokenModifier,
+      ): boolean {
+        return entries.some(
+          (entry) =>
+            tokenText(entry) === text &&
+            entry.tokenType === type &&
+            (!modifier || entry.tokenModifiers.includes(modifier)),
+        );
+      }
+
+      const expected: Array<[
+        string,
+        UmpleSemanticTokenType,
+        UmpleSemanticTokenModifier?,
+      ]> = [
+        ["class", "keyword"],
+        ["Person", "class", "definition"],
+        ["Integer", "type", "defaultLibrary"],
+        ["age", "property"],
+        ["setAge", "method"],
+        ["value", "parameter"],
+        ["Open", "variable", "readonly"],
+        ["close", "event"],
+        ["// comment", "comment"],
+      ];
+      for (const [text, type, modifier] of expected) {
+        if (!hasToken(text, type, modifier)) {
+          throw new Error(
+            `missing semantic token ${text}:${type}${modifier ? `:${modifier}` : ""}; got ${entries.map((entry) => `${tokenText(entry)}:${entry.tokenType}:${entry.tokenModifiers.join("+")}`).join(", ")}`,
+          );
+        }
+      }
+
+      for (let i = 1; i < entries.length; i++) {
+        const prev = entries[i - 1];
+        const curr = entries[i];
+        if (
+          curr.line < prev.line ||
+          (curr.line === prev.line && curr.character < prev.character)
+        ) {
+          throw new Error(`semantic token entries are not sorted at index ${i}`);
+        }
+        if (
+          curr.line === prev.line &&
+          curr.character < prev.character + prev.length
+        ) {
+          throw new Error(`semantic token entries overlap at index ${i}`);
+        }
+      }
+
+      console.log(`  PASS  ${testName}`);
+      passed++;
+    } catch (e: any) {
+      console.log(`  FAIL  ${testName}: ${e.message}`);
+      failed++;
+    }
+  }
+
   // ── Direct programmatic test: recovery lifecycle ──────────────────────────
   // Exercises: broken open → recovered, clean edit → not recovered, broken again → recovered
   {
@@ -7869,7 +7981,7 @@ async function main() {
     } = require("vscode-languageserver/node");
 
     const URI = "file:///tmp/code_actions_probe.ump";
-    const SOURCE = "umple";
+    const SOURCE = UMPLE_DIAGNOSTIC_SOURCE;
 
     function makeDoc(text: string): any {
       return TextDocument.create(URI, "umple", 1, text);
@@ -7940,6 +8052,10 @@ async function main() {
       // Negative — non-umple source.
       { name: "non-umple source", text: "class A {\n  Integer x\n}\n", diagLine: 1, code: "W1007", source: "other-linter", expectActions: 0 },
 
+      // Negative — association-end rewrites are too semantic for a quick fix.
+      { name: "association block two standalone ends E1502", text: "class Person {}\nclass PersonRole {}\nassociation {\n  0..2 PersonRole;\n  1 Person;\n}\n", diagLine: 2, code: "E1502", severity: DiagnosticSeverity.Error, expectActions: 0 },
+      { name: "association block two standalone ends E1505", text: "association {\n  0..2 PersonRole;\n  1 Person;\n}\nclass PersonRole {}\nclass Person {}\n", diagLine: 0, code: "E1505", severity: DiagnosticSeverity.Error, expectActions: 0 },
+
       // Negative — diagnostic line out of range.
       { name: "diag line out of range", text: "class A {}\n", diagLine: 99, code: "W1007", expectActions: 0 },
 
@@ -7959,6 +8075,9 @@ async function main() {
 
       // Positive — a second association shape (codex confirmed clean).
       { name: "association `1 -> * B`", text: "class B {}\nclass A {\n  1 -> * B\n}\n", diagLine: 2, code: "W1007", expectActions: 1, expectInsertCol: 10 },
+
+      // Positive — diagnostics from older server builds used source `umple`.
+      { name: "legacy umple diagnostic source", text: "class A {\n  Integer x\n}\n", diagLine: 1, code: "W1007", source: LEGACY_UMPLE_DIAGNOSTIC_SOURCE, expectActions: 1, expectInsertCol: 11 },
     ];
 
     for (const c of cases) {
@@ -8108,7 +8227,7 @@ async function main() {
     } = require("vscode-languageserver/node");
 
     const URI = "file:///tmp/code_actions_057.ump";
-    const SOURCE = "umple";
+    const SOURCE = UMPLE_DIAGNOSTIC_SOURCE;
 
     function makeDoc(text: string): any {
       return TextDocument.create(URI, "umple", 1, text);

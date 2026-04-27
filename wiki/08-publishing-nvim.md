@@ -7,6 +7,8 @@ The plugin's job is two-fold:
 1. **Wire Neovim's built-in LSP client to `umple-lsp-server`** (downloaded from npm during plugin build)
 2. **Register the tree-sitter parser** with `nvim-treesitter` for syntax highlighting
 
+Neovim normally highlights Umple through tree-sitter, not LSP semantic tokens. The server still advertises semantic tokens for clients that want them, but `umple.nvim`'s visible highlighting depends on `tree-sitter-umple/queries/highlights.scm` and the compiled parser. Fix server semantics in `umple-lsp`; fix Neovim parser/query installation or stale cache behavior in `umple.nvim`.
+
 ## Repo details
 
 - **Repo:** github.com/umple/umple.nvim
@@ -101,6 +103,15 @@ ln -sf ../../umple-lsp/packages/tree-sitter-umple umple.nvim/tree-sitter-umple
 ```
 
 After grammar.js edits + `npm run compile`, in nvim run `:TSInstall umple` to recompile the native parser from the freshly regenerated parser.c.
+
+After `highlights.scm` edits, restart Neovim or reload the buffer. If colors still look stale, check:
+
+```vim
+:echo nvim_get_runtime_file('queries/umple/highlights.scm', v:true)
+:echo nvim_get_runtime_file('parser/umple.so', v:true)
+```
+
+The plugin repairs stale query symlinks on startup, but a stale compiled parser still requires `:TSInstall umple`.
 
 **Don't** commit symlinks. They're dev-machine-local; the build script handles real installs.
 

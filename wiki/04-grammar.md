@@ -39,7 +39,7 @@ tree-sitter-umple.wasm
     │
     ▼ npm run copy-wasm
 packages/server/tree-sitter-umple.wasm
-packages/server/{definitions,references,completions}.scm
+packages/server/{definitions,references,completions,highlights}.scm
     │
     ▼ tsc -b
 packages/server/out/*.js (consumes the WASM at runtime)
@@ -100,6 +100,12 @@ Tree-sitter's `#match?` predicate works in queries but not in grammar rules. So 
 
 If a syntax change is non-trivial, paste examples into try.umple.org to confirm the official compiler accepts them. Our grammar should not be **stricter** than the compiler (else valid Umple gets rejected) and should be **as close as possible** to its acceptance set without over-permitting (over-permitting just creates parse trees nobody can interpret).
 
+Parser acceptance is not the same as compiler acceptance. Some recovery-oriented
+grammar support is useful so LSP features keep working while users type, but it
+must not be treated as proof that the model is valid Umple. Diagnostics come from
+`umplesync.jar`, so an `umple compiler` diagnostic is expected whenever the
+official compiler rejects syntax that tree-sitter can still parse.
+
 ## The four query files
 
 All `.scm` files use [tree-sitter's S-expression query syntax](https://tree-sitter.github.io/tree-sitter/using-parsers#pattern-matching-with-queries).
@@ -148,7 +154,7 @@ Other capture names are parsed by underscore-splitting into `SymbolKind[]` and u
 
 ### highlights.scm
 
-Editor-side syntax highlighting. Loaded by Zed (from its own `languages/umple/highlights.scm` copy synced from this file) and Neovim (via the symlinked queries directory in `umple.nvim`). The LSP server itself doesn't read highlights.scm.
+Syntax highlighting query. Loaded by Zed (from its own `languages/umple/highlights.scm` copy synced from this file), Neovim (via the symlinked queries directory in `umple.nvim`), and the LSP server for `textDocument/semanticTokens/full`.
 
 Capture names are tree-sitter convention: `@keyword`, `@type`, `@variable`, `@string`, `@comment`, `@punctuation.bracket`, etc. Each editor maps these to its theme.
 

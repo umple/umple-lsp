@@ -27,6 +27,7 @@ import {
   WorkspaceEdit,
 } from "vscode-languageserver/node";
 import { TextDocument } from "vscode-languageserver-textdocument";
+import { isUmpleDiagnosticSource } from "./diagnosticSources";
 
 const W1007 = "W1007";
 const W1006 = "W1006";
@@ -58,7 +59,7 @@ function buildSemicolonAction(
   lines: string[],
   diag: Diagnostic,
 ): CodeAction | null {
-  if (diag.source !== "umple") return null;
+  if (!isUmpleDiagnosticSource(diag.source)) return null;
   if (diag.message?.startsWith("In imported file")) return null;
 
   if (diag.code === W1007) {

@@ -1,6 +1,6 @@
 {
   "name": "umple-lsp-server",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "Language Server Protocol implementation for the Umple modeling language",
   "main": "out/server.js",
   "bin": {
@@ -12,7 +12,8 @@
     "tree-sitter-umple.wasm",
     "references.scm",
     "definitions.scm",
-    "completions.scm"
+    "completions.scm",
+    "highlights.scm"
   ],
   "scripts": {
     "compile": "tsc -p .",

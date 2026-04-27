@@ -25,6 +25,7 @@ packages/server/tree-sitter-umple.wasm
 packages/server/references.scm
 packages/server/definitions.scm
 packages/server/completions.scm
+packages/server/highlights.scm
 
 # Test build output
 .test-out/

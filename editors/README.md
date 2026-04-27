@@ -4,9 +4,9 @@ Editors with full plugin support have their own repos. Editors that only need LS
 
 | Editor | Setup | Diagnostics | Go-to-def | Completion | Syntax Highlighting |
 |--------|-------|-------------|-----------|------------|---------------------|
-| [VS Code](vscode/) | [Separate repo](https://github.com/umple/umple.vscode) | ✅ | ✅ | ✅ | ✅ (TextMate) |
+| [VS Code](vscode/) | [Separate repo](https://github.com/umple/umple.vscode) | ✅ | ✅ | ✅ | ✅ (TextMate + semantic tokens) |
 | [Neovim](neovim/) | [Separate repo](https://github.com/umple/umple.nvim) | ✅ | ✅ | ✅ | ✅ (tree-sitter) |
-| [Zed](zed/) | [Separate repo](https://github.com/umple/umple.zed) | ✅ | ✅ | ✅ | ✅ |
+| [Zed](zed/) | [Separate repo](https://github.com/umple/umple.zed) | ✅ | ✅ | ✅ | ✅ (tree-sitter) |
 | [Sublime Text](sublime/) | Config in this repo | ✅ | ✅ | ✅ | ⚠️ (basic regex) |
 | [BBEdit](bbedit/) | Config in this repo | ✅ | ✅ | ✅ | ⚠️ (codeless language module) |
 
@@ -39,8 +39,20 @@ Your Editor
     │
     └─ (stdio) ─→ server.js ─→ umplesync.jar (diagnostics)
                      │
-                     └─ tree-sitter (go-to-definition, lazy indexing)
+                     └─ tree-sitter (go-to-definition, completion,
+                                      references, rename, hover,
+                                      formatting, symbols, semantic tokens)
 ```
+
+## Where Features Live
+
+Core language behavior belongs in this repo, not in the editor wrappers:
+
+- `packages/server`: diagnostics, completion, hover, go-to-definition, references, rename, formatting, workspace symbols, code actions, and LSP semantic tokens
+- `packages/tree-sitter-umple`: parser and query files such as `highlights.scm`
+- `umple.vscode`, `umple.nvim`, `umple.zed`: editor install/runtime wrappers, packaging, editor-specific UI, cache handling, and grammar sync
+
+For highlighting, fix shared tree-sitter captures in `packages/tree-sitter-umple/queries/highlights.scm` first. VS Code can additionally show LSP semantic tokens mapped in `packages/server/src/semanticTokens.ts`; Neovim and Zed primarily show the tree-sitter highlight query from their local/synced grammar copy.
 
 ## Initialization Options
 

@@ -19,6 +19,7 @@ tree-sitter-umple.wasm     — bundled grammar (copied from packages/tree-sitter
 references.scm             — copied at build time
 definitions.scm            — copied at build time
 completions.scm            — copied at build time
+highlights.scm             — copied at build time for LSP semantic tokens
 package.json
 README (if present)
 ```

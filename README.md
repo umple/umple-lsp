@@ -18,9 +18,18 @@ A Language Server Protocol implementation for the [Umple](https://www.umple.org)
 - **Document symbols** - Hierarchical outline of classes, state machines, states, attributes, methods
 - **Formatting** - AST-driven indent correction, arrow spacing, blank-line normalization, compact state expansion
 - **Syntax highlighting** - Tree-sitter grammar for accurate highlighting
+- **Semantic tokens** - LSP semantic highlighting for editors that do not load tree-sitter queries directly
 - **Cross-file support** - Transitive `use` statement resolution and cross-file diagnostics
 - **Import error reporting** - Errors in imported files shown on the `use` statement line
 - **Diagram navigation** - Custom LSP requests (`umple/resolveStateLocation`, `umple/resolveTransitionLocation`) for click-to-select in UML diagrams
+
+### Parser vs compiler diagnostics
+
+The LSP has two independent layers. Tree-sitter powers parsing, symbols,
+completion, formatting, and editor highlighting; `umplesync.jar` remains the
+authoritative compiler check for diagnostics. A construct can parse well enough
+for LSP features and still receive an `umple compiler` diagnostic if the official
+compiler rejects it.
 
 ## Umple Grammar Coverage
 
@@ -126,6 +135,7 @@ umple-lsp/
 │   │   │   ├── referenceSearch.ts     # Find-references semantic matching
 │   │   │   ├── hoverBuilder.ts        # Hover markdown content builders
 │   │   │   ├── documentSymbolBuilder.ts # Document outline (symbol hierarchy)
+│   │   │   ├── semanticTokens.ts      # LSP semantic-token legend and highlight-query mapping
 │   │   │   ├── formatter.ts           # Document formatting (indent, spacing, expansion)
 │   │   │   ├── formatRules.ts         # Formatting node classification
 │   │   │   ├── formatSafetyNet.ts     # Pre/post symbol-set check; aborts unsafe formats
@@ -158,6 +168,7 @@ Editor Plugin (separate repos)
                      ├── referenceSearch.ts (find-references)
                      ├── hoverBuilder.ts (hover content)
                      ├── documentSymbolBuilder.ts (outline)
+                     ├── semanticTokens.ts (LSP semantic highlighting)
                      ├── formatter.ts (formatting)
                      ├── diagramNavigation.ts + diagramRequests.ts (diagram clicks)
                      └── tokenAnalysis.ts + treeUtils.ts (shared analysis)

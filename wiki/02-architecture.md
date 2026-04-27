@@ -15,6 +15,7 @@ packages/server/src/
 ├── referenceSearch.ts         ← findReferences() with semantic disambiguation
 ├── hoverBuilder.ts            ← Markdown hover assembly per SymbolKind
 ├── documentSymbolBuilder.ts   ← Flat SymbolEntry[] → nested DocumentSymbol[]
+├── semanticTokens.ts           ← LSP semantic-token legend + highlights.scm capture mapping
 ├── formatter.ts               ← Indent/spacing/blank-line/embedded-code passes
 ├── formatRules.ts             ← Node classification used by the formatter
 ├── formatSafetyNet.ts         ← Pre/post symbol-set comparison; aborts if format breaks semantics
@@ -61,6 +62,13 @@ Server startup sequence (`server.ts`):
 3. Parse JSON output → LSP diagnostics
 4. Map filenames: errors in directly imported files appear on the `use` statement line; transitively imported errors also surface on the direct `use` line
 
+Diagnostics are compiler-authoritative and editor-independent. Tree-sitter parse
+success does not suppress `umplesync.jar` errors: the parser can recover enough
+structure for symbols, completion, and highlighting while the compiler still
+rejects the model. New diagnostics are published with source `umple compiler`;
+the server still accepts the legacy source `umple` for code-action
+compatibility.
+
 Debounced (500ms default). Re-runs when any file in a chain changes (forward + reverse importer set).
 
 ### Symbol resolution
@@ -90,6 +98,15 @@ The scope detection uses two complementary mechanisms:
 - **`prevLeaf`-based fallbacks** in `completionAnalysis.ts` — for cursor positions the parser hasn't yet committed to a real node (empty bodies, partial associations, slots between tokens)
 
 The `prevLeaf` pattern handles tree-sitter's LR(1) limitations gracefully without grammar contortions. Search `completionAnalysis.ts` for `prevLeaf?.type ===` to see all the recovery branches.
+
+### Semantic tokens
+
+`textDocument/semanticTokens/full` uses the same `highlights.scm` query that
+tree-sitter-based editors consume. `SymbolIndex` loads that query beside
+`definitions.scm`, `references.scm`, and `completions.scm`; `semanticTokens.ts`
+maps captures such as `@type.definition`, `@variable.member`, and `@keyword` to
+an LSP semantic-token legend. This gives editors that rely on LSP tokens a
+server-side highlighting path without duplicating grammar rules.
 
 ### Find references
 
@@ -141,7 +158,7 @@ There's no `getSymbolsByName` / `getSymbolsByContainer` etc. — one query inter
 
 ## Tree-sitter integration
 
-Server loads `tree-sitter-umple.wasm` (copied from the grammar package at build time) via `web-tree-sitter`. The four `.scm` query files (`definitions.scm`, `references.scm`, `completions.scm`, plus `highlights.scm` shipped to editors) are also copied into the server package.
+Server loads `tree-sitter-umple.wasm` (copied from the grammar package at build time) via `web-tree-sitter`. The four `.scm` query files (`definitions.scm`, `references.scm`, `completions.scm`, and `highlights.scm`) are also copied into the server package.
 
 Parser is instantiated once per `SymbolIndex`. Per-file: parse → store `Tree` → run query → extract `SymbolEntry[]`. Content-hash caching skips re-parse when content hasn't changed.
 
@@ -167,6 +184,11 @@ For accurate cross-file diagnostics the server creates a **shadow workspace** pe
 4. Map errors back to the real files; errors in transitively imported files surface on the direct `use` line, prefixed with `In imported file (X:line):`
 
 Concurrent validations are aborted via `AbortController` so only the latest request's results win.
+
+The diagnostics pipeline intentionally does not consult tree-sitter ERROR nodes
+when deciding whether to report a model error. Parser coverage and compiler
+validity are related but separate signals; fixing a parser gap should improve LSP
+features without hiding compiler diagnostics.
 
 ## Formatter
 

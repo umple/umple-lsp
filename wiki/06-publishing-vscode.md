@@ -2,6 +2,13 @@
 
 The VS Code extension is a thin wrapper. It **bundles** `umple-lsp-server` inside the `.vsix` at packaging time, ships a TextMate grammar for syntax highlighting, plus snippets and a command palette entry. Most user-facing improvements come from the LSP server, so the extension itself rarely needs new code — but **every time you ship new server features you must repackage + republish the extension**. Unlike Zed (which downloads the latest npm at runtime), VS Code users receive only what was bundled when the .vsix was built.
 
+Highlighting now has two possible sources in VS Code:
+
+- The extension's TextMate grammar still provides baseline syntax scopes.
+- The server also advertises `textDocument/semanticTokens/full`, backed by `packages/tree-sitter-umple/queries/highlights.scm`.
+
+So most highlighting fixes belong in `umple-lsp` (`highlights.scm` or `semanticTokens.ts`) and then require a new bundled server inside the `.vsix`. Only touch `umple.vscode` itself when the extension manifest, TextMate grammar, activation, commands, snippets, or server launch wiring must change.
+
 ## Package details
 
 - **Repo:** github.com/umple/umple.vscode
@@ -68,6 +75,8 @@ npx vsce package
 # G. Sanity check: install the .vsix locally first
 # In VS Code: Extensions panel → … menu → Install from VSIX...
 # Open a .ump file, verify completion / hover / goto-def work
+# For highlighting changes, also run "Developer: Inspect Editor Tokens and Scopes"
+# and check semantic token entries such as class/type/property/method.
 
 # H. Publish to marketplace
 npx vsce publish --packagePath umple-<X.Y.Z>.vsix

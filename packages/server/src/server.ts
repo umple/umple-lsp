@@ -17,6 +17,7 @@ import {
   InitializeResult,
   Location,
   ProposedFeatures,
+  SemanticTokens,
   SymbolKind,
   TextDocumentSyncKind,
   TextEdit,
@@ -60,6 +61,11 @@ import {
   COMPLETION_TRIGGER_CHARACTERS,
   shouldServeWhitespaceTriggeredCompletion,
 } from "./completionTriggers";
+import { UMPLE_DIAGNOSTIC_SOURCE } from "./diagnosticSources";
+import {
+  buildSemanticTokens,
+  UMPLE_SEMANTIC_TOKENS_LEGEND,
+} from "./semanticTokens";
 
 // Handle CLI flags before opening the LSP connection. Editor integrations
 // always spawn the server with `--stdio` and never pass these flags, so the
@@ -415,10 +421,14 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
       hoverProvider: true,
       documentSymbolProvider: true,
       workspaceSymbolProvider: true,
+      semanticTokensProvider: {
+        legend: UMPLE_SEMANTIC_TOKENS_LEGEND,
+        full: true,
+        range: false,
+      },
       documentFormattingProvider: true,
-      // Topic 056 — quick-fix code actions (currently only `Add missing
-      // semicolon`; gated on diagnostic.code === W1007 plus a
-      // shape-whitelist classifier).
+      // Quick-fix code actions. Pure classifiers live in codeActions.ts and
+      // are gated on compiler diagnostic codes plus shape whitelists.
       codeActionProvider: {
         codeActionKinds: [CodeActionKind.QuickFix],
         resolveProvider: false,
@@ -1239,6 +1249,17 @@ connection.onWorkspaceSymbol(async (params): Promise<SymbolInformation[]> => {
   return buildWorkspaceSymbols(symbolIndex.getAllSymbols(), params.query);
 });
 
+connection.languages.semanticTokens.on(async (params): Promise<SemanticTokens> => {
+  const document = getDocument(params.textDocument.uri);
+  if (!document || !symbolIndexReady) return { data: [] };
+
+  const docPath = getDocumentFilePath(document);
+  if (!docPath) return { data: [] };
+
+  symbolIndex.updateFile(docPath, document.getText());
+  return buildSemanticTokens(symbolIndex.getHighlightCaptures(docPath));
+});
+
 // ── Formatting ──────────────────────────────────────────────────────────────
 
 connection.onDocumentFormatting(async (params) => {
@@ -1342,8 +1363,8 @@ connection.onDocumentFormatting(async (params) => {
   ];
 });
 
-// Topic 056 — quick-fix code actions. Pure logic lives in `codeActions.ts`;
-// this handler just routes the diagnostics the client already received.
+// Quick-fix code actions. Pure logic lives in `codeActions.ts`; this handler
+// just routes the diagnostics the client already received.
 connection.onCodeAction(async (params): Promise<CodeAction[]> => {
   const document = getDocument(params.textDocument.uri);
   if (!document) return [];
@@ -1992,7 +2013,7 @@ function parseUmpleJsonDiagnostics(
               Position.create(useLine, useLineText.length),
             ),
             message,
-            source: "umple",
+            source: UMPLE_DIAGNOSTIC_SOURCE,
             ...(errorCode ? { code: errorCode } : {}),
           });
         }
@@ -2018,7 +2039,7 @@ function parseUmpleJsonDiagnostics(
           Position.create(lineNumber, lineText.length),
         ),
         message: details.join(": "),
-        source: "umple",
+        source: UMPLE_DIAGNOSTIC_SOURCE,
         ...(errorCode ? { code: errorCode } : {}),
       });
     }
