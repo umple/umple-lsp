@@ -740,6 +740,19 @@ const TEST_CASES: TestCase[] = [
     ],
   },
 
+  // 145: Corpus gap — class and trait bodies can apply an inline mixset to
+  // a named element or keyword target.
+  {
+    name: "145 corpus: inline mixset applications parse clean",
+    fixtures: ["145_corpus_inline_mixset_application.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "145_corpus_inline_mixset_application.ump" },
+      { type: "symbol_count", fixture: "145_corpus_inline_mixset_application.ump", name: "X", kind: "class", expect: 1 },
+      { type: "symbol_count", fixture: "145_corpus_inline_mixset_application.ump", name: "Y", kind: "trait", expect: 1 },
+      { type: "symbol_count", fixture: "145_corpus_inline_mixset_application.ump", name: "InlineMixset", kind: "mixset", expect: 0 },
+    ],
+  },
+
   // 15: Formatting smoke test
   {
     name: "15 formatting: indent + skip range",

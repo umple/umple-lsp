@@ -250,6 +250,7 @@ module.exports = grammar({
         $.req_implementation,
         $.class_definition,
         $.enum_definition,
+        $.mixset_application,
         $.mixset_definition,
         $.referenced_statemachine,
         $.emit_method,
@@ -579,6 +580,11 @@ module.exports = grammar({
         // Inline definition form: mixset name class/trait/interface Name { ... }
         seq("mixset", field("name", $.identifier), choice($.class_definition, $.trait_definition, $.interface_definition)),
       ),
+
+    // Inline application form used inside entities: mixset Feature target;
+    // Parse-only; the feature and target are not definitions.
+    mixset_application: ($) =>
+      seq("mixset", field("feature", $.identifier), field("target", choice($.identifier, "abstract")), ";"),
 
     // =====================
     // TRACE STATEMENTS
