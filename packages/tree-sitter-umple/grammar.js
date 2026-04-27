@@ -730,7 +730,7 @@ module.exports = grammar({
     singleton: ($) => seq("singleton", ";"),
 
     display_color: ($) =>
-      seq(choice("displayColor", "displayColour"), choice($.string_literal, $.identifier), ";"),
+      seq(choice("displayColor", "displayColour"), optional("="), choice($.string_literal, $.identifier), ";"),
 
     // Layout directives: position and position.association
     // These are layout metadata (not model semantics) — parsed to avoid ERROR nodes

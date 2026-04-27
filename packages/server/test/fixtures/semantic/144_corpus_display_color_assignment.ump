@@ -1,0 +1,19 @@
+class TrafficLight {
+  status {
+    Red {
+      displayColour = "#FF0000";
+      redToGreen -> Green;
+    }
+    Green {
+      displayColour = green;
+      greenToYellow -> Yellow;
+    }
+    Yellow {
+      displayColor=               "yellow";
+      yellowToRed -> Red;
+    }
+  }
+
+  displayColor "red";
+  displayColour lightgrey;
+}

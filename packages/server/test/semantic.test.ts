@@ -729,6 +729,17 @@ const TEST_CASES: TestCase[] = [
     ],
   },
 
+  // 144: Corpus gap — displayColor/displayColour directives accept an
+  // optional equals sign before either a string literal or named color.
+  {
+    name: "144 corpus: display color assignments parse clean",
+    fixtures: ["144_corpus_display_color_assignment.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "144_corpus_display_color_assignment.ump" },
+      { type: "symbol_count", fixture: "144_corpus_display_color_assignment.ump", name: "TrafficLight", kind: "class", expect: 1 },
+    ],
+  },
+
   // 15: Formatting smoke test
   {
     name: "15 formatting: indent + skip range",
