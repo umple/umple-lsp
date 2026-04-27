@@ -300,7 +300,7 @@ module.exports = grammar({
     interface_definition: ($) =>
       seq(
         "interface",
-        field("name", $.identifier),
+        field("name", choice($.identifier, alias("state", $.identifier))),
         "{",
         repeat(
           choice(
@@ -1019,6 +1019,7 @@ module.exports = grammar({
       seq(
         optional("queued"),
         optional("pooled"),
+        optional(field("type", $.type_name)),
         field("name", $.identifier),
         "{",
         repeat(
@@ -1035,9 +1036,19 @@ module.exports = grammar({
 
     state: ($) =>
       prec(2, seq(
-        optional(field("change_type", choice("+", "-", "*"))),
-        optional(field("is_final", "final")),
-        field("name", choice($.identifier, $.qualified_name)),
+        choice(
+          seq(
+            "state",
+            optional(field("change_type", choice("+", "-", "*"))),
+            optional(field("is_final", "final")),
+            field("name", choice($.identifier, $.qualified_name)),
+          ),
+          seq(
+            optional(field("change_type", choice("+", "-", "*"))),
+            optional(field("is_final", "final")),
+            field("name", choice($.identifier, alias("state", $.identifier), $.qualified_name)),
+          ),
+        ),
         "{",
         repeat(
           choice(

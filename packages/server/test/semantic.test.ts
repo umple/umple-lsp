@@ -789,6 +789,20 @@ const TEST_CASES: TestCase[] = [
     ],
   },
 
+  // 149: Corpus gap — legacy state machines may include an attribute type,
+  // and states may be introduced with the `state` keyword.
+  {
+    name: "149 corpus: typed state machines and state keyword parse clean",
+    fixtures: ["149_corpus_typed_state_machine_keyword_states.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "149_corpus_typed_state_machine_keyword_states.ump" },
+      { type: "symbol_count", fixture: "149_corpus_typed_state_machine_keyword_states.ump", name: "Garage", kind: "class", expect: 1 },
+      { type: "symbol_count", fixture: "149_corpus_typed_state_machine_keyword_states.ump", name: "door", kind: "statemachine", expect: 1 },
+      { type: "goto_def_exact", at: "target_open", expect: ["def_open"] },
+      { type: "goto_def_exact", at: "target_closed", expect: ["def_closed"] },
+    ],
+  },
+
   // 15: Formatting smoke test
   {
     name: "15 formatting: indent + skip range",

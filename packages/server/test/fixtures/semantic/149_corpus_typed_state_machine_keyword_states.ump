@@ -1,0 +1,15 @@
+class Garage {
+  String door {
+    state /*@def_closed*/Closed {
+      entry / stopMotor;
+      pressButton -> /*@target_open*/Open;
+    }
+
+    state /*@def_open*/Open {
+      entry / stopMotor {}
+      pressButton -> /*@target_closed*/Closed;
+    }
+  }
+
+  public void stopMotor() {}
+}
