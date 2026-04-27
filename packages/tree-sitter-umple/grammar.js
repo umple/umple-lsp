@@ -953,6 +953,7 @@ module.exports = grammar({
         "defaulted",
         "const",
         "autounique",
+        "ivar",
       ),
 
     // =====================

@@ -815,6 +815,17 @@ const TEST_CASES: TestCase[] = [
     ],
   },
 
+  // 151: Corpus gap — NuSMV input variables use the `ivar` attribute modifier.
+  {
+    name: "151 corpus: ivar attributes parse and resolve in constraints",
+    fixtures: ["151_corpus_ivar_attributes.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "151_corpus_ivar_attributes.ump" },
+      { type: "symbol_count", fixture: "151_corpus_ivar_attributes.ump", name: "ayo", kind: "attribute", expect: 1 },
+      { type: "goto_def_exact", at: "ref_ayo", expect: ["def_ayo"] },
+    ],
+  },
+
   // 15: Formatting smoke test
   {
     name: "15 formatting: indent + skip range",
