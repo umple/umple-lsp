@@ -25,6 +25,7 @@ module.exports = grammar({
     [$.constraint, $.guard],
     [$._java_static_final_field, $.method_signature],
     [$.trace_statement, $.event_spec],
+    [$.trace_statement],
     [$.enumerated_attribute, $.state_machine],
     [$.state_machine, $.method_declaration],
     [$.active_method, $.attribute_declaration, $.method_declaration, $.method_signature, $.emit_method],
@@ -590,7 +591,8 @@ module.exports = grammar({
     // TRACE STATEMENTS
     // =====================
     // Parse-only support. Supported forms:
-    //   trace entity [()]? postfix* ;
+    //   trace entity [()]? postfix* ;?
+    //   trace entity(); entity(); postfix* ;?
     //   tracecase name { trace entity [()]? postfix* ; ... }
     //   activate name (onAllObjects|onThisThreadOnly)? ;
     //   deactivate name onThisObject ;
@@ -614,6 +616,23 @@ module.exports = grammar({
           repeat(seq(",", $._trace_entity)),
           repeat($.trace_postfix),
           ";",
+        ),
+        seq(
+          "trace",
+          optional(seq($._trace_prefix, repeat(seq(",", $._trace_prefix)))),
+          $._trace_entity,
+          repeat(seq(",", $._trace_entity)),
+          repeat1($.trace_postfix),
+          optional(";"),
+        ),
+        seq(
+          "trace",
+          optional(seq($._trace_prefix, repeat(seq(",", $._trace_prefix)))),
+          $._trace_entity,
+          ";",
+          repeat1(seq($._trace_entity, ";")),
+          repeat($.trace_postfix),
+          optional(";"),
         ),
         seq(
           "tracecase",
@@ -640,7 +659,8 @@ module.exports = grammar({
 
     trace_postfix: ($) =>
       choice(
-        seq(choice("where", "until", "after", "giving"), $.guard),
+        seq(choice("where", "until", "after", "giving"), choice($.guard, $.trace_condition)),
+        seq("execute", $.code_block),
         seq("record", choice($.identifier, $.string_literal)),
         seq("logLevel", choice(
           "trace", "debug", "info", "warn", "error", "fatal",
@@ -649,6 +669,8 @@ module.exports = grammar({
         seq("for", $.integer_literal),
         seq("level", $.integer_literal),
       ),
+
+    trace_condition: (_$) => token(prec(-1, /[^;{}]+/)),
 
     // =====================
     // ASSOCIATION CLASS DEFINITION

@@ -767,6 +767,17 @@ const TEST_CASES: TestCase[] = [
     ],
   },
 
+  // 147: Corpus gap — tracer execute blocks, unbracketed where clauses, and
+  // semicolon-separated trace entities parse clean.
+  {
+    name: "147 corpus: trace execute and multi-entity forms parse clean",
+    fixtures: ["147_corpus_trace_execute_forms.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "147_corpus_trace_execute_forms.ump" },
+      { type: "symbol_count", fixture: "147_corpus_trace_execute_forms.ump", name: "LightFixture", kind: "class", expect: 1 },
+    ],
+  },
+
   // 15: Formatting smoke test
   {
     name: "15 formatting: indent + skip range",

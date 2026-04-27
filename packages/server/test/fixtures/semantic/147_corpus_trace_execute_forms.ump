@@ -1,0 +1,19 @@
+class LightFixture {
+  Integer attr7;
+
+  void m1() {}
+  void m2() {}
+  void m3() {}
+  void m4() {}
+
+  trace m1() execute { record("x"); }
+
+  trace m4() execute { "y" } where attr7>5;
+
+  trace
+    m2();
+    m3();
+  execute {
+    record("x", result);
+  }
+}
