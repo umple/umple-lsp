@@ -197,7 +197,7 @@ Environment variables: `UMPLESYNC_JAR_PATH`, `UMPLESYNC_TIMEOUT_MS`, `UMPLE_TREE
 npm run compile        # Build server (also copies WASM)
 npm run build-grammar  # Full rebuild after grammar.js changes
 npm run watch          # Watch mode
-npm test               # Run semantic regression tests (682 assertions)
+npm test               # Run semantic regression tests plus the corpus parser self-test
 ```
 
 ### Testing
@@ -205,8 +205,16 @@ npm test               # Run semantic regression tests (682 assertions)
 The project includes a semantic regression test harness that exercises go-to-definition, find-references, completion, hover, document symbols, and formatting. Tests use real `.ump` fixture files with `/*@marker*/` annotations for position-independent assertions.
 
 ```bash
-npm test    # Compile + run all 682 assertions
+npm test    # Compile + run the semantic suite and parser-report self-test
 ```
+
+To stress-test grammar permissiveness against a local checkout of the upstream Umple compiler corpus, point the read-only report tool at `cruise.umple/test`:
+
+```bash
+UMPLE_CORPUS_DIR=/path/to/cruise.umple/test npm run parse:corpus
+```
+
+The corpus report does not download anything, and it is report-only by default. A missing corpus path skips cleanly; an explicitly invalid path fails so typos are visible. Use `UMPLE_CORPUS_FAIL_ON_ERROR=1` or `--fail-on-error` only after choosing a baseline that should gate CI.
 
 ### Manual Testing
 

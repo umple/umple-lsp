@@ -61,7 +61,7 @@ Tree-sitter uses a JavaScript DSL — see https://tree-sitter.github.io/tree-sit
 6. **Add a `@scope.<kind>` capture** in `completions.scm` if it should change completion behavior inside its body.
 7. **Add a highlight pattern** in `highlights.scm` for any new keywords.
 8. **Run `npm run compile`** — fails loudly if there's a parser conflict.
-9. **Run `npm test`** — should still be 682+ passing if you didn't change semantics.
+9. **Run `npm test`** — the semantic suite and parser-report self-test should still pass if you didn't change semantics.
 10. **Add a fixture + assertions** for the new construct (see [03-development.md § Add a test](03-development.md#testing)).
 
 ### Key gotchas
@@ -178,6 +178,14 @@ done | wc -l
 ```
 
 Should print 18 (17 + 126_*). Anything higher is a regression — figure out which file is new and inspect it.
+
+For a broader read-only stress report against the upstream compiler corpus:
+
+```bash
+UMPLE_CORPUS_DIR=/path/to/cruise.umple/test npm run parse:corpus
+```
+
+The command strips UmpleOnline layout tails before parsing, reports the percentage of `.ump` files whose tree contains ERROR nodes, and exits successfully by default so existing corpus gaps do not break CI unexpectedly. To turn it into a gate after setting a baseline, add `UMPLE_CORPUS_FAIL_ON_ERROR=1` or pass `--fail-on-error`.
 
 ## When the grammar changes vs when the server changes
 

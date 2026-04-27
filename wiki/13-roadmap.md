@@ -4,7 +4,7 @@ A snapshot of what's shipping, what's known to be gappy, and where future studen
 
 ## Currently shipping
 
-- LSP server: go-to-def, find-refs, rename, hover, completion, diagnostics, document symbols, formatting, diagram navigation, code actions (`Add missing semicolon` quick-fix for W1006/W1007/E1502 — see "Code actions" below)
+- LSP server: go-to-def, find-refs, rename, hover, completion, diagnostics, document symbols, workspace symbols, formatting, diagram navigation, code actions (`Add missing semicolon` quick-fix for W1006/W1007/E1502 — see "Code actions" below)
 - Tree-sitter grammar: most real Umple syntax including structured req bodies (userStory / useCase) and implementsReq across all entity types
 - Editor extensions: VS Code (digized.umple), Zed (umple.zed), Neovim (umple.nvim), BBEdit (codeless module), IntelliJ (LSP4IJ + TextMate)
 - CI: build/test workflow for umple-lsp plus auto-PR for grammar/highlights changes from umple-lsp into umple.zed
@@ -54,6 +54,7 @@ The known array-fallback completion leaks have all been closed:
 - LSP snippet completion — topic 054 (`packages/server/src/snippets.ts` registry, capability-gated)
 - Find-implementations on traits — topic 059 (`textDocument/implementation` returns direct/transitive class/trait implementers for trait targets)
 - CI build/test workflow — topic 060 (`.github/workflows/ci.yml` runs `npm install`, downloads `umplesync.jar`, and executes root `npm test`)
+- Workspace symbol search — topic 061 (`workspace/symbol` returns qualified classes, traits, requirements, state machines, states, methods, attributes, associations, and enums across indexed workspace files)
 
 ### How to add new completion slots
 
@@ -113,6 +114,7 @@ Rename currently scopes to forward-imports + reverse-importers. If your workspac
 The LSP has PR/push/manual build-test CI now. Remaining optional follow-ups:
 
 - Add dependency caching once a root lockfile policy is settled.
+- Decide whether corpus parse stress should become a scheduled/manual CI report once a runner-accessible `cruise.umple/test` source is available. The local reporter exists now (`npm run parse:corpus`) and is report-only by default.
 - Keep the README badge current if workflow filenames change.
 
 ### No automated npm publish
@@ -136,15 +138,15 @@ This wiki lives in `wiki/` in the repo. GitHub also has a separate "Wiki" featur
 Pulled from the conversation history + general LSP best practice:
 
 1. **Live diagram refresh on edit/save** — VS Code has diagram support; investigate debounce/on-save behavior in `umple.vscode`.
-2. **Symbol search across workspace** — `workspace/symbol` LSP request not currently implemented.
-3. **Extend implementations beyond traits** — possible class subclasses or interface implementers/extensions, but verify Umple compiler semantics first.
+2. **Extend implementations beyond traits** — possible class subclasses or interface implementers/extensions, but verify Umple compiler semantics first.
+3. **Workspace-wide rename safety** — rename still scopes to import chains; a slower workspace search could make cross-file renames more complete.
 
 Each of these is a focused topic: spec the scope, get codex review, implement, test, commit. The ~5 day cadence we hit during topics 038–044 is comfortable for one of these per cycle.
 
 ## Testing roadmap
 
 - **Property-based tests for the formatter** — currently we have many fixture-based examples but no "format any clean parse and assert it stays clean + idempotent." A fast-check generator over small Umple programs would catch formatter bugs we don't know we have.
-- **Stress tests against the umple compiler corpus** — `cruise.umple/test/` has thousands of `.ump` files. A CI job that parses all of them and reports the % with ERROR nodes would catch regressions in grammar permissiveness. We did this manually during phase 038 work; never automated.
+- **Stress tests against the umple compiler corpus** — `cruise.umple/test/` has thousands of `.ump` files. The repo now has a read-only reporter (`UMPLE_CORPUS_DIR=/path/to/cruise.umple/test npm run parse:corpus`) and a generated self-test in root `npm test`. Remaining work is choosing a baseline/threshold and deciding whether a runner-accessible corpus source should feed a scheduled or manual CI report.
 - **End-to-end editor tests** — open a real editor, send LSP messages, assert responses. Heavy infra; haven't tried.
 
 ## How to pick what to work on

@@ -26,7 +26,19 @@ on:
 3. Install Java 17 because snippet compiler-validation tests invoke `umplesync.jar`.
 4. Run `npm install` (this repo does not track a root lockfile, so CI does not use `npm ci`).
 5. Run `npm run download-jar`.
-6. Run root `npm test`, which rebuilds the grammar/WASM and runs the semantic suite.
+6. Run root `npm test`, which rebuilds the grammar/WASM, runs the semantic suite, and runs the parser-report self-test against a generated two-file corpus.
+
+### Corpus parse stress reporter
+
+The repo includes a read-only corpus reporter:
+
+```bash
+UMPLE_CORPUS_DIR=/path/to/cruise.umple/test npm run parse:corpus
+```
+
+It recursively parses `.ump` files, strips UmpleOnline layout tails, and reports how many files contain tree-sitter ERROR nodes. It does not download or clone the compiler corpus. If no corpus path is configured it skips cleanly; if a path is explicitly provided but invalid it fails so typos are visible.
+
+The full compiler corpus is not part of the default CI job because GitHub runners do not have `cruise.umple/test` checked out. Default mode is report-only even when parse errors are found. Use `UMPLE_CORPUS_FAIL_ON_ERROR=1` or `--fail-on-error` only after choosing a baseline that should block merges.
 
 ### `umple-lsp/.github/workflows/sync-umple-zed.yml`
 
