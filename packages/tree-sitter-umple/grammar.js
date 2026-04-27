@@ -130,8 +130,40 @@ module.exports = grammar({
       ),
 
     // Test case: test name { ... }
+    // Corpus variants:
+    //   override test name { ... }
+    //   before test name { ... } / after test name { ... }
+    //   JUnit concrete test name { ... }
     test_case: ($) =>
-      seq("test", field("name", $.identifier), "{", optional($.code_content), "}"),
+      seq(
+        optional($.test_case_prefix),
+        "test",
+        field("name", $.identifier),
+        "{",
+        optional($.code_content),
+        "}",
+      ),
+
+    test_case_prefix: ($) =>
+      choice(
+        "override",
+        "before",
+        "after",
+        seq("JUnit", optional("concrete")),
+      ),
+
+    // Test sequence: testSequence ts { checkName -> checkStatus; }
+    test_sequence: ($) =>
+      seq(
+        "testSequence",
+        field("name", $.identifier),
+        "{",
+        repeat($.test_sequence_step),
+        "}",
+      ),
+
+    test_sequence_step: ($) =>
+      seq(field("from", $.identifier), "->", field("to", $.identifier), ";"),
 
     // Generic test case: generic test name(params) { ... }
     // Params are too varied to model precisely; use opaque regex for the signature
@@ -232,6 +264,7 @@ module.exports = grammar({
         $.active_method,
         $.trace_statement,
         $.test_case,
+        $.test_sequence,
         $.generic_test_case,
         $.position_directive,
         $.position_association_directive,

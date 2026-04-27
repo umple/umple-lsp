@@ -692,6 +692,18 @@ const TEST_CASES: TestCase[] = [
     ],
   },
 
+  // 142: Corpus gap — Test generator syntax includes test sequences and
+  // prefixed test cases. These are parse-only constructs for LSP purposes.
+  {
+    name: "142 corpus: testSequence and prefixed test cases parse clean",
+    fixtures: ["142_corpus_test_sequence.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "142_corpus_test_sequence.ump" },
+      { type: "symbol_count", fixture: "142_corpus_test_sequence.ump", name: "Person", kind: "class", expect: 1 },
+      { type: "symbol_count", fixture: "142_corpus_test_sequence.ump", name: "Student", kind: "class", expect: 1 },
+    ],
+  },
+
   // 15: Formatting smoke test
   {
     name: "15 formatting: indent + skip range",

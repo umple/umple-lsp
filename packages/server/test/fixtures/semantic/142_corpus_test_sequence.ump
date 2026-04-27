@@ -1,0 +1,34 @@
+generate Test;
+
+class Person {
+  testSequence ts {
+    checkName -> checkStatus;
+  }
+
+  test checkName {
+    for (Job job : jobs) {
+      assertTrue(job.getName() != "Coach");
+    }
+  }
+
+  before test setUp {
+    // initialize environment
+  }
+
+  after test teardown {
+    // delete files
+  }
+
+  JUnit concrete test checkStatus {
+    before assertFalse(d1.firstName() == "Orlean");
+    after assertFalse(p1.getId() == "something");
+  }
+}
+
+class Student {
+  isA Person;
+
+  override test checkName {
+    assertTrue(id == 2);
+  }
+}
