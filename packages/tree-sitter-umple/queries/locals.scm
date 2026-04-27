@@ -102,7 +102,7 @@
 
 ; isA references types
 (isa_declaration
-  (type_list
+  (isa_type_list
     (type_name
       (qualified_name) @local.reference)))
 

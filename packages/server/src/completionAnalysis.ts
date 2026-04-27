@@ -357,7 +357,7 @@ export function analyzeCompletion(
   }
 
   // --- Typed-prefix on isa_declaration type identifier (topic 047 item 1) ---
-  // Once the user types a prefix inside the type_list, the existing
+  // Once the user types a prefix inside the inheritance type list, the existing
   // (isa_declaration) @scope.class_interface_trait scope query still matches,
   // but the array form lets LookaheadIterator append class-body / top-level
   // starters (ERROR, namespace, Java, generate, ...). Force the scalar
@@ -368,7 +368,7 @@ export function analyzeCompletion(
   // stop + ERROR-recovery fallback), so only the identifier gate is shared
   // with items 2 / 3 via isLetterLeadingIdentifier.
   if (nodeAtCursor && isLetterLeadingIdentifier(nodeAtCursor)) {
-    // Primary: identifier is inside an isa_declaration's type_list.
+    // Primary: identifier is inside an isa_declaration's isa_type_list.
     // Hard-stop at trait_sm_binding so `isA T<sm as S|` is never misclassified.
     let n: SyntaxNode | null = nodeAtCursor.parent;
     let insideIsaDecl = false;
@@ -2085,7 +2085,7 @@ function isInsideBrokenMethodNameSlot(node: SyntaxNode): boolean {
 function isInsideTraitAngleBrackets(node: SyntaxNode): boolean {
   let n: SyntaxNode | null = node;
   while (n) {
-    if (n.type === "type_name" || n.type === "type_list") return true;
+    if (n.type === "type_name" || n.type === "type_list" || n.type === "isa_type_list") return true;
     // ERROR nodes inside isA declarations with angle brackets
     if (n.type === "isa_declaration") return true;
     if (n.type === "class_definition" || n.type === "source_file") return false;
@@ -2112,8 +2112,8 @@ function extractTraitNameFromAngleBrackets(node: SyntaxNode): string | undefined
       const isa = n.parent;
       for (let i = 0; i < isa.namedChildCount; i++) {
         const child = isa.namedChild(i);
-        if (child?.type === "type_list") {
-          // type_list > type_name > qualified_name
+        if (child?.type === "type_list" || child?.type === "isa_type_list") {
+          // type_list/isa_type_list > type_name > qualified_name
           const typeName = child.namedChild(0);
           if (typeName?.type === "type_name") {
             const qn = typeName.childForFieldName("name") ?? typeName.namedChild(0);

@@ -82,7 +82,7 @@
 ; =====================
 
 (isa_declaration
-  (type_list
+  (isa_type_list
     (type_name
       (qualified_name (identifier) @reference.class_interface_trait))))
 

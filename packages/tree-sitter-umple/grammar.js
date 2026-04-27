@@ -725,7 +725,9 @@ module.exports = grammar({
     // =====================
     // CLASS MEMBERS
     // =====================
-    isa_declaration: ($) => seq("isA", $.type_list, ";"),
+    isa_declaration: ($) => seq("isA", $.isa_type_list, ";"),
+
+    isa_type_list: ($) => seq($.type_name, repeat(seq(",", optional("isA"), $.type_name))),
 
     depend_statement: ($) =>
       seq("depend", field("package", $.import_path), ";"),

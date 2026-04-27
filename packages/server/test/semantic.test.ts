@@ -753,6 +753,20 @@ const TEST_CASES: TestCase[] = [
     ],
   },
 
+  // 146: Corpus gap — repeated `isA` tokens may appear after commas in a
+  // single inheritance declaration.
+  {
+    name: "146 corpus: repeated isA tokens in inheritance list parse and resolve",
+    fixtures: ["146_corpus_repeated_isa_list.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "146_corpus_repeated_isa_list.ump" },
+      { type: "goto_def_exact", at: "ref_human", expect: ["def_human"] },
+      { type: "goto_def_exact", at: "ref_student", expect: ["def_student"] },
+      { type: "goto_def_exact", at: "ref_person", expect: ["def_person"] },
+      { type: "goto_def_exact", at: "ref_man", expect: ["def_man"] },
+    ],
+  },
+
   // 15: Formatting smoke test
   {
     name: "15 formatting: indent + skip range",

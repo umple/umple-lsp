@@ -1,0 +1,11 @@
+class Student {
+  isA /*@ref_human*/Human,isA /*@ref_student*/IStudent,isA /*@ref_person*/IPerson,isA /*@ref_man*/IMan;
+}
+
+interface /*@def_student*/IStudent {}
+
+interface /*@def_person*/IPerson {}
+
+interface /*@def_man*/IMan {}
+
+class /*@def_human*/Human {}

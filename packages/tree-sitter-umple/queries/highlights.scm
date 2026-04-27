@@ -198,7 +198,7 @@
   (qualified_name) @type)
 
 (isa_declaration
-  (type_list
+  (isa_type_list
     (type_name) @type))
 
 (trait_binding

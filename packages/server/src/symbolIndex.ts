@@ -964,10 +964,10 @@ export class SymbolIndex {
         const className = parent?.childForFieldName("name")?.text;
         if (!className) return;
 
-        // Extract parent names from type_list → type_name → qualified_name
+        // Extract parent names from isa_type_list/type_list → type_name → qualified_name
         for (let i = 0; i < node.childCount; i++) {
           const child = node.child(i);
-          if (child?.type === "type_list") {
+          if (child?.type === "isa_type_list" || child?.type === "type_list") {
             for (let j = 0; j < child.childCount; j++) {
               const tn = child.child(j);
               if (tn?.type === "type_name") {
