@@ -803,6 +803,18 @@ const TEST_CASES: TestCase[] = [
     ],
   },
 
+  // 150: Corpus gap — association blocks can contain mixset blocks, and
+  // those mixsets can contain standalone association members.
+  {
+    name: "150 corpus: association-contained mixset associations parse and resolve",
+    fixtures: ["150_corpus_association_mixset.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "150_corpus_association_mixset.ump" },
+      { type: "symbol_count", fixture: "150_corpus_association_mixset.ump", name: "M1", kind: "mixset", expect: 1 },
+      { type: "goto_def_exact", at: "use_m1", expect: ["def_m1"] },
+    ],
+  },
+
   // 15: Formatting smoke test
   {
     name: "15 formatting: indent + skip range",

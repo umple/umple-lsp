@@ -1,0 +1,14 @@
+class ClassA {}
+
+class ClassB {}
+
+class ClassC {}
+
+association {
+  0..1 ClassA -> * ClassB;
+  mixset /*@def_m1*/M1 {
+    0..1 ClassA -> * ClassC;
+  }
+}
+
+use /*@use_m1*/M1;

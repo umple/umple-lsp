@@ -573,6 +573,7 @@ module.exports = grammar({
             $.do_activity,
             $.state,
             $.standalone_transition,
+            $.association_member,
             $.display_color,
             "||",
           )),
@@ -990,6 +991,7 @@ module.exports = grammar({
           $.association_member,
           $.association_property,
           $.single_association_end,
+          $.mixset_definition,
           $.req_implementation,
         )),
         "}",
@@ -998,7 +1000,7 @@ module.exports = grammar({
     association_property: ($) => seq(choice("reflexive", "symmetric"), ";"),
 
     association_member: ($) =>
-      seq(
+      prec(1, seq(
         optional("immutable"),
         $.multiplicity,
         field("left_type", $.identifier),
@@ -1010,7 +1012,7 @@ module.exports = grammar({
         optional(field("right_role", $.identifier)),
         optional($.sorted_modifier),
         ";",
-      ),
+      )),
 
     // =====================
     // STATE MACHINES
