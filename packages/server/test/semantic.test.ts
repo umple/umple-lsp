@@ -645,6 +645,7 @@ const TEST_CASES: TestCase[] = [
           { name: "Order.approve", kind: "Method", fixture: "140_workspace_symbols_a.ump" },
           { name: "C1.sm", kind: "Struct", fixture: "140_workspace_symbols_a.ump" },
           { name: "C1.sm.s1", kind: "EnumMember", fixture: "140_workspace_symbols_a.ump" },
+          { name: "BillingLink", kind: "Property", fixture: "140_workspace_symbols_a.ump" },
           { name: "Invoice", kind: "Class", fixture: "140_workspace_symbols_b.ump" },
           { name: "Payable", kind: "Interface", fixture: "140_workspace_symbols_b.ump" },
           { name: "PaymentState", kind: "Enum", fixture: "140_workspace_symbols_b.ump" },
@@ -677,6 +678,30 @@ const TEST_CASES: TestCase[] = [
         ],
         exclude: [
           { name: "Order.status" },
+        ],
+      },
+      {
+        type: "workspace_symbols",
+        query: "invoice.email",
+        expect: [
+          { name: "Invoice.email", kind: "Field", containerName: "Invoice", fixture: "140_workspace_symbols_b.ump" },
+        ],
+        exclude: [
+          { name: "Invoice" },
+        ],
+      },
+      {
+        type: "workspace_symbols",
+        query: "paymentstate.unpaid",
+        expect: [
+          { name: "PaymentState.Unpaid", kind: "EnumMember", containerName: "PaymentState", fixture: "140_workspace_symbols_b.ump" },
+        ],
+      },
+      {
+        type: "workspace_symbols",
+        query: "billing",
+        expect: [
+          { name: "BillingLink", kind: "Property", fixture: "140_workspace_symbols_a.ump" },
         ],
       },
       {
@@ -6066,6 +6091,12 @@ function runAssertion(
         return "EnumMember";
       case LspSymbolKind.Method:
         return "Method";
+      case LspSymbolKind.Field:
+        return "Field";
+      case LspSymbolKind.Property:
+        return "Property";
+      case LspSymbolKind.Constant:
+        return "Constant";
       case LspSymbolKind.String:
         return "String";
       case LspSymbolKind.Struct:

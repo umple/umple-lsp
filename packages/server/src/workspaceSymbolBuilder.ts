@@ -8,7 +8,7 @@ import type { SymbolEntry } from "./symbolTypes";
 import type { SymbolKind as UmpleSymbolKind } from "./tokenTypes";
 import { umpleKindToLspSymbolKind } from "./symbolPresentation";
 
-const WORKSPACE_SYMBOL_KINDS: ReadonlySet<UmpleSymbolKind> = new Set([
+const CORE_WORKSPACE_SYMBOL_KINDS: ReadonlySet<UmpleSymbolKind> = new Set([
   "class",
   "interface",
   "trait",
@@ -17,7 +17,14 @@ const WORKSPACE_SYMBOL_KINDS: ReadonlySet<UmpleSymbolKind> = new Set([
   "statemachine",
   "state",
   "method",
+  "association",
   "requirement",
+]);
+
+const QUERY_ONLY_WORKSPACE_SYMBOL_KINDS: ReadonlySet<UmpleSymbolKind> = new Set([
+  "attribute",
+  "const",
+  "enum_value",
 ]);
 
 export function buildWorkspaceSymbols(
@@ -27,10 +34,16 @@ export function buildWorkspaceSymbols(
   const normalizedQuery = query.trim().toLowerCase();
 
   return symbols
-    .filter((symbol) => WORKSPACE_SYMBOL_KINDS.has(symbol.kind))
+    .filter((symbol) => isWorkspaceSymbolKind(symbol.kind, normalizedQuery))
     .filter((symbol) => matchesWorkspaceSymbolQuery(symbol, normalizedQuery))
     .sort((a, b) => compareWorkspaceSymbols(a, b, normalizedQuery))
     .map(symbolToInformation);
+}
+
+function isWorkspaceSymbolKind(kind: UmpleSymbolKind, query: string): boolean {
+  if (CORE_WORKSPACE_SYMBOL_KINDS.has(kind)) return true;
+  if (query.length === 0) return false;
+  return QUERY_ONLY_WORKSPACE_SYMBOL_KINDS.has(kind);
 }
 
 function matchesWorkspaceSymbolQuery(
@@ -99,6 +112,7 @@ function symbolToInformation(symbol: SymbolEntry): SymbolInformation {
       Position.create(symbol.endLine, symbol.endColumn),
     ),
     pathToFileURL(symbol.file).toString(),
+    displayContainerName(symbol),
   );
 }
 
@@ -115,6 +129,13 @@ function workspaceSymbolName(symbol: SymbolEntry): string {
 
 function displayContainerName(symbol: SymbolEntry): string | undefined {
   if (!symbol.container || symbol.container === symbol.name) return undefined;
+  if (
+    symbol.kind === "statemachine" &&
+    symbol.container.endsWith(`.${symbol.name}`)
+  ) {
+    const owner = symbol.container.slice(0, -(`.${symbol.name}`).length);
+    return owner || undefined;
+  }
   if (
     symbol.kind === "state" &&
     symbol.statePath &&

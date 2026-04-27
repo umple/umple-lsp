@@ -15,6 +15,10 @@ class C1 {
   }
 }
 
+association BillingLink {
+  1 Order -- * Invoice invoices;
+}
+
 trait Auditable {}
 
 req REQ_LOGIN userStory {

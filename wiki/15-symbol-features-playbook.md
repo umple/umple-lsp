@@ -287,7 +287,21 @@ Typical assertion:
 { type: "document_symbols", fixture: "NN_feature.ump", expectRoots: ["HighLevel"], expectChild: { parent: "HighLevel", child: "1" } }
 ```
 
-### 8. Minimum complete test set
+### 8. Workspace symbols
+
+File:
+
+- `packages/server/src/workspaceSymbolBuilder.ts`
+
+Workspace symbols are global search results, so keep the blank-query result focused. Core navigation symbols such as classes, traits, requirements, state machines, states, methods, and named associations can appear for an empty query. Member-level symbols such as attributes, enum values, and constants are intentionally query-only so clients do not open `workspace/symbol` with every field in the project.
+
+Typical assertion:
+
+```ts
+{ type: "workspace_symbols", query: "invoice.email", expect: [{ name: "Invoice.email", kind: "Field", containerName: "Invoice" }] }
+```
+
+### 9. Minimum complete test set
 
 For a new requirement-like symbol feature, the test block should cover all of:
 
@@ -297,6 +311,7 @@ For a new requirement-like symbol feature, the test block should cover all of:
 - `refs`
 - `hover_output`
 - `document_symbols`
+- `workspace_symbols` if the symbol should be globally searchable
 - `rename_edits`
 - `rename_rejected`
 
