@@ -217,6 +217,36 @@ After programmatic tests pass, smoke-test in at least one editor:
 - **Neovim:** if you've set up `umple.nvim` with a symlinked dev install (see [08-publishing-nvim.md](08-publishing-nvim.md)), nvim picks up your local `packages/server/out/` automatically. `:LspRestart` after each compile.
 - **Zed:** harder to test locally. Edit `umple.zed/` and `zed: open extension dev`-style; not heavily used in our flow.
 
+### Upstream Umple / UmpleOnline safety check
+
+When a change affects an LSP feature, especially workspace-scoped behavior such as rename, references, workspace symbols, implementations, diagnostics, or file lifecycle handling, also check the current upstream Umple checkout. Keep the checkout beside this repo:
+
+```bash
+cd /Users/ningyuheng/workspace/umple-dev
+git clone https://github.com/umple/umple.git umple
+# later refreshes:
+git -C umple pull --ff-only
+```
+
+Then run the normal LSP suite and the current upstream compiler corpus report:
+
+```bash
+cd /Users/ningyuheng/workspace/umple-dev/umple-lsp
+npm test
+UMPLE_CORPUS_DIR=/Users/ningyuheng/workspace/umple-dev/umple/cruise.umple/test npm run parse:corpus
+```
+
+For UmpleOnline compatibility, inspect the browser/proxy boundary in the upstream checkout:
+
+```bash
+node --check /Users/ningyuheng/workspace/umple-dev/umple/umpleonline/scripts/lsp-proxy/server.js
+node --check /Users/ningyuheng/workspace/umple-dev/umple/umpleonline/scripts/codemirror6/editor.mjs
+```
+
+The important invariant is that UmpleOnline starts one LSP process per model session. Its CodeMirror client sets `rootUri` to `file://<window.UMPLE_UMP_BASE>/<Page.getModel()>`, while the WebSocket proxy validates the `session` query parameter against `UMP_BASE_DIR` and spawns a fresh `umple-lsp-server` process for that model directory. Workspace-wide server features must therefore stay bounded to that model root, plus explicit `use`-reachable files, and must not assume the root is the whole `umpleonline/ump` tree.
+
+If you have a configured UmpleOnline browser test environment, run the LSP specs in `umpleonline/testsuite/spec/lsp_phase*_test_spec.rb` against the server build being tested. Without that environment, treat the corpus report plus the static proxy/client check as a compatibility smoke test, not a full browser E2E pass.
+
 ## Symlink-vs-npm dev flow
 
 `umple.nvim/node_modules/umple-lsp-server` is **a symlink** to `umple-lsp/packages/server` on the standard dev box (set up manually once with `ln -s`). This lets nvim consume your local server without npm publish per change. The same is NOT done by default for umple.vscode (it has a real install) — for VS Code, either:

@@ -51,6 +51,7 @@ Use this to avoid over-editing.
 - change the smallest layer that can actually fix the bug
 - add focused fixtures and assertions before manual editor testing
 - add negative boundary tests for completion work
+- run the upstream Umple / UmpleOnline safety check for LSP feature changes
 - keep parser tolerance and semantic indexing as separate decisions
 - reuse existing helpers before inventing a new pattern
 
@@ -130,6 +131,16 @@ Shape:
 3. raw lookahead never reaches the user
 
 ## 5. Per-topic checklists
+
+### Upstream compatibility gate
+
+Run this before committing LSP feature changes that can affect real editor behavior:
+
+- `npm test`
+- `UMPLE_CORPUS_DIR=/Users/ningyuheng/workspace/umple-dev/umple/cruise.umple/test npm run parse:corpus` against a fresh or fast-forwarded `umple/umple` checkout
+- `node --check` on upstream `umpleonline/scripts/lsp-proxy/server.js` and `umpleonline/scripts/codemirror6/editor.mjs`
+
+For workspace-scoped features, explicitly verify the UmpleOnline boundary: CodeMirror uses `rootUri = file://<window.UMPLE_UMP_BASE>/<Page.getModel()>`, and the proxy spawns one `umple-lsp-server` per model session. Rename, references, workspace symbols, implementations, and file lifecycle code should remain bounded to that model root unless a `use` statement deliberately reaches another file.
 
 ### Grammar-only topic
 
