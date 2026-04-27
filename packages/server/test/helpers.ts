@@ -13,6 +13,7 @@ import { buildSemanticCompletionItems } from "../src/completionBuilder";
 import { buildHoverMarkdown, buildTraitSmOpHover } from "../src/hoverBuilder";
 import { isRenameableKind, isValidNewName } from "../src/renameValidation";
 import { buildDocumentSymbolTree } from "../src/documentSymbolBuilder";
+import { buildWorkspaceSymbols } from "../src/workspaceSymbolBuilder";
 import { expandCompactStates, computeIndentEdits, fixTransitionSpacing, fixAssociationSpacing, normalizeTopLevelBlankLines, reindentEmbeddedCode } from "../src/formatter";
 import { checkFormatSafety } from "../src/formatSafetyNet";
 import { CompletionItem } from "vscode-languageserver/node";
@@ -495,6 +496,13 @@ export class SemanticTestHelper {
   documentSymbols(filePath: string) {
     const symbols = this.si.getFileSymbols(filePath);
     return buildDocumentSymbolTree(symbols);
+  }
+
+  /**
+   * Build workspace/symbol results from all currently indexed files.
+   */
+  workspaceSymbols(query: string) {
+    return buildWorkspaceSymbols(this.si.getAllSymbols(), query);
   }
 
   /**

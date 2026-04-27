@@ -1,0 +1,14 @@
+interface Payable {}
+
+enum PaymentState { Paid, Unpaid }
+
+class Invoice {
+  String email;
+
+  review {
+    Draft {}
+    Sent {}
+  }
+
+  void approveInvoice() {}
+}

@@ -1,0 +1,23 @@
+class Order {
+  String orderNumber;
+
+  status {
+    Pending {}
+    Approved {}
+  }
+
+  void approve() {}
+}
+
+class C1 {
+  sm {
+    s1 {}
+  }
+}
+
+trait Auditable {}
+
+req REQ_LOGIN userStory {
+  who { User }
+  what { Log in }
+}

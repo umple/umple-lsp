@@ -347,6 +347,17 @@ export class SymbolIndex {
     return this.files.get(filePath)?.symbols ?? [];
   }
 
+  /**
+   * Snapshot all indexed symbols across files. Used by workspace/symbol.
+   */
+  getAllSymbols(): SymbolEntry[] {
+    const result: SymbolEntry[] = [];
+    for (const file of this.files.values()) {
+      result.push(...file.symbols);
+    }
+    return result;
+  }
+
 
   /**
    * Get the parsed tree for a file (for formatting, etc.).

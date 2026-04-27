@@ -6,10 +6,15 @@
  */
 
 import * as path from "path";
+import { fileURLToPath } from "url";
 import { SemanticTestHelper, MarkerPosition, DeclSpec } from "./helpers";
 import { resolveTraitSmEventLocations } from "../src/traitSmEventResolver";
 import { stripLayoutTail } from "../src/tokenTypes";
-import { CompletionItemKind, InsertTextFormat } from "vscode-languageserver/node";
+import {
+  CompletionItemKind,
+  InsertTextFormat,
+  SymbolKind as LspSymbolKind,
+} from "vscode-languageserver/node";
 import { ALL_SNIPPETS } from "../src/snippets";
 import {
   COMPLETION_TRIGGER_CHARACTERS,
@@ -149,6 +154,7 @@ type Assertion =
   | RenameEditsAssertion
   | RenameRejectedAssertion
   | DocumentSymbolsAssertion
+  | WorkspaceSymbolsAssertion
   | FormatOutputAssertion
   | FormatOutputWithOptionsAssertion
   | FormatIdempotentAssertion
@@ -255,6 +261,13 @@ interface DocumentSymbolsAssertion {
   fixture: string;
   expectRoots: string[];
   expectChild: { parent: string; child: string };
+}
+
+interface WorkspaceSymbolsAssertion {
+  type: "workspace_symbols";
+  query: string;
+  expect: { name: string; kind?: string; containerName?: string; fixture?: string }[];
+  exclude?: { name: string; kind?: string; containerName?: string; fixture?: string }[];
 }
 
 interface TestCase {
@@ -592,6 +605,69 @@ const TEST_CASES: TestCase[] = [
         fixture: "14_hover.ump",
         expectRoots: ["Animal", "Creature"],
         expectChild: { parent: "Animal", child: "status" },
+      },
+    ],
+  },
+
+  // 140: workspace/symbol across indexed files
+  {
+    name: "140 workspace_symbols: searchable declarations across files",
+    fixtures: ["140_workspace_symbols_a.ump", "140_workspace_symbols_b.ump"],
+    assertions: [
+      {
+        type: "workspace_symbols",
+        query: "",
+        expect: [
+          { name: "Order", kind: "Class", fixture: "140_workspace_symbols_a.ump" },
+          { name: "Auditable", kind: "Interface", fixture: "140_workspace_symbols_a.ump" },
+          { name: "REQ_LOGIN", kind: "String", fixture: "140_workspace_symbols_a.ump" },
+          { name: "Order.status.Pending", kind: "EnumMember", fixture: "140_workspace_symbols_a.ump" },
+          { name: "Order.approve", kind: "Method", fixture: "140_workspace_symbols_a.ump" },
+          { name: "C1.sm", kind: "Struct", fixture: "140_workspace_symbols_a.ump" },
+          { name: "C1.sm.s1", kind: "EnumMember", fixture: "140_workspace_symbols_a.ump" },
+          { name: "Invoice", kind: "Class", fixture: "140_workspace_symbols_b.ump" },
+          { name: "Payable", kind: "Interface", fixture: "140_workspace_symbols_b.ump" },
+          { name: "PaymentState", kind: "Enum", fixture: "140_workspace_symbols_b.ump" },
+          { name: "Invoice.approveInvoice", kind: "Method", fixture: "140_workspace_symbols_b.ump" },
+        ],
+        exclude: [
+          { name: "email" },
+          { name: "orderNumber" },
+          { name: "Paid" },
+        ],
+      },
+      {
+        type: "workspace_symbols",
+        query: "order.status",
+        expect: [
+          { name: "Order.status", kind: "Struct" },
+          { name: "Order.status.Pending", kind: "EnumMember" },
+          { name: "Order.status.Approved", kind: "EnumMember" },
+        ],
+        exclude: [
+          { name: "Invoice.review.Draft" },
+        ],
+      },
+      {
+        type: "workspace_symbols",
+        query: "c1.sm",
+        expect: [
+          { name: "C1.sm", kind: "Struct" },
+          { name: "C1.sm.s1", kind: "EnumMember" },
+        ],
+        exclude: [
+          { name: "Order.status" },
+        ],
+      },
+      {
+        type: "workspace_symbols",
+        query: "req",
+        expect: [
+          { name: "REQ_LOGIN", kind: "String" },
+        ],
+        exclude: [
+          { name: "Order" },
+        ],
       },
     ],
   },
@@ -5693,6 +5769,57 @@ function runAssertion(
     return null;
   }
 
+  function workspaceSymbolMatches(
+    item: ReturnType<SemanticTestHelper["workspaceSymbols"]>[number],
+    expected: { name: string; kind?: string; containerName?: string; fixture?: string },
+  ): boolean {
+    if (item.name !== expected.name) return false;
+    if (expected.kind && lspSymbolKindName(item.kind) !== expected.kind) return false;
+    if (
+      expected.containerName !== undefined &&
+      item.containerName !== expected.containerName
+    ) return false;
+    if (expected.fixture) {
+      const fileInfo = files.get(expected.fixture);
+      if (!fileInfo) return false;
+      if (path.normalize(fileURLToPath(item.location.uri)) !== fileInfo.path) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function workspaceSymbolLabel(
+    item: ReturnType<SemanticTestHelper["workspaceSymbols"]>[number],
+  ): string {
+    const kind = lspSymbolKindName(item.kind);
+    const container = item.containerName ? ` in ${item.containerName}` : "";
+    return `${item.name}(${kind}${container})`;
+  }
+
+  function lspSymbolKindName(kind: LspSymbolKind): string {
+    switch (kind) {
+      case LspSymbolKind.Class:
+        return "Class";
+      case LspSymbolKind.Interface:
+        return "Interface";
+      case LspSymbolKind.Enum:
+        return "Enum";
+      case LspSymbolKind.EnumMember:
+        return "EnumMember";
+      case LspSymbolKind.Method:
+        return "Method";
+      case LspSymbolKind.String:
+        return "String";
+      case LspSymbolKind.Struct:
+        return "Struct";
+      case LspSymbolKind.Module:
+        return "Module";
+      default:
+        return `SymbolKind(${kind})`;
+    }
+  }
+
   if (assertion.type === "token_context") {
     const src = findMarker(assertion.at);
     if (!src) return { ok: false, message: `marker @${assertion.at} not found` };
@@ -6345,6 +6472,27 @@ function runAssertion(
         ok: false,
         message: `recovered_symbol ${assertion.name}(${assertion.kind}): expected recovered=${assertion.expectRecovered}, got ${isRecovered}`,
       };
+    }
+    return { ok: true, message: "" };
+  }
+
+  if (assertion.type === "workspace_symbols") {
+    const items = helper.workspaceSymbols(assertion.query);
+    for (const expected of assertion.expect) {
+      if (!items.some((item) => workspaceSymbolMatches(item, expected))) {
+        return {
+          ok: false,
+          message: `workspace_symbols query=${JSON.stringify(assertion.query)} missing ${JSON.stringify(expected)} in [${items.map(workspaceSymbolLabel).join(", ")}]`,
+        };
+      }
+    }
+    for (const unexpected of assertion.exclude ?? []) {
+      if (items.some((item) => workspaceSymbolMatches(item, unexpected))) {
+        return {
+          ok: false,
+          message: `workspace_symbols query=${JSON.stringify(assertion.query)} unexpectedly included ${JSON.stringify(unexpected)} in [${items.map(workspaceSymbolLabel).join(", ")}]`,
+        };
+      }
     }
     return { ok: true, message: "" };
   }

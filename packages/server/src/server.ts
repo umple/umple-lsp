@@ -27,6 +27,7 @@ import {
   DidChangeWatchedFilesNotification,
   MessageType,
   ShowMessageNotification,
+  SymbolInformation,
 } from "vscode-languageserver/node";
 import { TextDocument } from "vscode-languageserver-textdocument";
 import { buildQuickFixActions } from "./codeActions";
@@ -46,6 +47,7 @@ import { buildHoverMarkdown, buildTraitSmOpHover } from "./hoverBuilder";
 import { isRenameableKind, isValidNewName } from "./renameValidation";
 import { resolveTraitSmEventLocations } from "./traitSmEventResolver";
 import { buildDocumentSymbolTree } from "./documentSymbolBuilder";
+import { buildWorkspaceSymbols } from "./workspaceSymbolBuilder";
 import {
   expandCompactStates,
   computeIndentEdits,
@@ -412,6 +414,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
       },
       hoverProvider: true,
       documentSymbolProvider: true,
+      workspaceSymbolProvider: true,
       documentFormattingProvider: true,
       // Topic 056 — quick-fix code actions (currently only `Add missing
       // semicolon`; gated on diagnostic.code === W1007 plus a
@@ -632,11 +635,16 @@ connection.onDidChangeWatchedFiles((params) => {
       // File deleted — remove all indexed state (symbols, tree, isA, SM reuse, edges)
       symbolIndex.removeFile(filePath);
     } else {
-      // Created or Changed — update use-graph edges from disk content
+      // Created or changed. If workspace/symbol has already indexed this file,
+      // keep symbols fresh; otherwise only maintain the lightweight use graph.
       const content = readFileSafe(filePath);
       if (content) {
-        const uses = symbolIndex.extractUseStatements(filePath, content);
-        symbolIndex.updateUseGraphEdges(filePath, uses);
+        if (symbolIndex.isFileIndexed(filePath)) {
+          symbolIndex.indexFile(filePath, content);
+        } else {
+          const uses = symbolIndex.extractUseStatements(filePath, content);
+          symbolIndex.updateUseGraphEdges(filePath, uses);
+        }
       }
     }
   }
@@ -1216,6 +1224,19 @@ connection.onDocumentSymbol(async (params) => {
 
   symbolIndex.updateFile(docPath, document.getText());
   return buildDocumentSymbolTree(symbolIndex.getFileSymbols(docPath));
+});
+
+connection.onWorkspaceSymbol(async (params): Promise<SymbolInformation[]> => {
+  if (!symbolIndexReady) return [];
+
+  if (workspaceRoots.length > 0) {
+    symbolIndex.indexWorkspace(workspaceRoots, (filePath) => {
+      const uri = pathToFileURL(filePath).toString();
+      return getDocument(uri)?.getText();
+    });
+  }
+
+  return buildWorkspaceSymbols(symbolIndex.getAllSymbols(), params.query);
 });
 
 // ── Formatting ──────────────────────────────────────────────────────────────
