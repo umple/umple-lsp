@@ -927,9 +927,16 @@ module.exports = grammar({
         "association",
         optional(field("name", $.identifier)),
         "{",
-        repeat(choice($.association_member, $.req_implementation)),
+        repeat(choice(
+          $.association_member,
+          $.association_property,
+          $.single_association_end,
+          $.req_implementation,
+        )),
         "}",
       ),
+
+    association_property: ($) => seq(choice("reflexive", "symmetric"), ";"),
 
     association_member: ($) =>
       seq(

@@ -1052,6 +1052,36 @@ export function analyzeCompletion(
         }
       }
     }
+
+    // Corpus association syntax also permits standalone association ends:
+    //   association { 1 Person;  * Employee role; }
+    // That clean parse means `association { 1 O| }` and `1 Other |` are no
+    // longer wrapped in ERROR, so preserve the pre-existing completion
+    // behavior explicitly: typed identifiers complete class-like symbols,
+    // and whitespace after the left type still offers arrows for users who
+    // are building the arrow-form association member.
+    const isSingleEndInAssociationDefinition = (node: SyntaxNode | null): boolean =>
+      node?.type === "single_association_end" && node.parent?.type === "association_definition";
+
+    if (nodeAtCursor && isLetterLeadingIdentifier(nodeAtCursor)) {
+      let n: SyntaxNode | null = nodeAtCursor.parent;
+      while (n) {
+        if (isSingleEndInAssociationDefinition(n)) {
+          symbolKinds = "association_typed_prefix";
+          break;
+        }
+        if (n.type === "association_definition" || n.type === "source_file") break;
+        n = n.parent;
+      }
+    }
+
+    if (
+      prevLeaf?.type === "identifier" &&
+      isSingleEndInAssociationDefinition(prevLeaf.parent) &&
+      cursorOffset > prevLeaf.endIndex
+    ) {
+      symbolKinds = "association_arrow";
+    }
   }
 
   // --- Structured req body: slot-ready starter completion ---

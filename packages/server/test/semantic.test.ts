@@ -672,6 +672,26 @@ const TEST_CASES: TestCase[] = [
     ],
   },
 
+  // 141: Corpus gap — standalone associations can be written as one
+  // association end per line, without an explicit arrow between the ends.
+  {
+    name: "141 corpus: standalone association end declarations parse clean",
+    fixtures: ["141_corpus_standalone_association_ends.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "141_corpus_standalone_association_ends.ump" },
+      {
+        type: "goto_def_exact",
+        at: "role_type",
+        expect: ["def_role"],
+      },
+      {
+        type: "goto_def_exact",
+        at: "person_type",
+        expect: ["def_person"],
+      },
+    ],
+  },
+
   // 15: Formatting smoke test
   {
     name: "15 formatting: indent + skip range",

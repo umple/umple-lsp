@@ -1,0 +1,14 @@
+class /*@def_role*/PersonRole {}
+class /*@def_person*/Person {}
+class EmployeeRole {}
+
+association {
+  0..2 /*@role_type*/PersonRole;
+  1 /*@person_type*/Person;
+}
+
+association {
+  reflexive;
+  * EmployeeRole;
+  1 EmployeeRole supervisor;
+}
