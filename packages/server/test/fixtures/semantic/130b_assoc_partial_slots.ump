@@ -12,6 +12,10 @@ class ClassBodyAfterRightMult {
   1 -> * /*@class_body_after_right_mult*/
 }
 
+class ClassBodyAfterRightMultNoSpace {
+  1 -> */*@class_body_after_right_mult_no_space*/
+}
+
 class ClassBodyAfterRangeMult {
   0..1 -> 1..* /*@class_body_after_range_mult*/
 }
@@ -36,6 +40,7 @@ class NegState {
 association {
   1 Other -> /*@assoc_block_after_arrow*/
   1 Other -> * /*@assoc_block_after_right_mult*/
+  1 Other -> */*@assoc_block_after_right_mult_no_space*/
   0..1 Other -> 1..* /*@assoc_block_after_range_mult*/
 }
 

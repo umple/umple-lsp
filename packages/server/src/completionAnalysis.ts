@@ -883,6 +883,10 @@ export function analyzeCompletion(
           segment.length === 1 &&
           last.type === "multiplicity" &&
           last.endIndex === cursorOffset;
+        // `1 -> *|` is still the multiplicity token. The right-type slot starts
+        // after whitespace (`1 -> * |`) or after a typed identifier (`1 -> * O|`).
+        const isRightMultiplicityWithoutTypeBoundary = (node: SyntaxNode): boolean =>
+          !isLetterLeadingId(node) && mightBeMult(node) && node.endIndex === cursorOffset;
 
         if (assocMode === "standalone") {
           const leftSide =
@@ -904,9 +908,13 @@ export function analyzeCompletion(
           } else if (segArrowIdxInSeg >= 0 && hasLeftMult && hasLeftType) {
             // Standalone slot 3: `1 Other -> * |` needs right type.
             const child = segment[prevInSeg];
-            symbolKinds = isLetterLeadingId(child)
-              ? "association_typed_prefix"
-              : "association_type";
+            if (isRightMultiplicityWithoutTypeBoundary(child)) {
+              symbolKinds = null;
+            } else {
+              symbolKinds = isLetterLeadingId(child)
+                ? "association_typed_prefix"
+                : "association_type";
+            }
           } else if (hasLeftMult && hasLeftType) {
             // Standalone slot 1b: `1 Other |` or `1 Other -|` needs arrow.
             symbolKinds = "association_arrow";
@@ -932,9 +940,13 @@ export function analyzeCompletion(
           // slot. typed-prefix vs blank-multiplicity disambiguation matches
           // topic 043's heuristic.
           const child = segment[prevInSeg];
-          symbolKinds = isLetterLeadingId(child)
-            ? "association_typed_prefix"
-            : "association_type";
+          if (isRightMultiplicityWithoutTypeBoundary(child)) {
+            symbolKinds = null;
+          } else {
+            symbolKinds = isLetterLeadingId(child)
+              ? "association_typed_prefix"
+              : "association_type";
+          }
         } else {
           // Inline slot 0: no arrow in this segment yet. If prevLeaf is
           // mult-like OR a partial-arrow character (`-`, `<`, `>`, `@`,

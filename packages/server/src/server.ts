@@ -391,7 +391,6 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
         //   "-"  association arrow start (`1 -|`); trait-SM op marker
         //   ">"  association arrow finish (`1 ->|` → multiplicity slot);
         //        transition-target flow after `->`
-        //   "*"  association right-multiplicity / type slot (`1 -> *|`)
         //   ","  isA / implementsReq / param continuation
         // Stage-2 (topic 053):
         //   "<"  association arrow `1 <|`; trait-SM op recovery `isA T<-|`
@@ -399,7 +398,9 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
         //   "("  parameter-type slot at method (param-type completion)
         // Topic 063:
         //   " "  retrigger after structural whitespace slots (`1 |`,
-        //        `1 -> |`, `1 -> * |`, `implementsReq |`)
+        //        `1 -> |`, `1 -> * |`, `implementsReq |`). We intentionally
+        //        do not trigger on `*` itself; the class-name slot starts after
+        //        the separating space, not at `*|`.
         triggerCharacters: [...COMPLETION_TRIGGER_CHARACTERS],
       },
       definitionProvider: true,

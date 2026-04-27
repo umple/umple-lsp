@@ -7,13 +7,16 @@ import type { CompletionInfo } from "./completionAnalysis";
  * server returns; they only tell clients when to ask the server again while the
  * user is typing. Space is intentionally included for Umple's structural slots
  * such as `association { 1 | }`, `1 -> |`, and `1 -> * |`.
+ *
+ * Deliberately do not advertise "*" as a trigger. In association multiplicity
+ * syntax, "*" completes the current multiplicity token; class-name completion
+ * should wait until the user types the separating space.
  */
 export const COMPLETION_TRIGGER_CHARACTERS = [
   "/",
   ".",
   "-",
   ">",
-  "*",
   ",",
   "<",
   "@",

@@ -4627,7 +4627,7 @@ const TEST_CASES: TestCase[] = [
         ],
       },
 
-      // Slot 2: right-type after the right multiplicity.
+      // Slot 2: right-type after the right multiplicity plus a separating space.
       {
         type: "completion_kinds",
         at: "class_body_after_right_mult",
@@ -4645,8 +4645,13 @@ const TEST_CASES: TestCase[] = [
           "isA", "before", "trace", "abstract", "class", "trait", "ERROR",
         ],
       },
+      {
+        type: "completion_kinds",
+        at: "class_body_after_right_mult_no_space",
+        expect: null,
+      },
 
-      // Ranged multiplicity (`0..1 -> 1..*`) still routes to slot 2.
+      // Ranged multiplicity plus a boundary (`0..1 -> 1..* `) still routes to slot 2.
       {
         type: "completion_kinds",
         at: "class_body_after_range_mult",
@@ -4710,6 +4715,11 @@ const TEST_CASES: TestCase[] = [
         type: "completion_excludes",
         at: "assoc_block_after_right_mult",
         expect: ["isA", "namespace", "class", "Java", "ERROR"],
+      },
+      {
+        type: "completion_kinds",
+        at: "assoc_block_after_right_mult_no_space",
+        expect: null,
       },
       {
         type: "completion_kinds",
@@ -6815,7 +6825,7 @@ async function main() {
   {
     const testName = "completion_triggers: advertise structural retriggers";
     try {
-      const expected = ["/", ".", "-", ">", "*", ",", "<", "@", "(", " "];
+      const expected = ["/", ".", "-", ">", ",", "<", "@", "(", " "];
       const actual: string[] = [...COMPLETION_TRIGGER_CHARACTERS];
       for (const ch of expected) {
         if (!actual.includes(ch)) {
@@ -6824,6 +6834,9 @@ async function main() {
       }
       if (new Set(actual).size !== actual.length) {
         throw new Error(`Trigger characters contain duplicates: [${actual.join(", ")}]`);
+      }
+      if (actual.includes("*")) {
+        throw new Error("Star should not be advertised as a trigger; class names need a whitespace boundary");
       }
       if (!shouldServeWhitespaceTriggeredCompletion("association_type")) {
         throw new Error("Whitespace trigger should be served for association_type");
