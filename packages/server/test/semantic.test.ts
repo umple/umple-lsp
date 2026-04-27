@@ -704,6 +704,31 @@ const TEST_CASES: TestCase[] = [
     ],
   },
 
+  // 143: Corpus gap — nested states can be declared with a dotted prefix
+  // repeating their parent state name, e.g. `Cooling.On { ... }`.
+  {
+    name: "143 corpus: dotted nested state declarations parse and resolve",
+    fixtures: ["143_corpus_dotted_state_declarations.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "143_corpus_dotted_state_declarations.ump" },
+      {
+        type: "token_context",
+        at: "def_cooling_on",
+        expect: { contextType: "normal", stateDefinitionRef: { definitionPath: ["Cooling", "On"] } },
+      },
+      {
+        type: "goto_def_exact",
+        at: "target_cooling_on",
+        expect: ["def_cooling_on"],
+      },
+      {
+        type: "goto_def_exact",
+        at: "target_heating_on",
+        expect: ["def_heating_on"],
+      },
+    ],
+  },
+
   // 15: Formatting smoke test
   {
     name: "15 formatting: indent + skip range",

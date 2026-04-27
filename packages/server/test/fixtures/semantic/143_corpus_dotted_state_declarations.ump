@@ -1,0 +1,25 @@
+class AirConditioner {
+  Controller {
+    Cooling {
+      Cooling./*@def_cooling_on*/On {
+        entry / { turnOnCompressor(); }
+        tempBelowThermometer -> Cooling.Off;
+      }
+      Cooling./*@def_cooling_off*/Off {
+        entry / { turnOffCompressor(); }
+        tempAboveThermometer -> Cooling./*@target_cooling_on*/On;
+      }
+      switchMode -> Heating;
+    }
+
+    Heating {
+      Heating./*@def_heating_on*/On {
+        tempAboveThermometer -> Heating.Off;
+      }
+      Heating./*@def_heating_off*/Off {
+        tempBelowThermometer -> Heating./*@target_heating_on*/On;
+      }
+      switchMode -> Cooling;
+    }
+  }
+}

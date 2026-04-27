@@ -1307,7 +1307,10 @@ export class SymbolIndex {
           // State recovery (V2b): only depth-1 direct children of a valid SM.
           if (defNode.type !== "state" || defNode.isError) continue;
           const stateNameNode = defNode.childForFieldName("name");
-          if (!stateNameNode || stateNameNode.type !== "identifier") continue;
+          if (
+            !stateNameNode ||
+            (stateNameNode.type !== "identifier" && stateNameNode.type !== "qualified_name")
+          ) continue;
           // No ERROR in header before `{`
           let hasHeaderError = false;
           for (let ci = 0; ci < defNode.childCount; ci++) {

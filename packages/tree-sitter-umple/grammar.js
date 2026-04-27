@@ -19,7 +19,6 @@ module.exports = grammar({
 
   conflicts: ($) => [
     [$._definition, $._class_content],
-    [$.multiplicity, $.state],
     [$.event_spec, $.qualified_name],
     [$._class_content, $.mixset_definition],
     [$.state_machine, $.state],
@@ -27,7 +26,6 @@ module.exports = grammar({
     [$._java_static_final_field, $.method_signature],
     [$.trace_statement, $.event_spec],
     [$.enumerated_attribute, $.state_machine],
-    [$.enumerated_attribute, $.state_machine, $.state],
     [$.state_machine, $.method_declaration],
     [$.active_method, $.attribute_declaration, $.method_declaration, $.method_signature, $.emit_method],
     [$.attribute_declaration, $.method_declaration, $.method_signature, $.emit_method],
@@ -37,8 +35,6 @@ module.exports = grammar({
     [$.abstract_method_declaration, $.trait_method_signature],
     [$.more_code, $.code_block],
     [$.method_signature, $.trait_method_signature],
-    [$.attribute_declaration, $.state, $.method_declaration, $.method_signature],
-    [$.state, $.method_declaration],
     [$.state_machine, $.method_declaration, $.method_signature],
     [$._class_content, $.active_method],
     [$.active_method, $.attribute_declaration, $.method_declaration, $.emit_method],
@@ -1008,17 +1004,17 @@ module.exports = grammar({
       ),
 
     state: ($) =>
-      seq(
+      prec(2, seq(
         optional(field("change_type", choice("+", "-", "*"))),
         optional(field("is_final", "final")),
-        field("name", $.identifier),
+        field("name", choice($.identifier, $.qualified_name)),
         "{",
         repeat(
           choice(
+            $.state,
             $.transition,
             $.entry_exit_action,
             $.do_activity,
-            $.state,
             $.standalone_transition,
             $.display_color,
             $.mixset_definition,
@@ -1030,7 +1026,7 @@ module.exports = grammar({
           ),
         ),
         "}",
-      ),
+      )),
 
     transition: ($) =>
       seq(

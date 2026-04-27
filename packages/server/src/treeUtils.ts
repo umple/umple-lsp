@@ -64,14 +64,27 @@ export function resolveEnclosingScope(
  * E.g., for `Inner` inside `Open` inside `EEE`, returns `["EEE", "Open", "Inner"]`.
  */
 export function resolveStatePath(nameNode: SyntaxNode): string[] {
-  const segments: string[] = [nameNode.text];
-  let current = nameNode.parent; // The state node itself
-  if (current) current = current.parent; // Go above it
+  const stateNameText = (node: SyntaxNode): string => {
+    if (node.type === "qualified_name") {
+      for (let i = node.namedChildCount - 1; i >= 0; i--) {
+        const child = node.namedChild(i);
+        if (child?.type === "identifier") return child.text;
+      }
+    }
+    return node.text;
+  };
+
+  const segments: string[] = [stateNameText(nameNode)];
+  let current: SyntaxNode | null = nameNode;
+  while (current && current.type !== "state") {
+    current = current.parent;
+  }
+  if (current) current = current.parent; // Go above the state being named.
 
   while (current) {
     if (current.type === "state") {
       const name = current.childForFieldName("name");
-      if (name) segments.unshift(name.text);
+      if (name) segments.unshift(stateNameText(name));
     }
     if (
       current.type === "state_machine" ||

@@ -121,8 +121,12 @@ export function analyzeToken(
   let stateDefinitionRef: TokenResult["stateDefinitionRef"];
   if (
     node.type === "identifier" &&
-    parent?.type === "state" &&
-    parent.childForFieldName("name")?.id === node.id
+    (
+      (parent?.type === "state" && parent.childForFieldName("name")?.id === node.id) ||
+      (parent?.type === "qualified_name" &&
+       parent.parent?.type === "state" &&
+       parent.parent.childForFieldName("name")?.id === parent.id)
+    )
   ) {
     stateDefinitionRef = { definitionPath: resolveStatePath(node) };
   }

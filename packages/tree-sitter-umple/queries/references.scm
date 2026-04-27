@@ -47,6 +47,7 @@
 (state_machine name: (identifier) @reference.statemachine)
 (referenced_statemachine definition: (identifier) @reference.statemachine)
 (state name: (identifier) @reference.state)
+(state name: (qualified_name (identifier) @reference.state .))
 (association_definition name: (identifier) @reference.association)
 (attribute_declaration name: (identifier) @reference.attribute)
 (const_declaration name: (identifier) @reference.const)
