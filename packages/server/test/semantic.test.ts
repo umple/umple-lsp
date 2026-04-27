@@ -5917,10 +5917,66 @@ const TEST_CASES: TestCase[] = [
         ],
       },
 
-      // Negative: cursor on a non-trait symbol (a class declaration) returns [].
+      // Negative: class with no subclasses returns [].
       { type: "implementations_empty", at: "class_decl_Person" },
       // Negative: cursor on a class with no isA at all returns [].
       { type: "implementations_empty", at: "class_decl_Plain" },
+    ],
+  },
+
+  // 152: Find implementations beyond traits. Classes return subclasses
+  // (including associationClass, stored as kind=class), while interfaces
+  // return interface extensions plus class/trait implementers.
+  {
+    name: "152 implementation_targets: class subclasses and interface implementers",
+    fixtures: ["152_implementation_targets.ump"],
+    assertions: [
+      {
+        type: "implementations",
+        at: "impl_class_base",
+        expectAt: [
+          "impl_class_direct",
+          "impl_class_grand",
+          "impl_class_assoc",
+        ],
+        excludeAt: [
+          "impl_interface_noise",
+          "impl_trait_noise",
+          "impl_unrelated",
+        ],
+      },
+      {
+        type: "implementations",
+        at: "impl_class_use_base",
+        expectAt: [
+          "impl_class_direct",
+          "impl_class_grand",
+          "impl_class_assoc",
+        ],
+      },
+      {
+        type: "implementations",
+        at: "impl_iface_api",
+        expectAt: [
+          "impl_iface_extended",
+          "impl_iface_direct_class",
+          "impl_iface_transitive_class",
+          "impl_iface_trait",
+          "impl_iface_trait_user",
+        ],
+        excludeAt: ["impl_unrelated"],
+      },
+      {
+        type: "implementations",
+        at: "impl_iface_use_api",
+        expectAt: [
+          "impl_iface_extended",
+          "impl_iface_direct_class",
+          "impl_iface_transitive_class",
+          "impl_iface_trait",
+          "impl_iface_trait_user",
+        ],
+      },
     ],
   },
 

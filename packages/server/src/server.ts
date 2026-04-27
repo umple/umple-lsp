@@ -1014,10 +1014,10 @@ function expandRenameDeclarations(
   );
 }
 
-// ── Find Implementations (topic 059) ─────────────────────────────────────────
-// Returns class/trait declarations that implement a trait via `isA`, both
-// directly and transitively. Cursor must resolve to exactly one trait
-// symbol; non-trait targets return [].
+// ── Find Implementations ─────────────────────────────────────────────────────
+// For class/interface/trait targets, return declarations below the target in
+// the `isA` graph. Trait behavior preserves topic 059 semantics: interfaces
+// are excluded and are not traversed for trait targets.
 
 connection.onImplementation(async (params) => {
   const document = getDocument(params.textDocument.uri);
@@ -1034,16 +1034,18 @@ connection.onImplementation(async (params) => {
   );
   if (!resolved) return [];
 
-  const traitSymbols = resolved.symbols.filter((s) => s.kind === "trait");
-  if (traitSymbols.length !== 1) return [];
-  const trait = traitSymbols[0];
+  const targetSymbols = resolved.symbols.filter(
+    (s) => s.kind === "class" || s.kind === "interface" || s.kind === "trait",
+  );
+  if (targetSymbols.length !== 1) return [];
+  const target = targetSymbols[0];
 
   // Same scope model as find-references: declaration files + forward
   // import closure + reverse importers, lazily indexed.
   const reachable = ensureImportsIndexed(docPath, document.getText());
-  const traitFiles = new Set([path.normalize(trait.file)]);
-  for (const f of traitFiles) reachable.add(f);
-  const reverseImporters = symbolIndex.getReverseImporters(traitFiles);
+  const targetFiles = new Set([path.normalize(target.file)]);
+  for (const f of targetFiles) reachable.add(f);
+  const reverseImporters = symbolIndex.getReverseImporters(targetFiles);
   for (const f of reverseImporters) {
     if (!symbolIndex.isFileIndexed(f)) {
       try {
@@ -1056,7 +1058,11 @@ connection.onImplementation(async (params) => {
     reachable.add(f);
   }
 
-  const implementers = symbolIndex.findTraitImplementers(trait.name, reachable);
+  const implementers = symbolIndex.findIsAImplementers(
+    target.name,
+    target.kind as "class" | "interface" | "trait",
+    reachable,
+  );
   return implementers.map((sym) =>
     Location.create(
       pathToFileURL(sym.file).toString(),

@@ -4,7 +4,7 @@ A snapshot of what's shipping, what's known to be gappy, and where future studen
 
 ## Currently shipping
 
-- LSP server: go-to-def, find-refs, rename, hover, completion, diagnostics, document symbols, workspace symbols, formatting, diagram navigation, code actions (`Add missing semicolon` quick-fix for W1006/W1007/E1502 — see "Code actions" below)
+- LSP server: go-to-def, find-refs, find-implementations, rename, hover, completion, diagnostics, document symbols, workspace symbols, formatting, diagram navigation, code actions (`Add missing semicolon` quick-fix for W1006/W1007/E1502 — see "Code actions" below)
 - Tree-sitter grammar: most real Umple syntax including structured req bodies (userStory / useCase) and implementsReq across all entity types
 - Editor extensions: VS Code (digized.umple), Zed (umple.zed), Neovim (umple.nvim), BBEdit (codeless module), IntelliJ (LSP4IJ + TextMate)
 - CI: build/test workflow for umple-lsp plus auto-PR for grammar/highlights changes from umple-lsp into umple.zed
@@ -58,6 +58,7 @@ The known array-fallback completion leaks have all been closed:
 - LSP semantic tokens — topic 064 (`textDocument/semanticTokens/full` maps `highlights.scm` captures into an LSP legend for editors that do not load tree-sitter queries directly)
 - VS Code live diagram refresh — topic 065 (`umple.vscode` refreshes diagrams when the root file or any reachable imported `.ump` file changes, including unsaved in-memory edits)
 - Workspace-wide rename safety — topic 066 (`textDocument/rename` synchronously indexes workspace roots for explicit rename requests, then searches every indexed `.ump` file instead of only the import graph)
+- Find-implementations beyond traits — topic 067 (`textDocument/implementation` now returns class subclasses and interface extensions/implementers in addition to the existing trait implementers)
 
 ### How to add new completion slots
 
@@ -133,8 +134,7 @@ This wiki lives in `wiki/` in the repo. GitHub also has a separate "Wiki" featur
 
 Pulled from the conversation history + general LSP best practice:
 
-1. **Extend implementations beyond traits** — possible class subclasses or interface implementers/extensions, but verify Umple compiler semantics first.
-2. **Inlay hints** — inferred attribute types, multiplicity defaults, or trait template substitutions.
+1. **Inlay hints** — inferred attribute types, multiplicity defaults, or trait template substitutions.
 
 Each of these is a focused topic: spec the scope, get codex review, implement, test, commit. The ~5 day cadence we hit during topics 038–044 is comfortable for one of these per cycle.
 

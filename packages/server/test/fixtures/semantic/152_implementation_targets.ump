@@ -1,0 +1,49 @@
+class /*@impl_class_base*/Base {}
+
+class /*@impl_class_direct*/DirectChild {
+  isA /*@impl_class_use_base*/Base;
+}
+
+class /*@impl_class_grand*/GrandChild {
+  isA DirectChild;
+}
+
+interface /*@impl_interface_noise*/BaseLike {
+  isA Base;
+}
+
+trait /*@impl_trait_noise*/BaseTrait {
+  isA Base;
+}
+
+class Left {}
+class Right {}
+
+associationClass /*@impl_class_assoc*/AssocChild {
+  1 Left -- * Right;
+  isA Base;
+}
+
+interface /*@impl_iface_api*/Api {}
+
+interface /*@impl_iface_extended*/ExtendedApi {
+  isA /*@impl_iface_use_api*/Api;
+}
+
+class /*@impl_iface_direct_class*/ApiClient {
+  isA Api;
+}
+
+class /*@impl_iface_transitive_class*/ExtendedClient {
+  isA ExtendedApi;
+}
+
+trait /*@impl_iface_trait*/ApiTrait {
+  isA Api;
+}
+
+class /*@impl_iface_trait_user*/TraitClient {
+  isA ApiTrait;
+}
+
+class /*@impl_unrelated*/Plain {}

@@ -338,11 +338,11 @@ export class SemanticTestHelper {
   }
 
   /**
-   * Topic 059 — get implementation locations for the trait at the cursor.
+   * Get implementation locations for the class/interface/trait at the cursor.
    * Mirrors the production handler: resolve cursor → require exactly one
-   * trait symbol → walk `findTraitImplementers` over the reachable scope.
-   * Returns deduplicated declaration locations. Empty array on
-   * non-trait or zero/multiple-trait resolution.
+   * supported target symbol → walk `findIsAImplementers` over the reachable
+   * scope. Returns deduplicated declaration locations. Empty array on
+   * unsupported or zero/multiple-target resolution.
    */
   implementationsAt(
     filePath: string,
@@ -353,10 +353,16 @@ export class SemanticTestHelper {
   ): RefLocation[] {
     const resolved = this.resolve(filePath, content, line, col, reachable);
     if (!resolved) return [];
-    const traitSymbols = resolved.symbols.filter((s: SymbolEntry) => s.kind === "trait");
-    if (traitSymbols.length !== 1) return [];
-    const trait = traitSymbols[0];
-    const implementers = this.si.findTraitImplementers(trait.name, reachable);
+    const targetSymbols = resolved.symbols.filter((s: SymbolEntry) =>
+      s.kind === "class" || s.kind === "interface" || s.kind === "trait",
+    );
+    if (targetSymbols.length !== 1) return [];
+    const target = targetSymbols[0];
+    const implementers = this.si.findIsAImplementers(
+      target.name,
+      target.kind as "class" | "interface" | "trait",
+      reachable,
+    );
     return implementers.map((s: SymbolEntry) => ({
       file: s.file,
       line: s.line,
@@ -365,10 +371,10 @@ export class SemanticTestHelper {
   }
 
   /**
-   * Topic 059 — production-shaped find-implementations with reverse-
+   * Production-shaped find-implementations with reverse-
    * importer discovery and lazy indexing. Mirrors `connection.onImplementation`
    * in `server.ts`:
-   *   1. Resolve cursor → require exactly one trait symbol.
+   *   1. Resolve cursor → require exactly one class/interface/trait symbol.
    *   2. Compute reverse importers for the trait's declaration files.
    *   3. Lazily index any reverse importers not yet indexed (using
    *      `fileContents` as the disk-shadow source).
@@ -389,11 +395,13 @@ export class SemanticTestHelper {
   ): RefLocation[] {
     const resolved = this.resolve(filePath, content, line, col, reachable);
     if (!resolved) return [];
-    const traitSymbols = resolved.symbols.filter((s: SymbolEntry) => s.kind === "trait");
-    if (traitSymbols.length !== 1) return [];
-    const trait = traitSymbols[0];
+    const targetSymbols = resolved.symbols.filter((s: SymbolEntry) =>
+      s.kind === "class" || s.kind === "interface" || s.kind === "trait",
+    );
+    if (targetSymbols.length !== 1) return [];
+    const target = targetSymbols[0];
 
-    const traitFiles = new Set([path.normalize(trait.file)]);
+    const traitFiles = new Set([path.normalize(target.file)]);
     const fullScope = new Set<string>(reachable);
     for (const f of traitFiles) fullScope.add(f);
 
@@ -406,7 +414,11 @@ export class SemanticTestHelper {
       fullScope.add(f);
     }
 
-    const implementers = this.si.findTraitImplementers(trait.name, fullScope);
+    const implementers = this.si.findIsAImplementers(
+      target.name,
+      target.kind as "class" | "interface" | "trait",
+      fullScope,
+    );
     return implementers.map((s: SymbolEntry) => ({
       file: s.file,
       line: s.line,

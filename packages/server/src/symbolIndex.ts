@@ -413,10 +413,30 @@ export class SymbolIndex {
     traitName: string,
     reachableFiles: Set<string>,
   ): SymbolEntry[] {
+    return this.findIsAImplementers(traitName, "trait", reachableFiles);
+  }
+
+  /**
+   * Find declarations that sit below a class/interface/trait target in the
+   * isA graph. The returned declaration kinds intentionally depend on the
+   * target kind:
+   *
+   * - class target: class declarations that subclass it
+   * - interface target: classes/traits that implement it and interfaces that
+   *   extend it
+   * - trait target: existing behavior, classes/traits only; interfaces are not
+   *   traversed for trait targets
+   */
+  findIsAImplementers(
+    targetName: string,
+    targetKind: "class" | "interface" | "trait",
+    reachableFiles: Set<string>,
+  ): SymbolEntry[] {
+    const policy = implementationPolicy(targetKind);
     const result: SymbolEntry[] = [];
     const seenSymbols = new Set<string>();
-    const visitedNames = new Set<string>([traitName]);
-    const queue: string[] = [traitName];
+    const visitedNames = new Set<string>([targetName]);
+    const queue: string[] = [targetName];
 
     while (queue.length > 0) {
       const target = queue.shift()!;
@@ -426,24 +446,24 @@ export class SymbolIndex {
 
         const decls = this.getSymbols({
           name: child,
-          kind: ["class", "trait"],
+          kind: policy.resultKinds,
         }).filter((s) => reachableFiles.has(path.normalize(s.file)));
 
-        // If `child` is only declared as an interface (or has no
-        // class/trait declaration at all), skip it AND do not enqueue
-        // it for transitive traversal — the compiler treats the
-        // interface->trait edge as semantically dropped for
-        // implementation lookups.
+        // If `child` has no declaration kind valid for this target, skip it
+        // and do not traverse through it. This preserves the existing trait
+        // behavior where interface→trait edges are ignored.
         if (decls.length === 0) continue;
-
-        visitedNames.add(child);
-        queue.push(child);
 
         for (const s of decls) {
           const key = `${s.file}:${s.line}:${s.column}`;
           if (seenSymbols.has(key)) continue;
           seenSymbols.add(key);
           result.push(s);
+        }
+
+        if (decls.some((s) => policy.traversalKinds.has(s.kind))) {
+          visitedNames.add(child);
+          queue.push(child);
         }
       }
     }
@@ -1681,6 +1701,28 @@ export class SymbolIndex {
     }
   }
 
+}
+
+function implementationPolicy(targetKind: "class" | "interface" | "trait"): {
+  resultKinds: SymbolKind[];
+  traversalKinds: Set<SymbolKind>;
+} {
+  if (targetKind === "class") {
+    return {
+      resultKinds: ["class"],
+      traversalKinds: new Set<SymbolKind>(["class"]),
+    };
+  }
+  if (targetKind === "interface") {
+    return {
+      resultKinds: ["class", "interface", "trait"],
+      traversalKinds: new Set<SymbolKind>(["class", "interface", "trait"]),
+    };
+  }
+  return {
+    resultKinds: ["class", "trait"],
+    traversalKinds: new Set<SymbolKind>(["class", "trait"]),
+  };
 }
 
 // Singleton instance
