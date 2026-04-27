@@ -1,0 +1,5 @@
+class /*@ws_def_Target*/Target {}
+
+class MainUser {
+  /*@ws_main_ref*/Target target;
+}

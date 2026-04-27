@@ -367,6 +367,15 @@ export class SymbolIndex {
     return result;
   }
 
+  /**
+   * Snapshot all file paths currently held in the index.
+   * Used by workspace-wide rename, which must also search files that have no
+   * declarations but may contain references.
+   */
+  getIndexedFilePaths(): Set<string> {
+    return new Set(this.files.keys());
+  }
+
 
   /**
    * Get the parsed tree for a file (for formatting, etc.).

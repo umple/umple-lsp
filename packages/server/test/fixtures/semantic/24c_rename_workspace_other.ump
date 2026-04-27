@@ -1,0 +1,3 @@
+class WorkspaceOnlyUser {
+  /*@ws_other_ref*/Target target;
+}

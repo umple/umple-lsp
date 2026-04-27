@@ -106,6 +106,15 @@ let workspaceRoots: string[] = [];
 type RootScanState = "idle" | "scanning" | "ready";
 const rootScanStates = new Map<string, RootScanState>();
 
+function isPathInsideRoot(filePath: string, root: string): boolean {
+  const relative = path.relative(path.normalize(root), path.normalize(filePath));
+  return relative === "" || (!!relative && !relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function isInWorkspaceRoot(filePath: string): boolean {
+  return workspaceRoots.some((root) => isPathInsideRoot(filePath, root));
+}
+
 /**
  * Check if the workspace use-graph is ready for the root containing a file.
  * Returns true if the root's scan is complete, false if scanning or idle.
@@ -114,10 +123,15 @@ const rootScanStates = new Map<string, RootScanState>();
 function isUseGraphReadyForFile(filePath: string): boolean {
   const normalized = path.normalize(filePath);
   for (const [root, state] of rootScanStates) {
-    if (normalized.startsWith(root)) return state === "ready";
+    if (isPathInsideRoot(normalized, root)) return state === "ready";
   }
   // File outside all workspace roots — no graph needed, local scope is fine
   return true;
+}
+
+function getOpenDocumentContent(filePath: string): string | undefined {
+  const uri = pathToFileURL(filePath).toString();
+  return getDocument(uri)?.getText();
 }
 
 /**
@@ -969,6 +983,37 @@ function isUnambiguousRename(symbols: SymbolEntry[]): boolean {
   return symbols.every((s) => s.name === name);
 }
 
+function shouldUseWorkspaceWideRename(
+  docPath: string,
+  symbols: SymbolEntry[],
+): boolean {
+  return workspaceRoots.length > 0 &&
+    (isInWorkspaceRoot(docPath) || symbols.some((s) => isInWorkspaceRoot(s.file)));
+}
+
+function indexWorkspaceForRename(): Set<string> {
+  symbolIndex.indexWorkspace(workspaceRoots, getOpenDocumentContent);
+  return symbolIndex.getIndexedFilePaths();
+}
+
+function expandRenameDeclarations(
+  resolvedSymbols: SymbolEntry[],
+  filesToSearch: Set<string>,
+): SymbolEntry[] {
+  if (resolvedSymbols.length === 0) return [];
+  const target = resolvedSymbols[0];
+  const candidates = symbolIndex.getSymbols({
+    name: target.name,
+    kind: target.kind,
+  });
+  return candidates.filter((candidate) =>
+    filesToSearch.has(path.normalize(candidate.file)) &&
+    candidate.name === target.name &&
+    candidate.kind === target.kind &&
+    isUnambiguousRename([...resolvedSymbols, candidate]),
+  );
+}
+
 // ── Find Implementations (topic 059) ─────────────────────────────────────────
 // Returns class/trait declarations that implement a trait via `isA`, both
 // directly and transitively. Cursor must resolve to exactly one trait
@@ -1099,37 +1144,44 @@ connection.onRenameRequest(async (params) => {
   // Validate new name against the kind-specific rule.
   if (!isValidNewName(resolved.symbols[0].kind, params.newName)) return null;
 
-  // Check workspace use-graph readiness for the DECLARATION files' roots.
-  // Rename must not return partial WorkspaceEdits — if any declaration's
-  // root is still scanning, fail explicitly rather than silently miss importers.
-  // (Checked after resolution so we know which roots actually matter.)
-  for (const sym of resolved.symbols) {
-    if (!isUseGraphReadyForFile(sym.file)) {
-      // Use window/showMessage notification instead of showWarningMessage
-      // (window/showMessageRequest) — some clients like CodeMirror don't
-      // implement the request and the rejection crashes the server.
-      connection.sendNotification(ShowMessageNotification.type, {
-        type: MessageType.Warning,
-        message: "Workspace scan in progress. Please try rename again in a moment.",
-      });
-      return null;
+  const useWorkspaceWideRename = shouldUseWorkspaceWideRename(docPath, resolved.symbols);
+
+  // Check workspace use-graph readiness only for the old import-chain fallback.
+  // Workspace-wide rename indexes the workspace synchronously below, so it does
+  // not depend on the background use-graph scan having finished.
+  if (!useWorkspaceWideRename) {
+    for (const sym of resolved.symbols) {
+      if (!isUseGraphReadyForFile(sym.file)) {
+        // Use window/showMessage notification instead of showWarningMessage
+        // (window/showMessageRequest) — some clients like CodeMirror don't
+        // implement the request and the rejection crashes the server.
+        connection.sendNotification(ShowMessageNotification.type, {
+          type: MessageType.Warning,
+          message: "Workspace scan in progress. Please try rename again in a moment.",
+        });
+        return null;
+      }
     }
   }
 
-  // 2. Index forward-reachable files (fast, import-chain only — no workspace crawl).
-  // Same scope model as references: current file + forward imports + known reverse
-  // importers. See onReferences comment for full rationale.
+  // 2. Index forward-reachable files. If the rename target belongs to a
+  // workspace root, also synchronously index the workspace before searching.
+  // Rename is explicit and must prefer complete edits over request latency.
   const reachableFiles = ensureImportsIndexed(docPath, document.getText());
 
   // 3. Compute search scope: declaration files + forward-reachable + known reverse importers
   const declFiles = new Set(
     resolved.symbols.map((s) => path.normalize(s.file)),
   );
+  const workspaceFiles = useWorkspaceWideRename
+    ? indexWorkspaceForRename()
+    : new Set<string>();
   const reverseImporters = symbolIndex.getReverseImporters(declFiles);
   const filesToSearch = new Set([
     ...declFiles,
     ...reachableFiles,
     ...reverseImporters,
+    ...workspaceFiles,
   ]);
 
   // Ensure reverse importers are fully indexed
@@ -1145,20 +1197,28 @@ connection.onRenameRequest(async (params) => {
     }
   }
 
-  // 4. Expand shared state declarations (reused SM alias/base equivalence)
-  const sharedDecls = symbolIndex.getSharedStateDeclarations(
+  // 4. Expand declarations after the full search scope is known. This picks up
+  // same-identity declarations discovered by workspace indexing, such as
+  // partial top-level declarations in files outside the import graph.
+  const renameDeclarations = expandRenameDeclarations(
     resolved.symbols,
     filesToSearch,
   );
 
-  // 5. Find ALL references including declarations
+  // 5. Expand shared state declarations (reused SM alias/base equivalence)
+  const sharedDecls = symbolIndex.getSharedStateDeclarations(
+    renameDeclarations,
+    filesToSearch,
+  );
+
+  // 6. Find ALL references including declarations
   const refs = symbolIndex.findReferences(
     sharedDecls,
     filesToSearch,
     true,
   );
 
-  // 5. Build WorkspaceEdit
+  // 7. Build WorkspaceEdit
   const changes: { [uri: string]: TextEdit[] } = {};
   for (const r of refs) {
     const uri = pathToFileURL(r.file).toString();

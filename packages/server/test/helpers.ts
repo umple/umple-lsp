@@ -669,6 +669,7 @@ export class SemanticTestHelper {
     col: number,
     newName: string,
     reachable: Set<string>,
+    searchScope: Set<string> = reachable,
   ):
     | { status: "ok"; edits: RefLocation[] }
     | { status: "no-symbol" | "not-renameable" | "ambiguous" | "invalid-name" } {
@@ -684,11 +685,45 @@ export class SemanticTestHelper {
     }
     if (!isValidNewName(kind, newName)) return { status: "invalid-name" };
 
-    // Run find-references with the resolved declaration set — same pipeline
-    // as refs assertions.
+    const target = resolved.symbols[0];
+    const declarations = this.si.getSymbols({
+      name: target.name,
+      kind: target.kind,
+    }).filter((candidate: SymbolEntry) =>
+      searchScope.has(path.normalize(candidate.file)) &&
+      candidate.name === target.name &&
+      candidate.kind === target.kind &&
+      this.isUnambiguousRename([...resolved.symbols, candidate]),
+    );
+
+    // Run find-references with the expanded declaration set — same pipeline
+    // as the production rename request after it has computed its search scope.
     const edits = this.si
-      .findReferences(resolved.symbols, reachable, true)
+      .findReferences(declarations, searchScope, true)
       .map((r: any) => ({ file: r.file, line: r.line, column: r.column }));
     return { status: "ok", edits };
+  }
+
+  private isUnambiguousRename(symbols: SymbolEntry[]): boolean {
+    if (symbols.length <= 1) return symbols.length === 1;
+    const kind = symbols[0].kind;
+    if (!symbols.every((s: SymbolEntry) => s.kind === kind)) return false;
+    if (kind === "state") {
+      const refPath = symbols[0].statePath?.join(".");
+      return symbols.every((s: SymbolEntry) => s.statePath?.join(".") === refPath);
+    }
+    const containerScoped = new Set<SymbolKind>([
+      "attribute",
+      "const",
+      "method",
+      "template",
+      "statemachine",
+    ]);
+    if (containerScoped.has(kind)) {
+      const { container, name } = symbols[0];
+      return symbols.every((s: SymbolEntry) => s.container === container && s.name === name);
+    }
+    const name = symbols[0].name;
+    return symbols.every((s: SymbolEntry) => s.name === name);
   }
 }

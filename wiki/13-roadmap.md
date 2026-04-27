@@ -56,6 +56,8 @@ The known array-fallback completion leaks have all been closed:
 - CI build/test workflow — topic 060 (`.github/workflows/ci.yml` runs `npm install`, downloads `umplesync.jar`, and executes root `npm test`)
 - Workspace symbol search — topic 061 (`workspace/symbol` returns qualified classes, traits, requirements, state machines, states, methods, attributes, associations, and enums across indexed workspace files)
 - LSP semantic tokens — topic 064 (`textDocument/semanticTokens/full` maps `highlights.scm` captures into an LSP legend for editors that do not load tree-sitter queries directly)
+- VS Code live diagram refresh — topic 065 (`umple.vscode` refreshes diagrams when the root file or any reachable imported `.ump` file changes, including unsaved in-memory edits)
+- Workspace-wide rename safety — topic 066 (`textDocument/rename` synchronously indexes workspace roots for explicit rename requests, then searches every indexed `.ump` file instead of only the import graph)
 
 ### How to add new completion slots
 
@@ -101,10 +103,6 @@ LSP supports inlay hints — small annotations rendered between tokens. Could sh
 - Multiplicity defaults: `1 -> Foo;` → `1 -> 1 Foo`
 - Trait template parameter substitutions
 
-### Workspace-wide rename safety
-
-Rename currently scopes to forward-imports + reverse-importers. If your workspace has files NOT in any import chain that reference a symbol, rename misses them. Workspace-wide search would be slower but more correct. Tradeoff to discuss.
-
 ## Known tooling gaps
 
 ### CI follow-ups
@@ -135,9 +133,8 @@ This wiki lives in `wiki/` in the repo. GitHub also has a separate "Wiki" featur
 
 Pulled from the conversation history + general LSP best practice:
 
-1. **Live diagram refresh on edit/save** — VS Code has diagram support; investigate debounce/on-save behavior in `umple.vscode`.
-2. **Extend implementations beyond traits** — possible class subclasses or interface implementers/extensions, but verify Umple compiler semantics first.
-3. **Workspace-wide rename safety** — rename still scopes to import chains; a slower workspace search could make cross-file renames more complete.
+1. **Extend implementations beyond traits** — possible class subclasses or interface implementers/extensions, but verify Umple compiler semantics first.
+2. **Inlay hints** — inferred attribute types, multiplicity defaults, or trait template substitutions.
 
 Each of these is a focused topic: spec the scope, get codex review, implement, test, commit. The ~5 day cadence we hit during topics 038–044 is comfortable for one of these per cycle.
 

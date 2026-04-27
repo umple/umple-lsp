@@ -163,6 +163,7 @@ type Assertion =
   | HoverOutputAssertion
   | HoverExcludesAssertion
   | RenameEditsAssertion
+  | WorkspaceRenameEditsAssertion
   | RenameRejectedAssertion
   | DocumentSymbolsAssertion
   | WorkspaceSymbolsAssertion
@@ -255,6 +256,14 @@ interface RenameEditsAssertion {
   // Marker names whose positions must appear in the rename edit set.
   expectAt: string[];
   // Optional count check — total edits must equal this number.
+  expectCount?: number;
+}
+
+interface WorkspaceRenameEditsAssertion {
+  type: "rename_edits_workspace";
+  at: string;
+  newName: string;
+  expectAt: string[];
   expectCount?: number;
 }
 
@@ -1145,6 +1154,33 @@ const TEST_CASES: TestCase[] = [
         type: "refs",
         decl: { name: "Shared", kind: "class", container: "Shared" },
         expectAt: ["def_shared_b", "use_shared"],
+      },
+    ],
+  },
+
+  // 24c: Workspace-wide rename safety. A file can refer to a symbol even when
+  // it is not in the current import chain. Normal reference scope stays narrow,
+  // but rename uses the full workspace search scope to avoid partial edits.
+  {
+    name: "24c rename_scope: workspace-wide rename includes non-import-chain refs",
+    fixtures: ["24c_rename_workspace_main.ump"],
+    unreachable: ["24c_rename_workspace_other.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "24c_rename_workspace_main.ump" },
+      { type: "parse_clean", fixture: "24c_rename_workspace_other.ump" },
+      {
+        type: "rename_edits",
+        at: "ws_def_Target",
+        newName: "RenamedTarget",
+        expectAt: ["ws_def_Target", "ws_main_ref"],
+        expectCount: 2,
+      },
+      {
+        type: "rename_edits_workspace",
+        at: "ws_def_Target",
+        newName: "RenamedTarget",
+        expectAt: ["ws_def_Target", "ws_main_ref", "ws_other_ref"],
+        expectCount: 3,
       },
     ],
   },
@@ -6778,6 +6814,49 @@ function runAssertion(
         return {
           ok: false,
           message: `rename_edits @${assertion.at}: expected edit at @${markerName} (${target.pos.line}:${target.pos.col}), got [${result.edits.map(e => e.line + ':' + e.column).join(', ')}]`,
+        };
+      }
+    }
+    return { ok: true, message: "" };
+  }
+
+  if (assertion.type === "rename_edits_workspace") {
+    const src = findMarker(assertion.at);
+    if (!src) return { ok: false, message: `marker @${assertion.at} not found` };
+    const workspaceScope = new Set<string>();
+    for (const f of files.values()) {
+      workspaceScope.add(f.path);
+    }
+    const result = helper.renameAt(
+      src.filePath, src.content, src.pos.line, src.pos.col,
+      assertion.newName, reachable, workspaceScope,
+    );
+    if (result.status !== "ok") {
+      return {
+        ok: false,
+        message: `rename_edits_workspace @${assertion.at} newName="${assertion.newName}": expected status=ok, got ${result.status}`,
+      };
+    }
+    if (assertion.expectCount !== undefined && result.edits.length !== assertion.expectCount) {
+      return {
+        ok: false,
+        message: `rename_edits_workspace @${assertion.at}: expected ${assertion.expectCount} edits, got ${result.edits.length}`,
+      };
+    }
+    for (const markerName of assertion.expectAt) {
+      const target = findMarker(markerName);
+      if (!target) {
+        return { ok: false, message: `rename_edits_workspace @${assertion.at}: expected marker @${markerName} not found in fixture` };
+      }
+      const hit = result.edits.some((e) =>
+        path.normalize(e.file) === target.filePath &&
+        e.line === target.pos.line &&
+        e.column === target.pos.col,
+      );
+      if (!hit) {
+        return {
+          ok: false,
+          message: `rename_edits_workspace @${assertion.at}: expected edit at @${markerName} (${target.pos.line}:${target.pos.col}), got [${result.edits.map(e => e.line + ':' + e.column).join(', ')}]`,
         };
       }
     }
