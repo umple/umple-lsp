@@ -172,6 +172,7 @@ export function computeIndentEdits(
   const lines = text.split("\n");
   const edits: TextEdit[] = [];
   const unit = options.insertSpaces ? " ".repeat(options.tabSize) : "\t";
+  const multilineListIndents = computeMultilineListIndentMap(lines, options, tree);
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -198,7 +199,7 @@ export function computeIndentEdits(
     depth = Math.max(0, depth - leadingCloses);
 
     // Compute expected indent
-    const expected = unit.repeat(depth);
+    const expected = multilineListIndents.get(i) ?? unit.repeat(depth);
     const currentIndent = line.substring(0, firstNonWs);
 
     // Only emit edit if indent differs
@@ -216,6 +217,180 @@ export function computeIndentEdits(
   }
 
   return edits;
+}
+
+function computeMultilineListIndentMap(
+  lines: string[],
+  options: { tabSize: number; insertSpaces: boolean },
+  tree: Tree,
+): Map<number, string> {
+  const overrides = new Map<number, { indent: string; spanRows: number; priority: number }>();
+
+  const setOverride = (row: number, indent: string, node: any, priority: number) => {
+    if (row < 0 || row >= lines.length) return;
+    if (lines[row].trim().length === 0) return;
+
+    const spanRows = node.endPosition.row - node.startPosition.row;
+    const existing = overrides.get(row);
+    if (
+      !existing ||
+      spanRows < existing.spanRows ||
+      (spanRows === existing.spanRows && priority > existing.priority)
+    ) {
+      overrides.set(row, { indent, spanRows, priority });
+    }
+  };
+  const getBaseIndentColumns = (row: number): number => {
+    const existing = overrides.get(row);
+    if (existing) {
+      return measureIndentColumns(existing.indent, options.tabSize);
+    }
+    return computeExpectedStructuralIndentColumns(lines, options, tree, row);
+  };
+
+  const visit = (node: any) => {
+    if (MULTILINE_LIST_NODES.has(node.type)) {
+      addMultilineListIndentOverrides(node, lines, options, getBaseIndentColumns, setOverride);
+    }
+    addParamListClosingIndentOverride(node, lines, options, getBaseIndentColumns, setOverride);
+
+    for (let i = 0; i < node.childCount; i++) {
+      visit(node.child(i));
+    }
+  };
+
+  visit(tree.rootNode);
+  return new Map(Array.from(overrides, ([row, value]) => [row, value.indent]));
+}
+
+function addMultilineListIndentOverrides(
+  node: any,
+  lines: string[],
+  options: { tabSize: number; insertSpaces: boolean },
+  getBaseIndentColumns: (row: number) => number,
+  setOverride: (row: number, indent: string, node: any, priority: number) => void,
+): void {
+  const startRow = node.startPosition.row;
+  const endRow = node.endPosition.row;
+  if (startRow === endRow) return;
+  if (!hasDirectCommaChild(node)) return;
+
+  const baseRow = getMultilineListBaseRow(node);
+  if (baseRow === null) return;
+
+  const baseColumns = getBaseIndentColumns(baseRow);
+  const baseIndent = buildIndent(baseColumns, options);
+  const itemIndent = buildIndent(baseColumns + options.tabSize, options);
+  const closingDelimiter = getMultilineListClosingDelimiter(node.type);
+
+  for (let row = Math.max(startRow, baseRow + 1); row <= endRow; row++) {
+    const trimmed = lines[row]?.trimStart() ?? "";
+    if (!trimmed) continue;
+
+    if (closingDelimiter && trimmed.startsWith(closingDelimiter)) {
+      setOverride(row, baseIndent, node, 40);
+    } else {
+      setOverride(row, itemIndent, node, 20);
+    }
+  }
+}
+
+function addParamListClosingIndentOverride(
+  node: any,
+  lines: string[],
+  options: { tabSize: number; insertSpaces: boolean },
+  getBaseIndentColumns: (row: number) => number,
+  setOverride: (row: number, indent: string, node: any, priority: number) => void,
+): void {
+  if (!hasDirectChildOfType(node, "param_list")) return;
+
+  const openParen = firstDirectChildOfType(node, "(");
+  const closeParen = lastDirectChildOfType(node, ")");
+  if (!openParen || !closeParen) return;
+  if (openParen.startPosition.row === closeParen.startPosition.row) return;
+
+  const closeRow = closeParen.startPosition.row;
+  const trimmed = lines[closeRow]?.trimStart() ?? "";
+  if (!trimmed.startsWith(")")) return;
+
+  const baseColumns = getBaseIndentColumns(openParen.startPosition.row);
+  setOverride(closeRow, buildIndent(baseColumns, options), node, 50);
+}
+
+function computeExpectedStructuralIndentColumns(
+  lines: string[],
+  options: { tabSize: number; insertSpaces: boolean },
+  tree: Tree,
+  row: number,
+): number {
+  const line = lines[row] ?? "";
+  if (!line.trim()) return getLineIndentColumns(line, options.tabSize);
+
+  const firstNonWs = line.length - line.trimStart().length;
+  let depth = computeStructuralDepth(tree, row, firstNonWs);
+  const trimmed = line.trim();
+  let leadingCloses = 0;
+  for (const ch of trimmed) {
+    if (ch === "}") leadingCloses++;
+    else break;
+  }
+  depth = Math.max(0, depth - leadingCloses);
+  return depth * options.tabSize;
+}
+
+function hasDirectCommaChild(node: any): boolean {
+  return hasDirectChildOfType(node, ",");
+}
+
+function hasDirectChildOfType(node: any, type: string): boolean {
+  return firstDirectChildOfType(node, type) !== null;
+}
+
+function firstDirectChildOfType(node: any, type: string): any | null {
+  for (let i = 0; i < node.childCount; i++) {
+    const child = node.child(i);
+    if (child?.type === type) return child;
+  }
+  return null;
+}
+
+function lastDirectChildOfType(node: any, type: string): any | null {
+  for (let i = node.childCount - 1; i >= 0; i--) {
+    const child = node.child(i);
+    if (child?.type === type) return child;
+  }
+  return null;
+}
+
+function getMultilineListBaseRow(node: any): number | null {
+  if (node.type === "param_list") {
+    const openParen = node.parent ? firstDirectChildOfType(node.parent, "(") : null;
+    return openParen?.startPosition.row ?? node.startPosition.row;
+  }
+
+  const opener =
+    node.type === "template_list"
+      ? firstDirectChildOfType(node, "(")
+      : node.type === "type_name" || node.type === "trait_parameters"
+        ? firstDirectChildOfType(node, "<")
+        : node.type === "key_definition" || node.type === "enumerated_attribute"
+          ? firstDirectChildOfType(node, "{")
+          : null;
+
+  return opener?.startPosition.row ?? node.startPosition.row;
+}
+
+function getMultilineListClosingDelimiter(nodeType: string): string | null {
+  if (nodeType === "type_name" || nodeType === "trait_parameters") return ">";
+  if (nodeType === "template_list") return ")";
+  if (nodeType === "key_definition" || nodeType === "enumerated_attribute") return "}";
+  if (nodeType === "trace_statement") return "}";
+  return null;
+}
+
+function getLineIndentColumns(line: string, tabSize: number): number {
+  const indentChars = line.length - line.trimStart().length;
+  return measureIndentColumns(line.substring(0, indentChars), tabSize);
 }
 
 // ── Phase 2: Targeted fixups ────────────────────────────────────────────────
@@ -317,6 +492,29 @@ const STRUCTURAL_COMMA_NODES = new Set([
   "abstract_method_declaration",
   "before_after",
   "toplevel_code_injection",
+  "code_langs",
+  "key_definition",
+  "enumerated_attribute",
+  "req_implementation",
+  "trace_statement",
+  "template_list",
+]);
+const MULTILINE_LIST_NODES = new Set([
+  "use_statement",
+  "isa_type_list",
+  "filter_value",
+  "filter_combined_value",
+  "filter_namespace_stmt",
+  "param_list",
+  "type_name",
+  "type_list",
+  "trait_parameters",
+  "code_langs",
+  "key_definition",
+  "enumerated_attribute",
+  "req_implementation",
+  "trace_statement",
+  "template_list",
 ]);
 
 function isHorizontalWhitespace(ch: string | undefined): boolean {

@@ -1,0 +1,14 @@
+class SpacingMore {
+name;
+Integer age;
+key {id,name}
+status {Open,Closed,Paused}
+implementsReq R1,R2;
+trace set,get name,age;
+tracecase Audit {
+trace entry,exit Open,Closed;
+}
+active Java,Php Worker { run(a,b); }
+before setName Java,Php { log(a,b); }
+emit genReport()(before,after);
+}

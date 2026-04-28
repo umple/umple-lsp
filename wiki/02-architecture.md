@@ -212,7 +212,7 @@ features without hiding compiler diagnostics.
 Multi-pass, AST-driven (`formatter.ts`):
 
 - **Phase 0** — `expandCompactStates`: rewrites compact `S1 { e -> S2; }` blocks onto multiple lines so subsequent passes see consistent shape
-- **Phase 1** — `computeIndentEdits`: indent based on `INDENT_NODES` (class/interface/trait/state/req/...)
+- **Phase 1** — `computeIndentEdits`: indent based on `INDENT_NODES` (class/interface/trait/state/req/...) and align already split parser-visible list continuations/closing delimiters
 - **Phase 2** — `fixTransitionSpacing`, `fixAssociationSpacing`, `fixDeclarationAssignmentSpacing`, `fixStructuralCommaSpacing`, `normalizeTopLevelBlankLines`; structural spacing passes normalize spaces or tabs around parser-visible operators only
 - **Phase 3** — `reindentEmbeddedCode`: re-indent code inside `{...}` method/template bodies relative to the surrounding Umple indent
 
@@ -229,6 +229,8 @@ Intentional limits:
   shifting whole code blocks to match surrounding Umple indentation.
 - Structural spacing rules only use parser-visible tokens in known node types;
   they must not scan arbitrary text for punctuation.
+- Multi-line list indentation only changes existing line indents; it does not
+  split single-line lists or join already split lists.
 - Broad rewrites such as splitting all compact declarations or Java-formatting
   method bodies should remain separate topics with corpus proof before landing.
 

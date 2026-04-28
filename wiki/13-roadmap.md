@@ -147,7 +147,11 @@ Recent safe formatter slices landed:
 - Declaration assignment spacing for attributes/constants.
 - Structural comma spacing for `use`, `isA`, filter lists, method parameters,
   type arguments, type lists, trait parameter lists, enum values, `throws`
-  lists, and before/after hook target or operation lists.
+  lists, before/after hook target or operation lists, code-language tags, keys,
+  enumerated attributes, requirement links, trace lists, and template lists.
+- Multi-line list continuation indentation for already split parser-visible
+  lists, including params, type args, filters, `use`, keys, enumerated attrs,
+  requirement links, trace lists, and template lists.
 - Formatter corpus reporter (`npm run format:corpus`) that checks parse-clean
   files stay parse-clean and idempotent.
 - Formatter scope docs in the LSP and editor wrapper READMEs.
@@ -158,15 +162,13 @@ Remaining formatter topics, ordered by safety:
 1. **Additional parser-visible spacing rules** — only add new punctuation rules
    when they use explicit tree-sitter child tokens and have exact fixtures plus
    corpus proof. Avoid string-scanning inside target-language code.
-2. **Multi-line list indentation** — align or normalize already multi-line
-   parameter/type/filter lists. Medium risk because it changes line structure.
-3. **Compact declaration expansion** — decide whether one-line `class A {}`
+2. **Compact declaration expansion** — decide whether one-line `class A {}`
    or `interface I { void f(); }` should expand. High risk because compact
    forms are common in tests and examples.
-4. **Embedded target-language formatting** — out of scope for this LSP
+3. **Embedded target-language formatting** — out of scope for this LSP
    formatter. Java/PHP/C++/Python bodies should remain verbatim unless a
    separate language-aware formatter integration is designed.
-5. **Corpus automation in CI** — possible only after deciding how CI obtains a
+4. **Corpus automation in CI** — possible only after deciding how CI obtains a
    stable upstream Umple corpus. Until then, corpus reports remain local/manual.
 
 ## Suggested next features (user-facing)

@@ -1,0 +1,35 @@
+class MultiLineLists {
+void f(
+Integer x,
+String y
+) {
+call(x,y);
+}
+List<
+String,
+Integer
+> values;
+status {
+Open,
+Closed
+}
+key {
+id,
+name
+}
+implementsReq
+R1,
+R2;
+}
+
+filter F {
+include
+A,
+B;
+}
+
+use
+foo.ump,
+bar.ump;
+
+class AfterUse {}

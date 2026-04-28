@@ -1116,6 +1116,69 @@ const TEST_CASES: TestCase[] = [
     ],
   },
 
+  {
+    name: "162 format_more_structural_commas: parser-visible remaining lists",
+    fixtures: ["162_format_more_structural_commas.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "162_format_more_structural_commas.ump" },
+      {
+        type: "format_output",
+        fixture: "162_format_more_structural_commas.ump",
+        expectLines: [
+          { line: 3, text: "  key {id, name}" },
+          { line: 4, text: "  status {Open, Closed, Paused}" },
+          { line: 5, text: "  implementsReq R1, R2;" },
+          { line: 6, text: "  trace set, get name, age;" },
+          { line: 8, text: "    trace entry, exit Open, Closed;" },
+          { line: 9, text: "  }" },
+          { line: 10, text: "  active Java, Php Worker { run(a,b); }" },
+          { line: 11, text: "  before setName Java, Php { log(a,b); }" },
+          { line: 12, text: "  emit genReport()(before, after);" },
+        ],
+      },
+      {
+        type: "format_idempotent",
+        fixture: "162_format_more_structural_commas.ump",
+      },
+    ],
+  },
+
+  {
+    name: "163 format_multiline_lists: continuation and closing delimiter indentation",
+    fixtures: ["163_format_multiline_lists.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "163_format_multiline_lists.ump" },
+      {
+        type: "format_output",
+        fixture: "163_format_multiline_lists.ump",
+        expectLines: [
+          { line: 2, text: "    Integer x," },
+          { line: 3, text: "    String y" },
+          { line: 4, text: "  ) {" },
+          { line: 8, text: "    String," },
+          { line: 9, text: "    Integer" },
+          { line: 10, text: "  > values;" },
+          { line: 12, text: "    Open," },
+          { line: 13, text: "    Closed" },
+          { line: 14, text: "  }" },
+          { line: 16, text: "    id," },
+          { line: 17, text: "    name" },
+          { line: 18, text: "  }" },
+          { line: 20, text: "    R1," },
+          { line: 21, text: "    R2;" },
+          { line: 26, text: "    A," },
+          { line: 27, text: "    B;" },
+          { line: 31, text: "  foo.ump," },
+          { line: 32, text: "  bar.ump;" },
+        ],
+      },
+      {
+        type: "format_idempotent",
+        fixture: "163_format_multiline_lists.ump",
+      },
+    ],
+  },
+
   // 15: Formatting smoke test
   {
     name: "15 formatting: indent + skip range",
