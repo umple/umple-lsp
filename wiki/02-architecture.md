@@ -213,7 +213,7 @@ Multi-pass, AST-driven (`formatter.ts`):
 
 - **Phase 0** — `expandCompactStates`: rewrites compact `S1 { e -> S2; }` blocks onto multiple lines so subsequent passes see consistent shape
 - **Phase 1** — `computeIndentEdits`: indent based on `INDENT_NODES` (class/interface/trait/state/req/...)
-- **Phase 2** — `fixTransitionSpacing`, `fixAssociationSpacing`, `fixDeclarationAssignmentSpacing`, `normalizeTopLevelBlankLines`; structural spacing passes normalize spaces or tabs around parser-visible operators only
+- **Phase 2** — `fixTransitionSpacing`, `fixAssociationSpacing`, `fixDeclarationAssignmentSpacing`, `fixStructuralCommaSpacing`, `normalizeTopLevelBlankLines`; structural spacing passes normalize spaces or tabs around parser-visible operators only
 - **Phase 3** — `reindentEmbeddedCode`: re-indent code inside `{...}` method/template bodies relative to the surrounding Umple indent
 
 Safety net (`formatSafetyNet.ts`): before returning edits, the formatter re-parses the result, re-runs symbol extraction, and compares symbol sets. If the formatted version has materially fewer symbols (or the parse goes from clean to broken), the format is **discarded** and a warning is logged.

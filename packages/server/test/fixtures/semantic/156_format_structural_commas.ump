@@ -1,0 +1,11 @@
+use model/a.ump,model/b.ump, "model/c.ump";
+
+interface I {}
+trait T {}
+
+class A {
+isA I,T,isA model.Base;
+void body() {
+call(a,b);
+}
+}

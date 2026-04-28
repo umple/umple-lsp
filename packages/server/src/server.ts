@@ -56,6 +56,7 @@ import {
   fixTransitionSpacing,
   fixAssociationSpacing,
   fixDeclarationAssignmentSpacing,
+  fixStructuralCommaSpacing,
   normalizeTopLevelBlankLines,
   reindentEmbeddedCode,
 } from "./formatter";
@@ -1381,6 +1382,7 @@ connection.onDocumentFormatting(async (params) => {
     ...fixTransitionSpacing(text, formatTree),
     ...fixAssociationSpacing(text, formatTree),
     ...fixDeclarationAssignmentSpacing(text, formatTree),
+    ...fixStructuralCommaSpacing(text, formatTree),
     ...normalizeTopLevelBlankLines(text, formatTree),
     ...reindentEmbeddedCode(text, params.options, formatTree),
   ];

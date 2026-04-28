@@ -301,9 +301,73 @@ const DECLARATION_ASSIGNMENT_NODES = new Set([
   "attribute_declaration",
   "const_declaration",
 ]);
+const STRUCTURAL_COMMA_NODES = new Set([
+  "use_statement",
+  "isa_type_list",
+]);
 
 function isHorizontalWhitespace(ch: string | undefined): boolean {
   return ch === " " || ch === "\t";
+}
+
+/**
+ * Normalize commas in selected structural lists.
+ * This deliberately excludes method bodies and expression-like text; code commas
+ * are inside code_content and are not parser-visible children here.
+ */
+export function fixStructuralCommaSpacing(
+  text: string,
+  tree: Tree,
+): TextEdit[] {
+  const lines = text.split("\n");
+  const edits: TextEdit[] = [];
+
+  const visit = (node: any) => {
+    if (STRUCTURAL_COMMA_NODES.has(node.type)) {
+      const startRow = node.startPosition.row;
+      const endRow = node.endPosition.row;
+      if (startRow !== endRow) return;
+
+      const line = lines[startRow];
+      for (let c = 0; c < node.childCount; c++) {
+        const child = node.child(c);
+        if (!child || child.type !== ",") continue;
+
+        const commaCol = child.startPosition.column;
+        const commaEndCol = child.endPosition.column;
+        let wsStart = commaCol;
+        while (wsStart > 0 && isHorizontalWhitespace(line[wsStart - 1])) {
+          wsStart--;
+        }
+        let wsEnd = commaEndCol;
+        while (wsEnd < line.length && isHorizontalWhitespace(line[wsEnd])) {
+          wsEnd++;
+        }
+
+        const currentRegion = line.substring(wsStart, wsEnd);
+        const expectedRegion = ", ";
+        if (currentRegion !== expectedRegion) {
+          edits.push(
+            TextEdit.replace(
+              Range.create(
+                Position.create(startRow, wsStart),
+                Position.create(startRow, wsEnd),
+              ),
+              expectedRegion,
+            ),
+          );
+        }
+      }
+      return;
+    }
+
+    for (let i = 0; i < node.childCount; i++) {
+      visit(node.child(i));
+    }
+  };
+
+  visit(tree.rootNode);
+  return edits;
 }
 
 /**

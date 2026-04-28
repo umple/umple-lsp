@@ -987,6 +987,27 @@ const TEST_CASES: TestCase[] = [
     ],
   },
 
+  {
+    name: "156 format_structural_commas: use and isA only",
+    fixtures: ["156_format_structural_commas.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "156_format_structural_commas.ump" },
+      {
+        type: "format_output",
+        fixture: "156_format_structural_commas.ump",
+        expectLines: [
+          { line: 0, text: "use model/a.ump, model/b.ump, \"model/c.ump\";" },
+          { line: 7, text: "  isA I, T, isA model.Base;" },
+          { line: 9, text: "    call(a,b);" },
+        ],
+      },
+      {
+        type: "format_idempotent",
+        fixture: "156_format_structural_commas.ump",
+      },
+    ],
+  },
+
   // 15: Formatting smoke test
   {
     name: "15 formatting: indent + skip range",
@@ -7440,6 +7461,60 @@ async function main() {
           "",
           `${indent()}association {`,
           `${indent()}1 ${classA}${pick(["--", " -- ", "  --"])}* ${classB};`,
+          `${indent()}}`,
+        ].join("\n"));
+      }
+
+      for (let i = 0; i < 12; i++) {
+        const iface = `I${i}`;
+        const parentIface = `J${i}`;
+        const trait = `T${i}`;
+        const classA = `GeneratedA${i}`;
+        const classB = `GeneratedB${i}`;
+        const mixset = `Feature${i}`;
+        const filter = `Filter${i}`;
+        generatedModels.push([
+          `${indent()}interface ${parentIface} {`,
+          `${indent()}void marker${i}();`,
+          `${indent()}}`,
+          "",
+          `${indent()}interface ${iface} {`,
+          `${indent()}isA ${parentIface};`,
+          `${indent()}const Integer MAX${i}=10;`,
+          `${indent()}void op${i}(String name,Integer count);`,
+          `${indent()}}`,
+          "",
+          `${indent()}trait ${trait}<TP isA ${iface} = ${classA}, TP2> {`,
+          `${indent()}isA ${iface};`,
+          `${indent()}flag${i}=true;`,
+          `${indent()}abstract void needed${i}();`,
+          `${indent()}}`,
+          "",
+          `${indent()}class ${classA} {`,
+          `${indent()}isA ${iface},${trait};`,
+          `${indent()}name${i};`,
+          `${indent()}}`,
+          "",
+          `${indent()}class ${classB} {`,
+          `${indent()}Integer count${i}=1;`,
+          `${indent()}}`,
+          "",
+          `${indent()}filter ${filter} {`,
+          `${indent()}include ${classA},${classB};`,
+          `${indent()}namespace generated.ns${i},other.ns${i};`,
+          `${indent()}hops { super 1; sub 1; association 1; }`,
+          `${indent()}}`,
+          "",
+          `${indent()}req R${i} userStory {`,
+          `${indent()}who { user${i} }`,
+          `${indent()}what { thing${i} }`,
+          `${indent()}why { reason${i} }`,
+          `${indent()}}`,
+          "",
+          `${indent()}mixset ${mixset} {`,
+          `${indent()}class Mixed${i} {`,
+          `${indent()}label${i}=\"x\";`,
+          `${indent()}}`,
           `${indent()}}`,
         ].join("\n"));
       }

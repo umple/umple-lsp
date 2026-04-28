@@ -37,6 +37,7 @@ const {
   fixTransitionSpacing,
   fixAssociationSpacing,
   fixDeclarationAssignmentSpacing,
+  fixStructuralCommaSpacing,
   normalizeTopLevelBlankLines,
   reindentEmbeddedCode,
 } = requireBuilt("formatter.js");
@@ -215,6 +216,7 @@ function formatOnce(symbolIndex, filePath, originalText) {
     ...fixTransitionSpacing(text, formatTree),
     ...fixAssociationSpacing(text, formatTree),
     ...fixDeclarationAssignmentSpacing(text, formatTree),
+    ...fixStructuralCommaSpacing(text, formatTree),
     ...normalizeTopLevelBlankLines(text, formatTree),
     ...reindentEmbeddedCode(text, options, formatTree),
   ];

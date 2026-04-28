@@ -19,7 +19,7 @@ A Language Server Protocol implementation for the [Umple](https://www.umple.org)
 - **Code completion** - Context-aware keyword and symbol suggestions
 - **Document symbols** - Hierarchical outline of classes, state machines, states, attributes, methods
 - **Workspace symbols** - Search across indexed files for classes, traits, requirements, state machines, states, methods, named associations, and query-matched members
-- **Formatting** - AST-driven indent correction, arrow spacing, declaration assignment spacing, blank-line normalization, compact state expansion
+- **Formatting** - AST-driven indent correction, arrow spacing, declaration assignment spacing, structural comma spacing, blank-line normalization, compact state expansion
 - **Syntax highlighting** - Tree-sitter grammar for accurate highlighting
 - **Semantic tokens** - LSP semantic highlighting for editors that do not load tree-sitter queries directly
 - **Cross-file support** - Transitive `use` statement resolution and cross-file diagnostics
