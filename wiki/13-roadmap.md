@@ -179,7 +179,14 @@ Remaining formatter topics, ordered by safety:
 
 Pulled from the conversation history + general LSP best practice:
 
-1. **Richer inlay hints** — trait template substitutions or other proven semantic annotations, but only after compiler-backed examples define the exact behavior.
+1. **Semantic highlighting polish** — continue with small `highlights.scm`
+   slices when supported grammar constructs still render as plain text. Recent
+   coverage pins strictness/distributable/layout directives, tracer directive
+   config names/values, port declarations/connectors, active methods,
+   test/test-sequence constructs, and layout numeric payloads through both
+   tree-sitter highlighting and LSP semantic tokens. VS Code also has matching
+   TextMate fallback scopes for these constructs.
+2. **Richer inlay hints** — trait template substitutions or other proven semantic annotations, but only after compiler-backed examples define the exact behavior.
 
 Each of these is a focused topic: spec the scope, get codex review, implement, test, commit. The ~5 day cadence we hit during topics 038–044 is comfortable for one of these per cycle.
 

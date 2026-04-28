@@ -767,18 +767,22 @@ module.exports = grammar({
     // These are layout metadata (not model semantics) — parsed to avoid ERROR nodes
     // but not indexed, referenced, or offered in completion.
     position_directive: ($) =>
-      seq("position", $._position_number, $._position_number, $._position_number, $._position_number, ";"),
+      seq("position", $.position_number, $.position_number, $.position_number, $.position_number, ";"),
 
-    _position_number: ($) => choice($.integer_literal, /\d+\.\d+/),
+    position_number: ($) => choice($.integer_literal, /\d+\.\d+/),
 
     position_association_directive: ($) =>
       seq(
         "position.association",
-        /[^\s;]+/,  // association payload (e.g., "Card__Code:cardId")
-        /-?\d+(\.\d+)?,-?\d+(\.\d+)?/,  // first coordinate pair (supports negative/decimal)
-        /-?\d+(\.\d+)?,-?\d+(\.\d+)?/,  // second coordinate pair
+        $.position_association_payload,  // association payload (e.g., "Card__Code:cardId")
+        $.position_coordinate_pair,  // first coordinate pair (supports negative/decimal)
+        $.position_coordinate_pair,  // second coordinate pair
         ";",
       ),
+
+    position_association_payload: ($) => /[^\s;]+/,
+
+    position_coordinate_pair: ($) => /-?\d+(\.\d+)?,-?\d+(\.\d+)?/,
 
     key_definition: ($) =>
       seq(
