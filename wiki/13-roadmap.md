@@ -148,7 +148,8 @@ Recent safe formatter slices landed:
 - Structural comma spacing for `use`, `isA`, filter lists, method parameters,
   type arguments, type lists, trait parameter lists, enum values, `throws`
   lists, before/after hook target or operation lists, code-language tags, keys,
-  enumerated attributes, requirement links, trace lists, and template lists.
+  enumerated attributes, requirement links, trace lists, tracer directive
+  configurations, and template lists.
 - Multi-line list continuation indentation for already split parser-visible
   lists, including params, type args, filters, `use`, keys, enumerated attrs,
   requirement links, trace lists, and template lists.

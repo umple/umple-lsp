@@ -476,6 +476,9 @@ const DECLARATION_ASSIGNMENT_NODES = new Set([
   "attribute_declaration",
   "const_declaration",
 ]);
+const STRUCTURAL_EQUALS_NODES = new Set([
+  "tracer_directive",
+]);
 const STRUCTURAL_COMMA_NODES = new Set([
   "use_statement",
   "isa_type_list",
@@ -498,6 +501,7 @@ const STRUCTURAL_COMMA_NODES = new Set([
   "req_implementation",
   "trace_statement",
   "template_list",
+  "tracer_directive",
 ]);
 const MULTILINE_LIST_NODES = new Set([
   "use_statement",
@@ -661,46 +665,43 @@ export function fixDeclarationAssignmentSpacing(
   const edits: TextEdit[] = [];
 
   const visit = (node: any) => {
-    if (DECLARATION_ASSIGNMENT_NODES.has(node.type)) {
+    if (DECLARATION_ASSIGNMENT_NODES.has(node.type) || STRUCTURAL_EQUALS_NODES.has(node.type)) {
       const startRow = node.startPosition.row;
       const endRow = node.endPosition.row;
       if (startRow !== endRow) return;
 
-      let equalsChild: any = null;
       for (let c = 0; c < node.childCount; c++) {
         const child = node.child(c);
-        if (child && child.type === "=") {
-          equalsChild = child;
-          break;
+        if (!child || child.type !== "=") continue;
+
+        const equalsCol = child.startPosition.column;
+        const equalsEndCol = child.endPosition.column;
+        const line = lines[startRow];
+
+        let wsStart = equalsCol;
+        while (wsStart > 0 && isHorizontalWhitespace(line[wsStart - 1])) {
+          wsStart--;
         }
-      }
-      if (!equalsChild) return;
+        let wsEnd = equalsEndCol;
+        while (wsEnd < line.length && isHorizontalWhitespace(line[wsEnd])) {
+          wsEnd++;
+        }
 
-      const equalsCol = equalsChild.startPosition.column;
-      const equalsEndCol = equalsChild.endPosition.column;
-      const line = lines[startRow];
-
-      let wsStart = equalsCol;
-      while (wsStart > 0 && isHorizontalWhitespace(line[wsStart - 1])) {
-        wsStart--;
-      }
-      let wsEnd = equalsEndCol;
-      while (wsEnd < line.length && isHorizontalWhitespace(line[wsEnd])) {
-        wsEnd++;
-      }
-
-      const currentRegion = line.substring(wsStart, wsEnd);
-      const expectedRegion = " = ";
-      if (currentRegion !== expectedRegion) {
-        edits.push(
-          TextEdit.replace(
-            Range.create(
-              Position.create(startRow, wsStart),
-              Position.create(startRow, wsEnd),
+        const currentRegion = line.substring(wsStart, wsEnd);
+        const expectedRegion = " = ";
+        if (currentRegion !== expectedRegion) {
+          edits.push(
+            TextEdit.replace(
+              Range.create(
+                Position.create(startRow, wsStart),
+                Position.create(startRow, wsEnd),
+              ),
+              expectedRegion,
             ),
-            expectedRegion,
-          ),
-        );
+          );
+        }
+
+        if (DECLARATION_ASSIGNMENT_NODES.has(node.type)) break;
       }
       return;
     }

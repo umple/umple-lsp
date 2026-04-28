@@ -42,10 +42,10 @@ structural spacing, top-level blank lines, and simple compact state blocks.
 Structural comma spacing is limited to parser-visible Umple lists such as
 `use`/`isA`, filter values, method params, type arguments, enum values, `throws`
 lists, before/after hook target or operation lists, code-language tags, keys,
-enumerated attributes, requirement links, trace lists, and template lists. It
-does not format embedded target-language code inside method/action bodies, does
-not rewrite files that already contain parser errors, and does not split every
-compact one-line declaration.
+enumerated attributes, requirement links, trace lists, tracer directive
+configurations, and template lists. It does not format embedded target-language
+code inside method/action bodies, does not rewrite files that already contain
+parser errors, and does not split every compact one-line declaration.
 
 Formatter changes belong in `packages/server/src/formatter.ts`, with exact
 fixtures in `packages/server/test/fixtures/semantic/` and coverage in

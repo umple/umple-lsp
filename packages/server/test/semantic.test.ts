@@ -1179,6 +1179,27 @@ const TEST_CASES: TestCase[] = [
     ],
   },
 
+  {
+    name: "164 format_tracer_spacing: config commas and equals",
+    fixtures: ["164_format_tracer_spacing.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "164_format_tracer_spacing.ump" },
+      {
+        type: "format_output",
+        fixture: "164_format_tracer_spacing.ump",
+        expectLines: [
+          { line: 0, text: "tracer log4j debug, error = console, file on:Time, Object;" },
+          { line: 1, text: "tracer log4j root = all debug = console monitorInterval = 30;" },
+          { line: 4, text: "  name;" },
+        ],
+      },
+      {
+        type: "format_idempotent",
+        fixture: "164_format_tracer_spacing.ump",
+      },
+    ],
+  },
+
   // 15: Formatting smoke test
   {
     name: "15 formatting: indent + skip range",

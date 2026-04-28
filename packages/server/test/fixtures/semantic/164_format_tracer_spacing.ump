@@ -1,0 +1,6 @@
+tracer log4j debug,error=console,file on:Time,Object;
+tracer log4j root=all debug=console monitorInterval=30;
+
+class Traced {
+name;
+}
