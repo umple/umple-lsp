@@ -140,6 +140,37 @@ The jar consumed for diagnostics is downloaded once via `npm run download-jar` (
 
 This wiki lives in `wiki/` in the repo. GitHub also has a separate "Wiki" feature backed by a separate repo at `<repo>.wiki.git`. Could sync these via a workflow on every push. For now, the in-repo wiki is the source of truth; the GitHub Wiki feature is empty.
 
+## Formatter Backlog
+
+Recent safe formatter slices landed:
+
+- Declaration assignment spacing for attributes/constants.
+- Structural comma spacing for `use`, `isA`, filter lists, method parameters,
+  type arguments, type lists, and trait parameter lists.
+- Formatter corpus reporter (`npm run format:corpus`) that checks parse-clean
+  files stay parse-clean and idempotent.
+- Formatter scope docs in the LSP and editor wrapper READMEs.
+
+Remaining formatter topics, ordered by safety:
+
+1. **More generated coverage** — broaden deterministic generated formatter
+   models to include enums, traits with reused state machines, association
+   classes, trace statements, and top-level injections. This is test-only and
+   should be done before additional behavior changes.
+2. **Additional parser-visible spacing rules** — consider enum value commas,
+   `throws` lists, and before/after operation lists. Only land rules that use
+   explicit tree-sitter child tokens and have exact fixtures plus corpus proof.
+3. **Multi-line list indentation** — align or normalize already multi-line
+   parameter/type/filter lists. Medium risk because it changes line structure.
+4. **Compact declaration expansion** — decide whether one-line `class A {}`
+   or `interface I { void f(); }` should expand. High risk because compact
+   forms are common in tests and examples.
+5. **Embedded target-language formatting** — out of scope for this LSP
+   formatter. Java/PHP/C++/Python bodies should remain verbatim unless a
+   separate language-aware formatter integration is designed.
+6. **Corpus automation in CI** — possible only after deciding how CI obtains a
+   stable upstream Umple corpus. Until then, corpus reports remain local/manual.
+
 ## Suggested next features (user-facing)
 
 Pulled from the conversation history + general LSP best practice:
