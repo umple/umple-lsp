@@ -150,7 +150,7 @@ Each of these is a focused topic: spec the scope, get codex review, implement, t
 
 ## Testing roadmap
 
-- **Property-based tests for the formatter** — currently we have many fixture-based examples but no "format any clean parse and assert it stays clean + idempotent." A fast-check generator over small Umple programs would catch formatter bugs we don't know we have.
+- **Formatter generated-model and corpus tests** — the suite now has deterministic generated clean models that assert formatting stays parse-clean, symbol-preserving, and idempotent. The manual corpus reporter (`UMPLE_FORMAT_CORPUS_DIR=/path/to/cruise.umple/test npm run format:corpus`) checks the same invariants against parse-clean upstream files. Future work could broaden generation into a larger `fast-check` generator with more grammar families.
 - **Stress tests against the umple compiler corpus** — `cruise.umple/test/` has thousands of `.ump` files. The repo now has a read-only reporter (`UMPLE_CORPUS_DIR=/path/to/cruise.umple/test npm run parse:corpus`) and a generated self-test in root `npm test`. Remaining work is choosing a baseline/threshold and deciding whether a runner-accessible corpus source should feed a scheduled or manual CI report.
 - **End-to-end editor tests** — open a real editor, send LSP messages, assert responses. Heavy infra; haven't tried.
 

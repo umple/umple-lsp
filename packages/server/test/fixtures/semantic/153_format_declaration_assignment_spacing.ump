@@ -1,0 +1,18 @@
+class AssignmentSpacing {
+Integer count=5;
+label="Bob";
+Boolean flag =true;
+score= 1.5;
+derived={count + 1}
+
+void keepOperators(Integer value) {
+if (value==5) {
+count=10;
+}
+}
+}
+
+interface Constants {
+const Integer MAX=10;
+const NAME="x";
+}

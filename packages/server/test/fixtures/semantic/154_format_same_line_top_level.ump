@@ -1,0 +1,4 @@
+class A {}
+use f1; use f2; use f3;
+
+class B {}

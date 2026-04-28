@@ -15,7 +15,7 @@ import { isRenameableKind, isValidNewName } from "../src/renameValidation";
 import { buildDocumentSymbolTree } from "../src/documentSymbolBuilder";
 import { buildWorkspaceSymbols } from "../src/workspaceSymbolBuilder";
 import { buildInlayHints } from "../src/inlayHints";
-import { expandCompactStates, computeIndentEdits, fixTransitionSpacing, fixAssociationSpacing, normalizeTopLevelBlankLines, reindentEmbeddedCode } from "../src/formatter";
+import { expandCompactStates, computeIndentEdits, fixTransitionSpacing, fixAssociationSpacing, fixDeclarationAssignmentSpacing, normalizeTopLevelBlankLines, reindentEmbeddedCode } from "../src/formatter";
 import { checkFormatSafety } from "../src/formatSafetyNet";
 import { CompletionItem, Range } from "vscode-languageserver/node";
 
@@ -547,9 +547,10 @@ export class SemanticTestHelper {
     const indentEdits = computeIndentEdits(text, { tabSize: 2, insertSpaces: true }, tree);
     const spacingEdits = fixTransitionSpacing(text, tree);
     const assocEdits = fixAssociationSpacing(text, tree);
+    const assignmentEdits = fixDeclarationAssignmentSpacing(text, tree);
     const blankLineEdits = normalizeTopLevelBlankLines(text, tree);
     const codeEdits = reindentEmbeddedCode(text, { tabSize: 2, insertSpaces: true }, tree);
-    const edits = [...indentEdits, ...spacingEdits, ...assocEdits, ...blankLineEdits, ...codeEdits];
+    const edits = [...indentEdits, ...spacingEdits, ...assocEdits, ...assignmentEdits, ...blankLineEdits, ...codeEdits];
 
     // Apply edits on the (possibly expanded) text
     const lines = text.split("\n");
@@ -618,9 +619,10 @@ export class SemanticTestHelper {
     const indentEdits = computeIndentEdits(text, options, tree);
     const spacingEdits = fixTransitionSpacing(text, tree);
     const assocEdits = fixAssociationSpacing(text, tree);
+    const assignmentEdits = fixDeclarationAssignmentSpacing(text, tree);
     const blankLineEdits = normalizeTopLevelBlankLines(text, tree);
     const codeEdits = reindentEmbeddedCode(text, options, tree);
-    const edits = [...indentEdits, ...spacingEdits, ...assocEdits, ...blankLineEdits, ...codeEdits];
+    const edits = [...indentEdits, ...spacingEdits, ...assocEdits, ...assignmentEdits, ...blankLineEdits, ...codeEdits];
 
     const lines = text.split("\n");
     const lineOffsets: number[] = [];

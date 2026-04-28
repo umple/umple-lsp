@@ -19,7 +19,7 @@ A Language Server Protocol implementation for the [Umple](https://www.umple.org)
 - **Code completion** - Context-aware keyword and symbol suggestions
 - **Document symbols** - Hierarchical outline of classes, state machines, states, attributes, methods
 - **Workspace symbols** - Search across indexed files for classes, traits, requirements, state machines, states, methods, named associations, and query-matched members
-- **Formatting** - AST-driven indent correction, arrow spacing, blank-line normalization, compact state expansion
+- **Formatting** - AST-driven indent correction, arrow spacing, declaration assignment spacing, blank-line normalization, compact state expansion
 - **Syntax highlighting** - Tree-sitter grammar for accurate highlighting
 - **Semantic tokens** - LSP semantic highlighting for editors that do not load tree-sitter queries directly
 - **Cross-file support** - Transitive `use` statement resolution and cross-file diagnostics
@@ -222,13 +222,21 @@ The project includes a semantic regression test harness that exercises go-to-def
 npm test    # Compile + run the semantic suite and parser-report self-test
 ```
 
-To stress-test grammar permissiveness against a local checkout of the upstream Umple compiler corpus, point the read-only report tool at `cruise.umple/test`:
+To stress-test grammar permissiveness against a local checkout of the upstream Umple compiler corpus, point the read-only parse report tool at `cruise.umple/test`:
 
 ```bash
 UMPLE_CORPUS_DIR=/path/to/cruise.umple/test npm run parse:corpus
 ```
 
 The corpus report does not download anything, and it is report-only by default. A missing corpus path skips cleanly; an explicitly invalid path fails so typos are visible. Use `UMPLE_CORPUS_FAIL_ON_ERROR=1` or `--fail-on-error` only after choosing a baseline that should gate CI.
+
+Formatter changes should also be checked against the same corpus. The formatter report skips files that already contain parser errors, formats every parse-clean file, reparses the result, and verifies a second format pass is idempotent:
+
+```bash
+UMPLE_FORMAT_CORPUS_DIR=/path/to/cruise.umple/test npm run format:corpus
+```
+
+Use `UMPLE_FORMAT_CORPUS_FAIL_ON_ERROR=1` or `--fail-on-error` when you want formatter failures to fail the command.
 
 ### Manual Testing
 

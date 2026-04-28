@@ -1,0 +1,12 @@
+class TabSpacing {
+status {
+Open {
+go	->	Closed;
+}
+}
+value	=	1;
+}
+
+association {
+1 TabSpacing	--	* TabSpacing;
+}

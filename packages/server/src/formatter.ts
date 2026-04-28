@@ -261,11 +261,11 @@ export function fixTransitionSpacing(
       // Don't walk past line indentation — that belongs to computeIndentEdits().
       const indentEnd = line.search(/\S/);
       let wsStart = arrowCol;
-      while (wsStart > 0 && wsStart > indentEnd && line[wsStart - 1] === " ") {
+      while (wsStart > 0 && wsStart > indentEnd && isHorizontalWhitespace(line[wsStart - 1])) {
         wsStart--;
       }
       let wsEnd = arrowEndCol;
-      while (wsEnd < line.length && line[wsEnd] === " ") {
+      while (wsEnd < line.length && isHorizontalWhitespace(line[wsEnd])) {
         wsEnd++;
       }
 
@@ -297,6 +297,14 @@ export function fixTransitionSpacing(
 
 /** Node types that contain an `arrow` child whose surrounding whitespace should be normalized. */
 const ASSOC_NODES = new Set(["association_inline", "association_member"]);
+const DECLARATION_ASSIGNMENT_NODES = new Set([
+  "attribute_declaration",
+  "const_declaration",
+]);
+
+function isHorizontalWhitespace(ch: string | undefined): boolean {
+  return ch === " " || ch === "\t";
+}
 
 /**
  * Normalize whitespace around the arrow in association_inline and association_member nodes.
@@ -332,11 +340,11 @@ export function fixAssociationSpacing(
 
       // Find whitespace region around the arrow
       let wsStart = arrowCol;
-      while (wsStart > 0 && line[wsStart - 1] === " ") {
+      while (wsStart > 0 && isHorizontalWhitespace(line[wsStart - 1])) {
         wsStart--;
       }
       let wsEnd = arrowEndCol;
-      while (wsEnd < line.length && line[wsEnd] === " ") {
+      while (wsEnd < line.length && isHorizontalWhitespace(line[wsEnd])) {
         wsEnd++;
       }
 
@@ -354,6 +362,72 @@ export function fixAssociationSpacing(
           expectedRegion,
         ),
       );
+      return;
+    }
+
+    for (let i = 0; i < node.childCount; i++) {
+      visit(node.child(i));
+    }
+  };
+
+  visit(tree.rootNode);
+  return edits;
+}
+
+/**
+ * Normalize whitespace around structural declaration assignment (`=`) tokens.
+ * Only touches parser-visible assignment children in attributes and constants;
+ * embedded code bodies and expression operators are intentionally ignored.
+ */
+export function fixDeclarationAssignmentSpacing(
+  text: string,
+  tree: Tree,
+): TextEdit[] {
+  const lines = text.split("\n");
+  const edits: TextEdit[] = [];
+
+  const visit = (node: any) => {
+    if (DECLARATION_ASSIGNMENT_NODES.has(node.type)) {
+      const startRow = node.startPosition.row;
+      const endRow = node.endPosition.row;
+      if (startRow !== endRow) return;
+
+      let equalsChild: any = null;
+      for (let c = 0; c < node.childCount; c++) {
+        const child = node.child(c);
+        if (child && child.type === "=") {
+          equalsChild = child;
+          break;
+        }
+      }
+      if (!equalsChild) return;
+
+      const equalsCol = equalsChild.startPosition.column;
+      const equalsEndCol = equalsChild.endPosition.column;
+      const line = lines[startRow];
+
+      let wsStart = equalsCol;
+      while (wsStart > 0 && isHorizontalWhitespace(line[wsStart - 1])) {
+        wsStart--;
+      }
+      let wsEnd = equalsEndCol;
+      while (wsEnd < line.length && isHorizontalWhitespace(line[wsEnd])) {
+        wsEnd++;
+      }
+
+      const currentRegion = line.substring(wsStart, wsEnd);
+      const expectedRegion = " = ";
+      if (currentRegion !== expectedRegion) {
+        edits.push(
+          TextEdit.replace(
+            Range.create(
+              Position.create(startRow, wsStart),
+              Position.create(startRow, wsEnd),
+            ),
+            expectedRegion,
+          ),
+        );
+      }
       return;
     }
 
@@ -395,6 +469,12 @@ export function normalizeTopLevelBlankLines(
   for (let i = 0; i < topDecls.length - 1; i++) {
     const prevEnd = topDecls[i].endRow;
     const nextStart = topDecls[i + 1].startRow;
+
+    // Multiple top-level declarations can legally appear on one physical line
+    // (`use f1; use f2;`). This pass only normalizes inter-line gaps; splitting
+    // same-line declarations is a separate, higher-risk rewrite.
+    if (nextStart <= prevEnd) continue;
+
     const gap = nextStart - prevEnd - 1; // number of lines between them
 
     if (gap === 1) continue; // Already correct: exactly 1 blank line

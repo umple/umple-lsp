@@ -18,6 +18,8 @@
     "download-jar": "curl -# -L https://try.umple.org/scripts/umplesync.jar --output packages/server/umplesync.jar",
     "parse:corpus": "node scripts/parse-corpus.cjs",
     "parse:corpus:self-test": "node scripts/parse-corpus.cjs --self-test",
-    "test": "npm run compile && npm test -w packages/server && npm run parse:corpus:self-test"
+    "format:corpus": "node scripts/format-corpus.cjs",
+    "format:corpus:self-test": "node scripts/format-corpus.cjs --self-test",
+    "test": "npm run compile && npm test -w packages/server && npm run parse:corpus:self-test && npm run format:corpus:self-test"
   }
 }

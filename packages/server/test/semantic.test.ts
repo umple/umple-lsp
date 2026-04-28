@@ -913,6 +913,80 @@ const TEST_CASES: TestCase[] = [
     ],
   },
 
+  {
+    name: "153 format_declaration_assignment_spacing: attributes and constants",
+    fixtures: ["153_format_declaration_assignment_spacing.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "153_format_declaration_assignment_spacing.ump" },
+      {
+        type: "format_output",
+        fixture: "153_format_declaration_assignment_spacing.ump",
+        expectLines: [
+          { line: 1, text: "  Integer count = 5;" },
+          { line: 2, text: "  label = \"Bob\";" },
+          { line: 3, text: "  Boolean flag = true;" },
+          { line: 4, text: "  score = 1.5;" },
+          { line: 5, text: "  derived = {count + 1}" },
+          { line: 8, text: "    if (value==5) {" },
+          { line: 9, text: "    count=10;" },
+          { line: 15, text: "  const Integer MAX = 10;" },
+          { line: 16, text: "  const NAME = \"x\";" },
+        ],
+      },
+      {
+        type: "format_idempotent",
+        fixture: "153_format_declaration_assignment_spacing.ump",
+      },
+    ],
+  },
+
+  {
+    name: "154 format_same_line_top_level: do not grow packed declarations",
+    fixtures: ["154_format_same_line_top_level.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "154_format_same_line_top_level.ump" },
+      {
+        type: "format_output",
+        fixture: "154_format_same_line_top_level.ump",
+        expectLines: [
+          { line: 0, text: "class A {}" },
+          { line: 1, text: "" },
+          { line: 2, text: "use f1; use f2; use f3;" },
+          { line: 3, text: "" },
+          { line: 4, text: "class B {}" },
+        ],
+      },
+      {
+        type: "format_idempotent",
+        fixture: "154_format_same_line_top_level.ump",
+      },
+    ],
+  },
+
+  {
+    name: "155 format_tabbed_structural_spacing: normalize tabs around structural tokens",
+    fixtures: ["155_format_tabbed_structural_spacing.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "155_format_tabbed_structural_spacing.ump" },
+      {
+        type: "format_output",
+        fixture: "155_format_tabbed_structural_spacing.ump",
+        expectLines: [
+          { line: 1, text: "  status {" },
+          { line: 2, text: "    Open {" },
+          { line: 3, text: "      go -> Closed;" },
+          { line: 5, text: "  }" },
+          { line: 6, text: "  value = 1;" },
+          { line: 10, text: "  1 TabSpacing -- * TabSpacing;" },
+        ],
+      },
+      {
+        type: "format_idempotent",
+        fixture: "155_format_tabbed_structural_spacing.ump",
+      },
+    ],
+  },
+
   // 15: Formatting smoke test
   {
     name: "15 formatting: indent + skip range",
@@ -7309,6 +7383,97 @@ async function main() {
       if (formatted !== brokenContent) {
         throw new Error("Broken input was modified by formatter");
       }
+      console.log(`  PASS  ${testName}`);
+      passed++;
+    } catch (e: any) {
+      console.log(`  FAIL  ${testName}: ${e.message}`);
+      failed++;
+    }
+  }
+
+  // ── Direct test: generated clean formatter inputs ───────────────────────
+  //
+  // This is intentionally deterministic: it gives us property-style coverage
+  // without adding a test dependency. Each generated model starts parse-clean,
+  // runs through the full formatter, and must remain parse-clean,
+  // symbol-preserving, and idempotent.
+  {
+    const testName = "format_generated_models: clean, symbol-preserving, idempotent";
+    try {
+      let seed = 0x5eed1234;
+      const next = () => {
+        seed = (seed * 1664525 + 1013904223) >>> 0;
+        return seed;
+      };
+      const pick = <T>(values: T[]): T => values[next() % values.length];
+      const indent = () => pick(["", " ", "  ", "    ", "\t"]);
+
+      const symbolKeys = (filePath: string): string[] =>
+        helper.si.getFileSymbols(filePath)
+          .map((s: any) => `${s.kind}:${s.name}:${s.container ?? ""}:${s.statePath?.join(".") ?? ""}`)
+          .sort();
+
+      const generatedModels: string[] = [];
+      for (let i = 0; i < 36; i++) {
+        const classA = `C${i}A`;
+        const classB = `C${i}B`;
+        const event = `go${i}`;
+        const reset = `reset${i}`;
+        generatedModels.push([
+          `${indent()}class ${classA} {`,
+          `${indent()}name${i};`,
+          `${indent()}Integer count${i}=5;`,
+          `${indent()}Boolean flag${i} = true;`,
+          `${indent()}status${pick(["", " "])}{`,
+          `${indent()}Open { ${event}->Closed; }`,
+          `${indent()}Closed { ${reset} -> Open; }`,
+          `${indent()}}`,
+          `${indent()}void bump${i}(Integer value) {`,
+          `${indent()}int local = value;`,
+          `${indent()}local = local + 1;`,
+          `${indent()}}`,
+          `${indent()}}`,
+          pick(["", "\n"]),
+          `${indent()}class ${classB} {`,
+          `${indent()}label${i} = "x";`,
+          `${indent()}}`,
+          "",
+          `${indent()}association {`,
+          `${indent()}1 ${classA}${pick(["--", " -- ", "  --"])}* ${classB};`,
+          `${indent()}}`,
+        ].join("\n"));
+      }
+
+      for (let i = 0; i < generatedModels.length; i++) {
+        const filePath = `/tmp/format_generated_${i}.ump`;
+        const content = generatedModels[i];
+
+        helper.si.indexFile(filePath, content);
+        const originalTree = helper.si.getTree(filePath);
+        if (!originalTree || originalTree.rootNode.hasError) {
+          throw new Error(`generated model ${i} did not start parse-clean:\n${content}`);
+        }
+        const originalSymbols = symbolKeys(filePath);
+
+        const pass1Text = helper.formatFile(filePath, content).join("\n");
+        helper.si.indexFile(filePath, pass1Text);
+        const formattedTree = helper.si.getTree(filePath);
+        if (!formattedTree || formattedTree.rootNode.hasError) {
+          throw new Error(`generated model ${i} formatted to parse errors:\n${pass1Text}`);
+        }
+        const formattedSymbols = symbolKeys(filePath);
+        if (JSON.stringify(originalSymbols) !== JSON.stringify(formattedSymbols)) {
+          throw new Error(
+            `generated model ${i} changed symbols: before=${originalSymbols.join(", ")} after=${formattedSymbols.join(", ")}`,
+          );
+        }
+
+        const pass2Text = helper.formatFile(filePath, pass1Text).join("\n");
+        if (pass1Text !== pass2Text) {
+          throw new Error(`generated model ${i} was not idempotent:\n--- pass1 ---\n${pass1Text}\n--- pass2 ---\n${pass2Text}`);
+        }
+      }
+
       console.log(`  PASS  ${testName}`);
       passed++;
     } catch (e: any) {
