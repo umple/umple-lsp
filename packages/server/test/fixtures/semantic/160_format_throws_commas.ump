@@ -1,0 +1,10 @@
+interface I {
+void read() throws IOException,RuntimeException;
+}
+
+class C {
+public abstract void load() throws ParseException,ValidationException;
+void save(String name,Integer count) throws IOException,RuntimeException {
+call(a,b);
+}
+}

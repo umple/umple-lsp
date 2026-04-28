@@ -312,6 +312,9 @@ const STRUCTURAL_COMMA_NODES = new Set([
   "type_list",
   "trait_parameters",
   "enum_definition",
+  "method_signature",
+  "method_declaration",
+  "abstract_method_declaration",
 ]);
 
 function isHorizontalWhitespace(ch: string | undefined): boolean {
@@ -332,38 +335,38 @@ export function fixStructuralCommaSpacing(
 
   const visit = (node: any) => {
     if (STRUCTURAL_COMMA_NODES.has(node.type)) {
-      const startRow = node.startPosition.row;
-      const endRow = node.endPosition.row;
-      if (startRow === endRow) {
-        const line = lines[startRow];
-        for (let c = 0; c < node.childCount; c++) {
-          const child = node.child(c);
-          if (!child || child.type !== ",") continue;
+      for (let c = 0; c < node.childCount; c++) {
+        const child = node.child(c);
+        if (!child || child.type !== ",") continue;
+        const row = child.startPosition.row;
+        if (row !== child.endPosition.row) continue;
 
-          const commaCol = child.startPosition.column;
-          const commaEndCol = child.endPosition.column;
-          let wsStart = commaCol;
-          while (wsStart > 0 && isHorizontalWhitespace(line[wsStart - 1])) {
-            wsStart--;
-          }
-          let wsEnd = commaEndCol;
-          while (wsEnd < line.length && isHorizontalWhitespace(line[wsEnd])) {
-            wsEnd++;
-          }
+        const commaCol = child.startPosition.column;
+        const commaEndCol = child.endPosition.column;
+        const line = lines[row];
+        if (line.substring(commaEndCol).trim().length === 0) continue;
 
-          const currentRegion = line.substring(wsStart, wsEnd);
-          const expectedRegion = ", ";
-          if (currentRegion !== expectedRegion) {
-            edits.push(
-              TextEdit.replace(
-                Range.create(
-                  Position.create(startRow, wsStart),
-                  Position.create(startRow, wsEnd),
-                ),
-                expectedRegion,
+        let wsStart = commaCol;
+        while (wsStart > 0 && isHorizontalWhitespace(line[wsStart - 1])) {
+          wsStart--;
+        }
+        let wsEnd = commaEndCol;
+        while (wsEnd < line.length && isHorizontalWhitespace(line[wsEnd])) {
+          wsEnd++;
+        }
+
+        const currentRegion = line.substring(wsStart, wsEnd);
+        const expectedRegion = ", ";
+        if (currentRegion !== expectedRegion) {
+          edits.push(
+            TextEdit.replace(
+              Range.create(
+                Position.create(row, wsStart),
+                Position.create(row, wsEnd),
               ),
-            );
-          }
+              expectedRegion,
+            ),
+          );
         }
       }
     }

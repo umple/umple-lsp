@@ -1072,6 +1072,28 @@ const TEST_CASES: TestCase[] = [
     ],
   },
 
+  {
+    name: "160 format_throws_commas: signatures and method declarations",
+    fixtures: ["160_format_throws_commas.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "160_format_throws_commas.ump" },
+      {
+        type: "format_output",
+        fixture: "160_format_throws_commas.ump",
+        expectLines: [
+          { line: 1, text: "  void read() throws IOException, RuntimeException;" },
+          { line: 5, text: "  public abstract void load() throws ParseException, ValidationException;" },
+          { line: 6, text: "  void save(String name, Integer count) throws IOException, RuntimeException {" },
+          { line: 7, text: "    call(a,b);" },
+        ],
+      },
+      {
+        type: "format_idempotent",
+        fixture: "160_format_throws_commas.ump",
+      },
+    ],
+  },
+
   // 15: Formatting smoke test
   {
     name: "15 formatting: indent + skip range",
