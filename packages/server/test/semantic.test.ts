@@ -7563,6 +7563,70 @@ async function main() {
         ].join("\n"));
       }
 
+      for (let i = 0; i < 8; i++) {
+        const left = `GeneratedLeft${i}`;
+        const right = `GeneratedRight${i}`;
+        const assoc = `GeneratedLink${i}`;
+        const inject = `Injected${i}`;
+        const globalSm = `GlobalSm${i}`;
+        const reuser = `ReuseHolder${i}`;
+        const mixset = `RichFeature${i}`;
+        generatedModels.push([
+          `${indent()}enum GeneratedColor${i} { Red${i},Blue${i},Green${i} }`,
+          "",
+          `${indent()}class ${left} {`,
+          `${indent()}name${i};`,
+          `${indent()}}`,
+          "",
+          `${indent()}class ${right} {`,
+          `${indent()}Integer value${i}=1;`,
+          `${indent()}}`,
+          "",
+          `${indent()}associationClass ${assoc} {`,
+          `${indent()}1 ${left};`,
+          `${indent()}* ${right};`,
+          `${indent()}String note${i};`,
+          `${indent()}}`,
+          "",
+          `${indent()}statemachine ${globalSm} {`,
+          `${indent()}Off { start${i}->On; }`,
+          `${indent()}On { stop${i}->Off; }`,
+          `${indent()}}`,
+          "",
+          `${indent()}class ${reuser} {`,
+          `${indent()}machine${i} as ${globalSm} {`,
+          `${indent()}Off { localStart${i}->On; }`,
+          `${indent()}}`,
+          `${indent()}}`,
+          "",
+          `${indent()}class ${inject} {`,
+          `${indent()}name${i};`,
+          `${indent()}Integer count${i}=0;`,
+          `${indent()}void setName${i}(String value) {`,
+          `${indent()}name${i} = value;`,
+          `${indent()}}`,
+          `${indent()}void setCount${i}(Integer value) {`,
+          `${indent()}count${i} = value;`,
+          `${indent()}}`,
+          `${indent()}trace set,get name${i},count${i};`,
+          `${indent()}}`,
+          "",
+          `${indent()}before { ${inject},* } setName${i}(String value),setCount${i}(Integer value) {`,
+          `${indent()}System.out.println(value);`,
+          `${indent()}}`,
+          "",
+          `${indent()}mixset ${mixset} {`,
+          `${indent()}class MixedGenerated${i} {`,
+          `${indent()}Integer size${i}=1;`,
+          `${indent()}status${i} { Active${i} { done${i}->Inactive${i}; } Inactive${i} {} }`,
+          `${indent()}}`,
+          `${indent()}trait MixedTrait${i} {`,
+          `${indent()}abstract void run${i}();`,
+          `${indent()}}`,
+          `${indent()}}`,
+        ].join("\n"));
+      }
+
       for (let i = 0; i < generatedModels.length; i++) {
         const filePath = `/tmp/format_generated_${i}.ump`;
         const content = generatedModels[i];
