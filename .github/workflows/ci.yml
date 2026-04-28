@@ -9,6 +9,8 @@ name: CI
 #      so this workflow installs both. Without them the suite still
 #      passes, but with materially weaker coverage — see topic 054 for
 #      the rationale.
+#   3. Parser and formatter corpus self-tests against generated local
+#      mini-corpora. Full upstream corpus sweeps remain manual/local.
 #
 # No package-lock.json is tracked in this repo, so we use `npm install`
 # (not `npm ci`). If that changes, swap to `npm ci`.

@@ -26,7 +26,7 @@ on:
 3. Install Java 17 because snippet compiler-validation tests invoke `umplesync.jar`.
 4. Run `npm install` (this repo does not track a root lockfile, so CI does not use `npm ci`).
 5. Run `npm run download-jar`.
-6. Run root `npm test`, which rebuilds the grammar/WASM, runs the semantic suite, and runs the parser-report self-test against a generated two-file corpus.
+6. Run root `npm test`, which rebuilds the grammar/WASM, runs the semantic suite, and runs parser/formatter corpus self-tests against generated mini-corpora.
 
 ### Corpus parse stress reporter
 

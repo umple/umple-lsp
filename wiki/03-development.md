@@ -66,7 +66,7 @@ The server auto-discovers it at `packages/server/umplesync.jar` (relative to the
 | `npm run build-grammar` | Same as `compile`. Use this name when emphasizing the grammar regen step. |
 | `npm run watch` | TypeScript watch mode for the server. Doesn't watch grammar — re-run `compile` after grammar edits. |
 | `npm run copy-wasm` | Just the WASM + .scm copy step. Useful when you only edited a `.scm` file. |
-| `npm test` | Runs the whole semantic test suite (currently 682 assertions). Auto-compiles first. |
+| `npm test` | Auto-compiles, runs the semantic test suite, then runs parser and formatter corpus self-tests. |
 | `npm run download-jar` | Pulls latest `umplesync.jar` from try.umple.org. |
 
 ## Running the server standalone
