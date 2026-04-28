@@ -1,0 +1,12 @@
+interface I {
+void g(String a,Integer b);
+}
+
+trait T<TP isA I = Default,TP2> {}
+
+class A {
+List<String,Integer> names;
+void f(String a,Integer b,List<String,Integer> c) {
+call(a,b);
+}
+}

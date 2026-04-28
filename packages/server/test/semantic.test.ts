@@ -1029,6 +1029,29 @@ const TEST_CASES: TestCase[] = [
     ],
   },
 
+  {
+    name: "158 format_signature_type_commas: params, generics, trait params",
+    fixtures: ["158_format_signature_type_commas.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "158_format_signature_type_commas.ump" },
+      {
+        type: "format_output",
+        fixture: "158_format_signature_type_commas.ump",
+        expectLines: [
+          { line: 1, text: "  void g(String a, Integer b);" },
+          { line: 4, text: "trait T<TP isA I = Default, TP2> {}" },
+          { line: 7, text: "  List<String, Integer> names;" },
+          { line: 8, text: "  void f(String a, Integer b, List<String, Integer> c) {" },
+          { line: 9, text: "    call(a,b);" },
+        ],
+      },
+      {
+        type: "format_idempotent",
+        fixture: "158_format_signature_type_commas.ump",
+      },
+    ],
+  },
+
   // 15: Formatting smoke test
   {
     name: "15 formatting: indent + skip range",
