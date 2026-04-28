@@ -15,6 +15,7 @@ A Language Server Protocol implementation for the [Umple](https://www.umple.org)
 - **Find implementations** - Jump from traits, interfaces, and classes to their `isA` implementers, extensions, and subclasses
 - **Rename** - Safe rename across all references (same pipeline as find-references)
 - **Hover** - Contextual information for symbols with markdown formatting
+- **Inlay hints** - Editor-only inferred type annotations for compiler-verified untyped attributes
 - **Code completion** - Context-aware keyword and symbol suggestions
 - **Document symbols** - Hierarchical outline of classes, state machines, states, attributes, methods
 - **Workspace symbols** - Search across indexed files for classes, traits, requirements, state machines, states, methods, named associations, and query-matched members

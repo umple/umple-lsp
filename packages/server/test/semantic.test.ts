@@ -167,6 +167,7 @@ type Assertion =
   | RenameRejectedAssertion
   | DocumentSymbolsAssertion
   | WorkspaceSymbolsAssertion
+  | InlayHintsAssertion
   | FormatOutputAssertion
   | FormatOutputWithOptionsAssertion
   | FormatIdempotentAssertion
@@ -288,6 +289,14 @@ interface WorkspaceSymbolsAssertion {
   query: string;
   expect: { name: string; kind?: string; containerName?: string; fixture?: string }[];
   exclude?: { name: string; kind?: string; containerName?: string; fixture?: string }[];
+}
+
+interface InlayHintsAssertion {
+  type: "inlay_hints";
+  fixture: string;
+  expect: { at: string; label: string }[];
+  excludeAt?: string[];
+  range?: { startAt: string; endAt: string };
 }
 
 interface TestCase {
@@ -868,6 +877,39 @@ const TEST_CASES: TestCase[] = [
       { type: "parse_clean", fixture: "151_corpus_ivar_attributes.ump" },
       { type: "symbol_count", fixture: "151_corpus_ivar_attributes.ump", name: "ayo", kind: "attribute", expect: 1 },
       { type: "goto_def_exact", at: "ref_ayo", expect: ["def_ayo"] },
+    ],
+  },
+
+  {
+    name: "152 inlay hints: conservative inferred attribute types",
+    fixtures: ["152_inlay_hints.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "152_inlay_hints.ump" },
+      {
+        type: "inlay_hints",
+        fixture: "152_inlay_hints.ump",
+        expect: [
+          { at: "plain", label: ": String" },
+          { at: "string", label: ": String" },
+          { at: "integer", label: ": Integer" },
+          { at: "negative", label: ": Integer" },
+          { at: "double", label: ": Double" },
+          { at: "boolean", label: ": Boolean" },
+          { at: "auto", label: ": Integer" },
+        ],
+        excludeAt: ["explicit", "suffix", "call", "derived"],
+      },
+      {
+        type: "inlay_hints",
+        fixture: "152_inlay_hints.ump",
+        range: { startAt: "integer", endAt: "double" },
+        expect: [
+          { at: "integer", label: ": Integer" },
+          { at: "negative", label: ": Integer" },
+          { at: "double", label: ": Double" },
+        ],
+        excludeAt: ["plain", "string", "boolean", "auto"],
+      },
     ],
   },
 
@@ -6782,6 +6824,59 @@ function runAssertion(
         };
       }
     }
+    return { ok: true, message: "" };
+  }
+
+  if (assertion.type === "inlay_hints") {
+    const fileInfo = files.get(assertion.fixture);
+    if (!fileInfo) return { ok: false, message: `fixture ${assertion.fixture} not found` };
+
+    let range;
+    if (assertion.range) {
+      const start = fileInfo.markers.get(assertion.range.startAt);
+      const end = fileInfo.markers.get(assertion.range.endAt);
+      if (!start) return { ok: false, message: `range start marker @${assertion.range.startAt} not found` };
+      if (!end) return { ok: false, message: `range end marker @${assertion.range.endAt} not found` };
+      range = {
+        start: { line: start.line, character: 0 },
+        end: { line: end.line, character: Number.MAX_SAFE_INTEGER },
+      };
+    }
+
+    const hints = helper.inlayHints(fileInfo.path, range);
+    for (const expected of assertion.expect) {
+      const marker = fileInfo.markers.get(expected.at);
+      if (!marker) return { ok: false, message: `marker @${expected.at} not found` };
+      const found = hints.some(
+        (hint) =>
+          hint.position.line === marker.line &&
+          hint.position.character >= marker.col &&
+          hint.label === expected.label,
+      );
+      if (!found) {
+        return {
+          ok: false,
+          message: `inlay_hints @${expected.at}: expected ${JSON.stringify(expected.label)}, got [${hints.map((hint) => `${hint.position.line}:${hint.position.character} ${JSON.stringify(hint.label)}`).join(", ")}]`,
+        };
+      }
+    }
+
+    for (const markerName of assertion.excludeAt ?? []) {
+      const marker = fileInfo.markers.get(markerName);
+      if (!marker) return { ok: false, message: `excluded marker @${markerName} not found` };
+      const found = hints.some(
+        (hint) =>
+          hint.position.line === marker.line &&
+          hint.position.character >= marker.col,
+      );
+      if (found) {
+        return {
+          ok: false,
+          message: `inlay_hints @${markerName}: expected no hint on marker line, got [${hints.map((hint) => `${hint.position.line}:${hint.position.character} ${JSON.stringify(hint.label)}`).join(", ")}]`,
+        };
+      }
+    }
+
     return { ok: true, message: "" };
   }
 

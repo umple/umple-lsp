@@ -27,6 +27,7 @@ The goal is simple:
 | blank-slot completion wrong | `completions.scm` or `completionAnalysis.ts`, then `completionBuilder.ts` | [16-completion-playbook.md](16-completion-playbook.md) |
 | typed-prefix completion wrong | `completionAnalysis.ts`, then `completionBuilder.ts` | [16-completion-playbook.md](16-completion-playbook.md) |
 | raw keyword junk leaking into completion | `completionBuilder.ts`, maybe `completionAnalysis.ts` | [16-completion-playbook.md](16-completion-playbook.md) |
+| inlay hint missing or wrong | `inlayHints.ts`, `server.ts`, tests | [02-architecture.md](02-architecture.md#inlay-hints) |
 | syntax highlighting only | `highlights.scm` | [04-grammar.md](04-grammar.md) |
 
 ## 2. File-touch matrix
@@ -42,6 +43,7 @@ Use this to avoid over-editing.
 | typed-prefix completion narrowing | `completionAnalysis.ts`, `completionBuilder.ts`, tests | `grammar.js` unless syntax is actually missing |
 | curated body completion | `completions.scm` and/or `completionAnalysis.ts`, `completionBuilder.ts`, tests | `definitions.scm` unless symbols also change |
 | hover metadata polish | `symbolIndex.ts`, `hoverBuilder.ts`, tests | `completionBuilder.ts` |
+| inlay hint polish | `inlayHints.ts`, `server.ts`, tests | `grammar.js` unless syntax is missing |
 | document outline nesting | `documentSymbolBuilder.ts`, maybe `symbolIndex.ts`, tests | `completionAnalysis.ts` |
 
 ## 3. Do / don’t rules

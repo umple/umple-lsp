@@ -108,6 +108,23 @@ maps captures such as `@type.definition`, `@variable.member`, and `@keyword` to
 an LSP semantic-token legend. This gives editors that rely on LSP tokens a
 server-side highlighting path without duplicating grammar rules.
 
+### Inlay hints
+
+`textDocument/inlayHint` is implemented in `inlayHints.ts`. It currently emits
+only editor-only type hints for untyped `attribute_declaration` nodes in clean
+parse trees. The supported cases mirror compiler-verified behavior:
+
+- no explicit type and no value → `String`
+- string literal / string concatenation → `String`
+- boolean literal → `Boolean`
+- plain integer literal → `Integer`
+- plain decimal literal → `Double`
+- `autounique` attribute → `Integer`
+
+The handler deliberately skips explicit types, derived attributes, method calls,
+qualified names, numeric suffixes, broken parse trees, and association
+multiplicity/default guesses. Inlay hints never edit source text.
+
 ### Find references
 
 `findReferences(declarations, reachableFiles, includeDecl)` in `symbolIndex.ts`:

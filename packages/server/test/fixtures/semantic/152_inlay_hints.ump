@@ -1,0 +1,14 @@
+class Person {
+  /*@plain*/name;
+  /*@string*/label = "Bob";
+  /*@integer*/age = 5;
+  /*@negative*/balance = -1;
+  /*@double*/score = 1.5;
+  /*@boolean*/active = true;
+  autounique /*@auto*/id;
+
+  String /*@explicit*/explicitName = "Alice";
+  /*@suffix*/longish = 5L;
+  /*@call*/separator = System.lineSeparator();
+  /*@derived*/derived = {age + 1}
+}

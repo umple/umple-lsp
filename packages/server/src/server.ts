@@ -15,6 +15,7 @@ import {
   DocumentSymbol,
   InitializeParams,
   InitializeResult,
+  InlayHint,
   Location,
   ProposedFeatures,
   SemanticTokens,
@@ -66,6 +67,7 @@ import {
   buildSemanticTokens,
   UMPLE_SEMANTIC_TOKENS_LEGEND,
 } from "./semanticTokens";
+import { buildInlayHints } from "./inlayHints";
 
 // Handle CLI flags before opening the LSP connection. Editor integrations
 // always spawn the server with `--stdio` and never pass these flags, so the
@@ -439,6 +441,9 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
         legend: UMPLE_SEMANTIC_TOKENS_LEGEND,
         full: true,
         range: false,
+      },
+      inlayHintProvider: {
+        resolveProvider: false,
       },
       documentFormattingProvider: true,
       // Quick-fix code actions. Pure classifiers live in codeActions.ts and
@@ -1324,6 +1329,17 @@ connection.languages.semanticTokens.on(async (params): Promise<SemanticTokens> =
 
   symbolIndex.updateFile(docPath, document.getText());
   return buildSemanticTokens(symbolIndex.getHighlightCaptures(docPath));
+});
+
+connection.languages.inlayHint.on(async (params): Promise<InlayHint[]> => {
+  const document = getDocument(params.textDocument.uri);
+  if (!document || !symbolIndexReady) return [];
+
+  const docPath = getDocumentFilePath(document);
+  if (!docPath) return [];
+
+  symbolIndex.updateFile(docPath, document.getText());
+  return buildInlayHints(symbolIndex.getTree(docPath), params.range);
 });
 
 // ── Formatting ──────────────────────────────────────────────────────────────

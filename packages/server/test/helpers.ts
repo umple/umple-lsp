@@ -14,9 +14,10 @@ import { buildHoverMarkdown, buildTraitSmOpHover } from "../src/hoverBuilder";
 import { isRenameableKind, isValidNewName } from "../src/renameValidation";
 import { buildDocumentSymbolTree } from "../src/documentSymbolBuilder";
 import { buildWorkspaceSymbols } from "../src/workspaceSymbolBuilder";
+import { buildInlayHints } from "../src/inlayHints";
 import { expandCompactStates, computeIndentEdits, fixTransitionSpacing, fixAssociationSpacing, normalizeTopLevelBlankLines, reindentEmbeddedCode } from "../src/formatter";
 import { checkFormatSafety } from "../src/formatSafetyNet";
-import { CompletionItem } from "vscode-languageserver/node";
+import { CompletionItem, Range } from "vscode-languageserver/node";
 
 // __dirname at runtime is .test-out/test/, so ../../ reaches the package root
 const FIXTURE_DIR = path.resolve(__dirname, "../../test/fixtures/semantic");
@@ -515,6 +516,13 @@ export class SemanticTestHelper {
    */
   workspaceSymbols(query: string) {
     return buildWorkspaceSymbols(this.si.getAllSymbols(), query);
+  }
+
+  /**
+   * Build inlay hints for a file from its indexed parse tree.
+   */
+  inlayHints(filePath: string, range?: Range) {
+    return buildInlayHints(this.si.getTree(filePath), range);
   }
 
   /**
