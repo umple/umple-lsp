@@ -222,6 +222,16 @@ Formatter regression coverage includes fixed fixtures plus deterministic
 generated clean models that must remain parse-clean, preserve symbols, and be
 idempotent after formatting.
 
+Intentional limits:
+
+- The formatter skips files whose tree already has parser errors.
+- Embedded target-language code is treated as a verbatim island, apart from
+  shifting whole code blocks to match surrounding Umple indentation.
+- Structural spacing rules only use parser-visible tokens in known node types;
+  they must not scan arbitrary text for punctuation.
+- Broad rewrites such as splitting all compact declarations or Java-formatting
+  method bodies should remain separate topics with corpus proof before landing.
+
 For local corpus checks, run
 `UMPLE_FORMAT_CORPUS_DIR=/path/to/cruise.umple/test npm run format:corpus`.
 The report skips files that already have parser errors, formats parse-clean

@@ -34,6 +34,20 @@ authoritative compiler check for diagnostics. A construct can parse well enough
 for LSP features and still receive an `umple compiler` diagnostic if the official
 compiler rejects it.
 
+### Formatter scope
+
+The formatter is intentionally conservative. It formats parse-clean Umple
+structure: indentation, selected structural spacing, top-level blank lines, and
+simple compact state blocks. It does not format embedded target-language code
+inside method/action bodies, does not rewrite files that already contain parser
+errors, and does not split every compact one-line declaration.
+
+Formatter changes belong in `packages/server/src/formatter.ts`, with exact
+fixtures in `packages/server/test/fixtures/semantic/` and coverage in
+`packages/server/test/semantic.test.ts`. Run `npm test` plus
+`UMPLE_FORMAT_CORPUS_DIR=/path/to/cruise.umple/test npm run format:corpus`
+before accepting new formatter rules.
+
 ## Umple Grammar Coverage
 
 The table below shows the LSP's support for Umple language features, based on the [Umple Grammar](https://cruise.umple.org/umple/UmpleGrammar.html). Priority: `**` = high, `*` = lower.
