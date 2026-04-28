@@ -1008,6 +1008,27 @@ const TEST_CASES: TestCase[] = [
     ],
   },
 
+  {
+    name: "157 format_filter_commas: include/includeFilter/namespace lists",
+    fixtures: ["157_format_filter_commas.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "157_format_filter_commas.ump" },
+      {
+        type: "format_output",
+        fixture: "157_format_filter_commas.ump",
+        expectLines: [
+          { line: 1, text: "  include A, B, ~C*, ?Name;" },
+          { line: 2, text: "  includeFilter f1, f2, 7;" },
+          { line: 3, text: "  namespace alpha.beta, gamma.delta;" },
+        ],
+      },
+      {
+        type: "format_idempotent",
+        fixture: "157_format_filter_commas.ump",
+      },
+    ],
+  },
+
   // 15: Formatting smoke test
   {
     name: "15 formatting: indent + skip range",

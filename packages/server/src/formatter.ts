@@ -304,6 +304,9 @@ const DECLARATION_ASSIGNMENT_NODES = new Set([
 const STRUCTURAL_COMMA_NODES = new Set([
   "use_statement",
   "isa_type_list",
+  "filter_value",
+  "filter_combined_value",
+  "filter_namespace_stmt",
 ]);
 
 function isHorizontalWhitespace(ch: string | undefined): boolean {
