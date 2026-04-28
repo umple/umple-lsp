@@ -1,0 +1,13 @@
+class Person {
+name;
+void setName(String n) {}
+void setAge(Integer age) {}
+before setName,setAge { audit(name,age); }
+after get*,!getAge { trace(name,age); }
+}
+
+before {Person,Address} setName,setAge { log("x,y"); }
+after {Person, Address} generated get*,!getAge { log(a,b); }
+
+class Address {
+}

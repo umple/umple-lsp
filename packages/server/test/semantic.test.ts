@@ -1094,6 +1094,28 @@ const TEST_CASES: TestCase[] = [
     ],
   },
 
+  {
+    name: "161 format_before_after_commas: hook operation and target lists",
+    fixtures: ["161_format_before_after_commas.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "161_format_before_after_commas.ump" },
+      {
+        type: "format_output",
+        fixture: "161_format_before_after_commas.ump",
+        expectLines: [
+          { line: 4, text: "  before setName, setAge { audit(name,age); }" },
+          { line: 5, text: "  after get*, !getAge { trace(name,age); }" },
+          { line: 8, text: "before {Person, Address} setName, setAge { log(\"x,y\"); }" },
+          { line: 10, text: "after {Person, Address} generated get*, !getAge { log(a,b); }" },
+        ],
+      },
+      {
+        type: "format_idempotent",
+        fixture: "161_format_before_after_commas.ump",
+      },
+    ],
+  },
+
   // 15: Formatting smoke test
   {
     name: "15 formatting: indent + skip range",

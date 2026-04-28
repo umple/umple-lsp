@@ -315,6 +315,8 @@ const STRUCTURAL_COMMA_NODES = new Set([
   "method_signature",
   "method_declaration",
   "abstract_method_declaration",
+  "before_after",
+  "toplevel_code_injection",
 ]);
 
 function isHorizontalWhitespace(ch: string | undefined): boolean {
