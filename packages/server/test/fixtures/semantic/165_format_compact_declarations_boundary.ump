@@ -1,0 +1,10 @@
+class Empty {}
+
+interface CompactInterface { void ping(); }
+
+trait CompactTrait { name; }
+
+class Container {
+class Nested {}
+enum Mode {On, Off}
+}

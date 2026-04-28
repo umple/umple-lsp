@@ -165,7 +165,10 @@ Remaining formatter topics, ordered by safety:
    corpus proof. Avoid string-scanning inside target-language code.
 2. **Compact declaration expansion** — decide whether one-line `class A {}`
    or `interface I { void f(); }` should expand. High risk because compact
-   forms are common in tests and examples.
+   forms are common in tests and examples. Fixture
+   `165_format_compact_declarations_boundary.ump` pins the current safe
+   boundary: compact declarations remain compact unless a later topic explicitly
+   designs and tests expansion.
 3. **Embedded target-language formatting** — out of scope for this LSP
    formatter. Java/PHP/C++/Python bodies should remain verbatim unless a
    separate language-aware formatter integration is designed.

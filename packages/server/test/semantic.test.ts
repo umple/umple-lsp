@@ -1200,6 +1200,29 @@ const TEST_CASES: TestCase[] = [
     ],
   },
 
+  {
+    name: "165 format_compact_declarations_boundary: keep compact declarations compact",
+    fixtures: ["165_format_compact_declarations_boundary.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "165_format_compact_declarations_boundary.ump" },
+      {
+        type: "format_output",
+        fixture: "165_format_compact_declarations_boundary.ump",
+        expectLines: [
+          { line: 0, text: "class Empty {}" },
+          { line: 2, text: "interface CompactInterface { void ping(); }" },
+          { line: 4, text: "trait CompactTrait { name; }" },
+          { line: 7, text: "  class Nested {}" },
+          { line: 8, text: "  enum Mode {On, Off}" },
+        ],
+      },
+      {
+        type: "format_idempotent",
+        fixture: "165_format_compact_declarations_boundary.ump",
+      },
+    ],
+  },
+
   // 15: Formatting smoke test
   {
     name: "15 formatting: indent + skip range",
