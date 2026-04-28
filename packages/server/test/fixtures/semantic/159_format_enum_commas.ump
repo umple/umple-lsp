@@ -1,0 +1,5 @@
+enum Color { Red,Blue, Green,Yellow }
+
+class Holder {
+enum Size { Small,Medium, Large }
+}

@@ -311,6 +311,7 @@ const STRUCTURAL_COMMA_NODES = new Set([
   "type_name",
   "type_list",
   "trait_parameters",
+  "enum_definition",
 ]);
 
 function isHorizontalWhitespace(ch: string | undefined): boolean {

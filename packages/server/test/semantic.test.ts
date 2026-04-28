@@ -1052,6 +1052,26 @@ const TEST_CASES: TestCase[] = [
     ],
   },
 
+  {
+    name: "159 format_enum_commas: top-level and nested enum values",
+    fixtures: ["159_format_enum_commas.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "159_format_enum_commas.ump" },
+      {
+        type: "format_output",
+        fixture: "159_format_enum_commas.ump",
+        expectLines: [
+          { line: 0, text: "enum Color { Red, Blue, Green, Yellow }" },
+          { line: 3, text: "  enum Size { Small, Medium, Large }" },
+        ],
+      },
+      {
+        type: "format_idempotent",
+        fixture: "159_format_enum_commas.ump",
+      },
+    ],
+  },
+
   // 15: Formatting smoke test
   {
     name: "15 formatting: indent + skip range",
