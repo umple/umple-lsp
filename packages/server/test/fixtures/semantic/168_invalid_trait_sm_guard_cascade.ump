@@ -1,0 +1,13 @@
+trait T {
+  sm {
+    s1 {
+      e1 -> s2;
+    }
+    s2 {}
+  }
+}
+
+class C {
+  Boolean guard;
+  isA T<-sm.s1.e1()[guard].s2>;
+}

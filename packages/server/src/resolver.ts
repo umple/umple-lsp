@@ -44,6 +44,7 @@ export function resolveSymbolAtPosition(
 
   const containerKinds = new Set<string>([
     "attribute",
+    "port",
     "const",
     "method",
     "template",
@@ -221,6 +222,25 @@ export function resolveSymbolAtPosition(
       break;
     }
 
+    case "component_port": {
+      const componentType = resolveComponentType(
+        si,
+        token.context.componentName,
+        token.enclosingClass,
+        reachableFiles,
+      );
+      if (!componentType) break;
+      symbols = si
+        .getSymbols({
+          name: token.word,
+          kind: ["port"],
+          container: componentType,
+          inherited: true,
+        })
+        .filter((s) => reachableFiles.has(path.normalize(s.file)));
+      break;
+    }
+
     case "default_value_qualifier":
     case "normal": {
       // Split kinds into scoped (class/SM-local) and unscoped (global).
@@ -339,4 +359,35 @@ export function resolveSymbolAtPosition(
   }
 
   return { token, symbols };
+}
+
+function resolveComponentType(
+  si: SymbolIndex,
+  componentName: string,
+  enclosingClass: string | undefined,
+  reachableFiles: Set<string>,
+): string | undefined {
+  if (!enclosingClass) return undefined;
+  const candidates = si
+    .getSymbols({
+      name: componentName,
+      kind: ["attribute"],
+      container: enclosingClass,
+      inherited: true,
+    })
+    .filter((s) => reachableFiles.has(path.normalize(s.file)));
+
+  const typeNames = new Set(
+    candidates
+      .map((s) => normalizeTypeName(s.declaredType))
+      .filter((typeName): typeName is string => !!typeName),
+  );
+
+  return typeNames.size === 1 ? [...typeNames][0] : undefined;
+}
+
+function normalizeTypeName(typeName: string | undefined): string | undefined {
+  if (!typeName) return undefined;
+  const parts = typeName.split(".").filter(Boolean);
+  return parts.length > 0 ? parts[parts.length - 1] : undefined;
 }

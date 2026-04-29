@@ -131,6 +131,34 @@ export function analyzeToken(
     stateDefinitionRef = { definitionPath: resolveStatePath(node) };
   }
 
+  let context: LookupContext = { type: "normal" };
+
+  // Port connector endpoints:
+  // - pIn -> pOut resolves as class-local ports
+  // - cmp1.pOut resolves the first segment as the component attribute and the
+  //   second as a port on that component's declared type.
+  if (
+    node.type === "identifier" &&
+    parent?.type === "qualified_name" &&
+    parent.parent?.type === "port_connector"
+  ) {
+    const endpoint = getQualifiedNameSegments(parent, node);
+    if (endpoint && endpoint.segments.length === 1) {
+      kinds = ["port"];
+      context = { type: "normal" };
+    } else if (endpoint && endpoint.segments.length === 2) {
+      if (endpoint.index === 0) {
+        kinds = ["attribute"];
+        context = { type: "normal" };
+      } else {
+        kinds = ["port"];
+        context = { type: "component_port", componentName: endpoint.segments[0] };
+      }
+    } else {
+      kinds = null;
+    }
+  }
+
   // ── Trace prefix override: propagate prefix semantics to all entities ────
   const TRACE_PREFIX_STATE = new Set(["entry", "exit"]);
   const TRACE_PREFIX_ATTR = new Set(["set", "get"]);
@@ -169,8 +197,6 @@ export function analyzeToken(
   }
 
   // ── Detect primary lookup context ────────────────────────────────────────
-
-  let context: LookupContext = { type: "normal" };
 
   // trait_sm_binding param: isA T1<sm1 as sm.s2> or isA T1<sm.s0.s11 as state11>
   if (
@@ -463,6 +489,22 @@ function findChildByType(node: SyntaxNode, type: string): SyntaxNode | null {
     if (node.child(i).type === type) return node.child(i);
   }
   return null;
+}
+
+function getQualifiedNameSegments(
+  node: SyntaxNode,
+  target: SyntaxNode,
+): { segments: string[]; index: number } | null {
+  if (node.type !== "qualified_name") return null;
+  const segments: string[] = [];
+  let index = -1;
+  for (let i = 0; i < node.namedChildCount; i++) {
+    const child = node.namedChild(i);
+    if (child?.type !== "identifier") continue;
+    if (child.id === target.id) index = segments.length;
+    segments.push(child.text);
+  }
+  return index >= 0 ? { segments, index } : null;
 }
 
 /**

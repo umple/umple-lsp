@@ -1,0 +1,21 @@
+class OuterClass {
+  static int y=0;
+
+  static class InnerStaticClass {
+    void increaseY() {
+      y++;
+    }
+  }
+}
+
+class StrictnessClassNoDelete {
+  strictness disable delete();
+}
+
+interface RegisterCapable {
+  id;
+  boolean registerForCourse(Course aCourse);
+  test checkCourseRegistration;
+}
+
+class Course {}

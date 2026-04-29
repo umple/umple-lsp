@@ -106,6 +106,14 @@ must not be treated as proof that the model is valid Umple. Diagnostics come fro
 `umplesync.jar`, so an `umple compiler` diagnostic is expected whenever the
 official compiler rejects syntax that tree-sitter can still parse.
 
+The reverse is also true during corpus triage: a corpus file that finishes with
+compiler `Success!` is not automatically a grammar gap. Some compiler fixtures
+intentionally exercise malformed syntax, warning recovery, no-line-ending
+behavior, or extra-code fallback. Only widen `grammar.js` for constructs with a
+clean language explanation plus a focused fixture. If you invoke the compiler on
+corpus files, run from a throwaway working directory or check for generated
+artifacts afterward; some implementation tests can emit temporary `.ump` files.
+
 ## The four query files
 
 All `.scm` files use [tree-sitter's S-expression query syntax](https://tree-sitter.github.io/tree-sitter/using-parsers#pattern-matching-with-queries).
@@ -192,6 +200,12 @@ UMPLE_CORPUS_DIR=/path/to/cruise.umple/test npm run parse:corpus
 ```
 
 The command strips UmpleOnline layout tails before parsing, reports the percentage of `.ump` files whose tree contains ERROR nodes, and exits successfully by default so existing corpus gaps do not break CI unexpectedly. To turn it into a gate after setting a baseline, add `UMPLE_CORPUS_FAIL_ON_ERROR=1` or pass `--fail-on-error`.
+
+As of the current local triage baseline, `/path/to/cruise.umple/test` contains
+2092 `.ump` files and the grammar parses 1965 cleanly. The remaining failures
+are dominated by invalid-name, malformed-state-machine, missing semicolon, and
+extra-code fallback fixtures; treat a future change to this baseline as a signal
+to inspect the top-error list, not as an automatic pass/fail rule.
 
 ## When the grammar changes vs when the server changes
 

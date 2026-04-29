@@ -1,0 +1,27 @@
+namespace example;
+
+tracer log4j;
+
+class TraceVariants {
+  Integer id;
+  Integer contact;
+  String name;
+
+  status {
+    Open { flip -> Closed; }
+    Closed { flip -> Open; }
+  }
+
+  trace *attributes;
+  trace onlyGet id, name;
+  trace status.Closed;
+  trace name record id,contact;
+  trace name record only id;
+  trace name logLevel debug,fatal;
+  trace transition flip record contact;
+
+  tracecase tc1 {
+    trace name;
+  }
+  deactivate tc1 onThisObject for 1s;
+}

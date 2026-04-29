@@ -33,6 +33,7 @@ export function searchReferences(
   fileTreeMap: Map<string, Tree>,
   isAGraph: Map<string, string[]>,
   smReuseBindings?: Map<string, string>,
+  allSymbols: SymbolEntry[] = [],
 ): ReferenceLocation[] {
   if (declarations.length === 0) return [];
 
@@ -51,7 +52,7 @@ export function searchReferences(
 
   // Container-scoped kinds need enclosing scope verification
   const containerScopedKinds = new Set<SymbolKind>([
-    "attribute", "const", "method", "template", "state", "statemachine", "tracecase",
+    "attribute", "port", "const", "method", "template", "state", "statemachine", "tracecase",
   ]);
   const isContainerScoped = containerScopedKinds.has(symKind);
 
@@ -85,6 +86,38 @@ export function searchReferences(
       const refKinds = parseCaptureKinds(capture.name);
       if (!refKinds || !refKinds.includes(symKind)) continue;
 
+      let skipContainerScopeCheck = false;
+      const componentPort = getPortConnectorSegmentInfo(node);
+      if (componentPort) {
+        if (componentPort.segments.length === 1) {
+          if (symKind !== "port") continue;
+        } else if (componentPort.segments.length === 2) {
+          if (componentPort.segmentIndex === 0) {
+            if (symKind !== "attribute") continue;
+          } else {
+            if (symKind !== "port") continue;
+            const componentType = resolveComponentTypeFromSymbols(
+              allSymbols,
+              componentPort.segments[0],
+              resolveEnclosingScopeFromNode(node, "attribute"),
+              isAGraph,
+            );
+            if (!componentType) continue;
+            if (
+              !validContainers.has(componentType) &&
+              !Array.from(validContainers).some((c) =>
+                isInheritanceChain(componentType, c, isAGraph),
+              )
+            ) {
+              continue;
+            }
+            skipContainerScopeCheck = true;
+          }
+        } else {
+          continue;
+        }
+      }
+
       // For sorted keys, resolve the owner class from the association and check
       // it matches the declaration container (with inheritance).
       if (node.parent?.type === "sorted_modifier" && symKind === "attribute") {
@@ -100,7 +133,7 @@ export function searchReferences(
       }
 
       // For container-scoped kinds, verify enclosing scope matches any valid container
-      else if (isContainerScoped && symContainer) {
+      else if (isContainerScoped && symContainer && !skipContainerScopeCheck) {
         const enclosing = resolveEnclosingScopeFromNode(node, symKind);
         if (enclosing && !validContainers.has(enclosing)) {
           // Check expanded matches: standalone SM, reuse bindings, inheritance
@@ -237,6 +270,82 @@ function parseCaptureKinds(captureName: string): SymbolKind[] | null {
     if (rest.startsWith("_")) rest = rest.substring(1);
   }
   return kinds.length > 0 ? kinds : null;
+}
+
+function getPortConnectorSegmentInfo(
+  node: SyntaxNode,
+): { segments: string[]; segmentIndex: number } | undefined {
+  const parent = node.parent;
+  if (parent?.type !== "qualified_name") return undefined;
+  if (parent.parent?.type !== "port_connector") return undefined;
+
+  const segments: string[] = [];
+  let segmentIndex = -1;
+  for (let i = 0; i < parent.namedChildCount; i++) {
+    const child = parent.namedChild(i);
+    if (child?.type !== "identifier") continue;
+    if (child.id === node.id) segmentIndex = segments.length;
+    segments.push(child.text);
+  }
+  return segmentIndex >= 0 ? { segments, segmentIndex } : undefined;
+}
+
+function resolveComponentTypeFromSymbols(
+  allSymbols: SymbolEntry[],
+  componentName: string,
+  enclosingClass: string | undefined,
+  isAGraph: Map<string, string[]>,
+): string | undefined {
+  if (!enclosingClass) return undefined;
+  const attr = findAttributeInContainerChain(
+    allSymbols,
+    componentName,
+    enclosingClass,
+    isAGraph,
+    new Set(),
+  );
+  return normalizeTypeName(attr?.declaredType);
+}
+
+function findAttributeInContainerChain(
+  allSymbols: SymbolEntry[],
+  name: string,
+  container: string,
+  isAGraph: Map<string, string[]>,
+  visited: Set<string>,
+): SymbolEntry | undefined {
+  if (visited.has(container)) return undefined;
+  visited.add(container);
+
+  const direct = allSymbols.filter(
+    (s) => s.kind === "attribute" && s.name === name && s.container === container,
+  );
+  const directTypes = new Set(
+    direct
+      .map((s) => normalizeTypeName(s.declaredType))
+      .filter((typeName): typeName is string => !!typeName),
+  );
+  if (directTypes.size === 1) return direct[0];
+  if (directTypes.size > 1) return undefined;
+
+  const parents = isAGraph.get(container) ?? [];
+  for (const parent of parents) {
+    const inherited = findAttributeInContainerChain(
+      allSymbols,
+      name,
+      parent,
+      isAGraph,
+      visited,
+    );
+    if (inherited) return inherited;
+  }
+  return undefined;
+}
+
+function normalizeTypeName(typeName: string | undefined): string | undefined {
+  if (!typeName) return undefined;
+  const parts = typeName.split(".").filter(Boolean);
+  return parts.length > 0 ? parts[parts.length - 1] : undefined;
 }
 
 function resolveEnclosingScopeFromNode(

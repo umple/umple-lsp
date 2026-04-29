@@ -105,6 +105,35 @@ function buildAttributeHover(
   return "```umple\n" + parts.join(" ") + "\n```" + extra;
 }
 
+function buildPortHover(
+  sym: SymbolEntry,
+  defNode: any,
+): string {
+  const parts: string[] = [];
+
+  const visibility = defNode.children.find((c: any) => c.type === "visibility");
+  if (visibility) parts.push(visibility.text);
+
+  const conjugated = defNode.children.find((c: any) => c.text === "conjugated");
+  if (conjugated) parts.push("conjugated");
+
+  const direction = defNode.children.find((c: any) =>
+    c.text === "in" || c.text === "out" || c.text === "port"
+  );
+  if (direction) parts.push(direction.text);
+
+  const typeNode = defNode.children.find((c: any) => c.type === "type_name");
+  if (typeNode) parts.push(typeNode.text);
+
+  parts.push(sym.name);
+
+  let result = "```umple\n" + parts.join(" ") + "\n```";
+  if (sym.container) {
+    result += `\n\n*in class ${sym.container}*`;
+  }
+  return result;
+}
+
 function buildConstHover(
   sym: SymbolEntry,
   defNode: any,
@@ -396,6 +425,9 @@ export function buildHoverMarkdown(
       break;
     case "attribute":
       result = buildAttributeHover(sym, defNode);
+      break;
+    case "port":
+      result = buildPortHover(sym, defNode);
       break;
     case "const":
       result = buildConstHover(sym, defNode);

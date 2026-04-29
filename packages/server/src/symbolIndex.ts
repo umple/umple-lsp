@@ -1276,6 +1276,7 @@ export class SymbolIndex {
         container = this.resolveStateMachineContainer(node);
       } else if (
         kind === "attribute" ||
+        kind === "port" ||
         kind === "const" ||
         kind === "method" ||
         kind === "template" ||
@@ -1404,6 +1405,9 @@ export class SymbolIndex {
       if (kind === "state") {
         entry.statePath = resolveStatePath(node);
       }
+      if (kind === "attribute" || kind === "port" || kind === "const") {
+        this.populateDeclaredType(entry, defNode);
+      }
       if (kind === "requirement") {
         this.populateRequirementMetadata(entry, defNode);
       }
@@ -1475,6 +1479,16 @@ export class SymbolIndex {
         case "req_why_tag":  entry.reqWhy  = tagText; break;
       }
     }
+  }
+
+  private populateDeclaredType(
+    entry: SymbolEntry,
+    defNode: SyntaxNode | null | undefined,
+  ): void {
+    if (!defNode) return;
+    const typeNode = defNode.childForFieldName("type") ??
+      defNode.children.find((c: SyntaxNode) => c.type === "type_name");
+    if (typeNode) entry.declaredType = typeNode.text;
   }
 
   /**
@@ -1640,6 +1654,7 @@ export class SymbolIndex {
       fileTreeMap,
       this.isAGraph,
       this.smReuseBindings,
+      this.getAllSymbols(),
     );
   }
 

@@ -25,6 +25,8 @@ export interface SymbolEntry {
   statePath?: string[];
   // True if extracted from a tree with parse errors (cold-open recovery)
   recovered?: boolean;
+  // Explicit declaration type for typed declarations such as attributes and ports.
+  declaredType?: string;
   // Structured requirement metadata (populated on kind="requirement" entries).
   // Compiler normalizes userstory → userStory and usecase → useCase; we do the
   // same in the indexer so queries can match the canonical form.

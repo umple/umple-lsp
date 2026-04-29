@@ -1,0 +1,27 @@
+debug;
+
+statemachine OnOffSwitch {
+  On {
+    push -> Off;
+  }
+  Off {
+    push -> On;
+  }
+}
+
+class Lightbulb {
+  fixture as OnOffSwitch {
+    On {
+      * push -> On;
+    }
+  }
+}
+
+class StandaloneNoEvent {
+  sm {
+    S1 {}
+    S2 {}
+    S1 -> S2;
+    S2 -> S1;
+  }
+}

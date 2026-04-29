@@ -85,7 +85,7 @@
 ; All trace entity forms use the same completion scope
 (trace_statement (trace_entity) @scope.trace_attribute_method)
 (trace_statement (trace_entity_call) @scope.trace_attribute_method)
-(trace_postfix "record" . (identifier) @scope.trace_attribute_method)
+(trace_record_target) @scope.trace_attribute_method
 
 ; referenced_statemachine definition — offer statemachine names from enclosing
 ; class plus top-level standalone statemachines (topic 055).

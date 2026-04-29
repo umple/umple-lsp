@@ -1,0 +1,16 @@
+glossary {
+  entity : entities;
+}
+
+distributable RMI forced;
+distributable WS on;
+distributable 1 on;
+
+class Service {
+  distributable RMI;
+}
+
+interface RemoteService {
+  distributable WS;
+  position 10 20 30 40;
+}

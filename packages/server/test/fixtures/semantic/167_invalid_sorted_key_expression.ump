@@ -1,0 +1,6 @@
+class Course {}
+
+class Registration {
+  String name;
+  * sorted {getStudent().name} -- 1 Course;
+}

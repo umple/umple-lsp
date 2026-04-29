@@ -41,6 +41,8 @@ module.exports = grammar({
     [$.active_method, $.attribute_declaration, $.method_declaration, $.emit_method],
     [$.active_method, $.more_code],
     [$.event_spec, $.entry_exit_action],
+    [$.test_case, $.event_spec],
+    [$.state_to_state_transition, $.event_spec],
     [$.req_user_step],
     [$.req_system_response],
   ],
@@ -52,8 +54,10 @@ module.exports = grammar({
       choice(
         $.namespace_declaration,
         $.use_statement,
+        $.debug_directive,
         $.generate_statement,
         $.filter_definition,
+        $.glossary_definition,
         $.class_definition,
         $.interface_definition,
         $.trait_definition,
@@ -103,6 +107,8 @@ module.exports = grammar({
       ),
 
     use_path: ($) => choice(/[a-zA-Z0-9_.\/:\-][a-zA-Z0-9_.\/:\-]*/, $.string_literal),
+
+    debug_directive: (_$) => seq("debug", ";"),
 
     generate_statement: ($) =>
       seq(
@@ -172,9 +178,31 @@ module.exports = grammar({
     suboption_directive: ($) =>
       prec.right(seq("suboption", $.string_literal, optional(";"))),
 
-    // Distributable directive: distributable [N] (forced|on|off);
+    // Top-level distributable directive:
+    //   distributable [RMI|WS]? [0|1|2|3]? [on|off|forced]? ;
     distributable_directive: ($) =>
-      seq("distributable", optional($.integer_literal), choice("forced", "on", "off"), ";"),
+      seq(
+        "distributable",
+        optional($.distributable_technology),
+        optional($.integer_literal),
+        optional(choice("forced", "on", "off")),
+        ";",
+      ),
+
+    // Class/interface-local distributable marker:
+    //   distributable [RMI|WS]? ;
+    distributable_declaration: ($) =>
+      prec(1, seq("distributable", optional($.distributable_technology), ";")),
+
+    distributable_technology: (_$) => choice("RMI", "WS"),
+
+    // Glossary directive: glossary { entity : entities; }
+    // Parse-only; glossary words are not indexed as symbols.
+    glossary_definition: ($) =>
+      seq("glossary", "{", repeat($.glossary_word), "}"),
+
+    glossary_word: ($) =>
+      seq(field("singular", $.identifier), ":", field("plural", $.identifier), ";"),
 
     // Strictness directive: grammar-only, no semantic handling.
     // Official forms: strictness (modelOnly|noExtraCode|none | allow|ignore|expect|disallow INT | disable EXPR) ;
@@ -234,6 +262,10 @@ module.exports = grammar({
         $.isa_declaration,
         $.depend_statement,
         $.singleton,
+        $.strictness_directive,
+        $.distributable_declaration,
+        $.inner_static_class_definition,
+        $.inner_class_definition,
         $.attribute_declaration,
         $.enumerated_attribute,
         $.constraint,
@@ -269,6 +301,15 @@ module.exports = grammar({
         ";", // bare semicolons are valid in class/mixset bodies
       ),
 
+    inner_class_definition: ($) =>
+      seq(
+        "inner",
+        $.class_definition,
+      ),
+
+    inner_static_class_definition: ($) =>
+      prec(1, seq("static", $.class_definition)),
+
     // Invariants: unnamed [expr]; and named [name: expr];
     // constraint_name consumes "identifier:" as a unit, so ":" is unambiguous
     // and the body _constraint_expr regex need not match it.
@@ -302,17 +343,31 @@ module.exports = grammar({
         "interface",
         field("name", choice($.identifier, alias("state", $.identifier))),
         "{",
-        repeat(
-          choice(
-            $.isa_declaration,
-            $.depend_statement,
-            $.method_signature,
-            $.const_declaration,
-            $._java_static_final_field,
-          ),
-        ),
+        repeat($._interface_content),
         "}",
       ),
+
+    _interface_content: ($) =>
+      choice(
+        $.isa_declaration,
+        $.depend_statement,
+        $.method_signature,
+        $.const_declaration,
+        $._java_static_final_field,
+        $.position_directive,
+        $.display_color,
+        $.distributable_declaration,
+        $.interface_test,
+        $.interface_extra_statement,
+        $.req_implementation,
+        ";",
+      ),
+
+    interface_test: ($) =>
+      seq("test", field("name", $.identifier), ";"),
+
+    interface_extra_statement: ($) =>
+      seq($.identifier, ";"),
 
     // =====================
     // TRAIT DEFINITION
@@ -597,16 +652,22 @@ module.exports = grammar({
     //   tracecase name { trace entity [()]? postfix* ; ... }
     //   activate name (onAllObjects|onThisThreadOnly)? ;
     //   deactivate name onThisObject ;
-    // Postfix: where/until/after/giving [condition], record entity
-    // Deferred: execute { code }, logLevel/for/period/during
+    // Postfix: where/until/after/giving [condition], record entity,
+    // period/during durations, execute blocks, and log-level controls.
     // Trace entities — named to distinguish bare (state/attr/assoc) from call (method)
-    trace_entity: ($) => $.identifier,
+    trace_entity: ($) => choice($.trace_wildcard, $.trace_qualified_name, $.identifier),
     trace_entity_call: ($) => seq($.identifier, "(", ")"),
+    trace_wildcard: ($) => token(seq("*", /[a-zA-Z_][a-zA-Z0-9_]*/)),
+    trace_qualified_name: ($) =>
+      seq(
+        $.identifier,
+        repeat1(seq(token.immediate("."), alias(token.immediate(/[a-zA-Z_][a-zA-Z0-9_]*/), $.identifier))),
+      ),
     _trace_entity: ($) => choice($.trace_entity_call, $.trace_entity),
 
-    // Trace prefix option: set, get, in, out, entry, exit, cardinality, add, remove
+    // Trace prefix option: set, get, in, out, entry, exit, cardinality, add, remove, etc.
     _trace_prefix: ($) =>
-      choice("set", "get", "in", "out", "entry", "exit", "cardinality", "add", "remove"),
+      choice("set", "get", "onlyGet", "onlySet", "in", "out", "entry", "exit", "cardinality", "add", "remove", "transition"),
 
     trace_statement: ($) =>
       choice(
@@ -655,21 +716,30 @@ module.exports = grammar({
           optional(choice("onAllObjects", "onThisThreadOnly")),
           ";",
         ),
-        seq("deactivate", $.identifier, "onThisObject", ";"),
+        seq("deactivate", $.identifier, "onThisObject", optional(seq("for", choice($.integer_literal, $.trace_duration))), ";"),
       ),
 
     trace_postfix: ($) =>
       choice(
         seq(choice("where", "until", "after", "giving"), choice($.guard, $.trace_condition)),
         seq("execute", $.code_block),
-        seq("record", choice($.identifier, $.string_literal)),
-        seq("logLevel", choice(
-          "trace", "debug", "info", "warn", "error", "fatal",
-          "all", "finest", "fine", "config", "warning", "severe",
-        )),
+        seq("record", $.trace_record_target, repeat(seq(",", $.trace_record_target))),
+        seq("logLevel", $._trace_log_level, repeat(seq(",", $._trace_log_level))),
         seq("for", $.integer_literal),
+        seq(choice("period", "during"), $.trace_duration),
         seq("level", $.integer_literal),
       ),
+
+    trace_record_target: ($) =>
+      choice(seq("only", $.identifier), $.identifier, $.string_literal),
+
+    _trace_log_level: (_$) =>
+      choice(
+        "trace", "debug", "info", "warn", "error", "fatal",
+        "all", "finest", "finer", "fine", "config", "warning", "severe",
+      ),
+
+    trace_duration: (_$) => /[0-9]+[a-zA-Z]+/,
 
     trace_condition: (_$) => token(prec(-1, /[^;{}]+/)),
 
@@ -718,6 +788,7 @@ module.exports = grammar({
           choice(
             $.state,
             $.standalone_transition,
+            $.state_to_state_transition,
             $.mixset_definition,
             $.req_implementation,
           ),
@@ -737,7 +808,7 @@ module.exports = grammar({
           seq(
             "{",
             repeat(
-              choice($.state, $.standalone_transition, $.entry_exit_action),
+              choice($.state, $.standalone_transition, $.state_to_state_transition, $.entry_exit_action),
             ),
             "}",
           ),
@@ -880,7 +951,8 @@ module.exports = grammar({
       ),
 
     // Header for standalone transitions (SM body level).
-    // Guard-only standalone ([x>0] Open -> Closed) is W1006 — event is always required.
+    // Guard-only standalone ([x>0] Open -> Closed) is W1006, but state-to-state
+    // transitions without an event are valid: S1 -> S2;
     _standalone_transition_header: ($) =>
       choice(
         seq(field("event", $.event_spec), optional($.guard)), // e [g]?
@@ -890,6 +962,16 @@ module.exports = grammar({
     standalone_transition: ($) =>
       seq(
         $._standalone_transition_header,
+        field("from_state", $.identifier),
+        optional($.action_code),
+        "->",
+        optional($.action_code),
+        field("to_state", $.identifier),
+        ";",
+      ),
+
+    state_to_state_transition: ($) =>
+      seq(
         field("from_state", $.identifier),
         optional($.action_code),
         "->",
@@ -958,6 +1040,7 @@ module.exports = grammar({
         "const",
         "autounique",
         "ivar",
+        "fixml",
       ),
 
     // =====================
@@ -1027,12 +1110,13 @@ module.exports = grammar({
         optional("queued"),
         optional("pooled"),
         optional(field("type", $.type_name)),
-        field("name", $.identifier),
+        field("name", choice($.identifier, alias("test", $.identifier))),
         "{",
         repeat(
           choice(
             $.state,
             $.standalone_transition,
+            $.state_to_state_transition,
             $.mixset_definition,
             $.trace_statement,
             $.req_implementation,
@@ -1077,16 +1161,29 @@ module.exports = grammar({
       )),
 
     transition: ($) =>
-      seq(
-        optional(choice("+", "-")), // optional add/remove prefix
-        optional($._transition_header),
-        choice(
-          seq($.action_code, "->"), // pre-arrow only:  e [g] / { code } -> T;
-          seq("->", $.action_code), // post-arrow only: e [g] -> / { code } T;
-          "->",                     // no action:       e [g] -> T;
+      choice(
+        seq(
+          "*", // change marker requires an event/guard header; avoids `* ->` association ambiguity.
+          $._transition_header,
+          choice(
+            seq($.action_code, "->"),
+            seq("->", $.action_code),
+            "->",
+          ),
+          field("target", $.qualified_name),
+          ";",
         ),
-        field("target", $.qualified_name),
-        ";",
+        seq(
+          optional(choice("+", "-")), // optional add/remove prefix
+          optional($._transition_header),
+          choice(
+            seq($.action_code, "->"), // pre-arrow only:  e [g] / { code } -> T;
+            seq("->", $.action_code), // post-arrow only: e [g] -> / { code } T;
+            "->",                     // no action:       e [g] -> T;
+          ),
+          field("target", $.qualified_name),
+          ";",
+        ),
       ),
 
     event_spec: ($) =>
@@ -1100,6 +1197,7 @@ module.exports = grammar({
             alias("deactivate", $.identifier),
             alias("entry", $.identifier),
             alias("exit", $.identifier),
+            alias("test", $.identifier),
           ),
           optional(seq("(", optional($.param_list), ")")),
         ),
@@ -1165,7 +1263,7 @@ module.exports = grammar({
         optional($._java_method_modifiers),
         optional(field("return_type", $.type_name)),
         optional(seq("[", "]")),  // array return type: Thread[]
-        field("name", $.identifier),
+        field("name", choice($.identifier, alias("test", $.identifier))),
         "(",
         optional($.param_list),
         ")",
@@ -1189,7 +1287,7 @@ module.exports = grammar({
         optional(choice("public", "protected")),
         "abstract",
         optional(field("return_type", $.type_name)),
-        field("name", $.identifier),
+        field("name", choice($.identifier, alias("test", $.identifier))),
         "(",
         optional($.param_list),
         ")",
@@ -1221,7 +1319,7 @@ module.exports = grammar({
         // Branch 1: implicit abstract — return type required
         seq(
           field("return_type", $.type_name),
-          field("name", $.identifier),
+          field("name", choice($.identifier, alias("test", $.identifier))),
           "(",
           optional($.param_list),
           ")",
@@ -1232,7 +1330,7 @@ module.exports = grammar({
           optional(choice("public", "protected")),
           "abstract",
           optional(field("return_type", $.type_name)),
-          field("name", $.identifier),
+          field("name", choice($.identifier, alias("test", $.identifier))),
           "(",
           optional($.param_list),
           ")",
@@ -1315,12 +1413,15 @@ module.exports = grammar({
         "(",
         optional(
           seq(
-            field("template_name", $.identifier),
-            repeat(seq(",", field("template_name", $.identifier))),
+            $.template_reference,
+            repeat(seq(",", $.template_reference)),
           ),
         ),
         ")",
       ),
+
+    template_reference: ($) =>
+      seq(optional(seq(field("template_owner", $.identifier), ".")), field("template_name", $.identifier)),
 
     // =====================
     // TOP-LEVEL CODE INJECTION (aspect-oriented)

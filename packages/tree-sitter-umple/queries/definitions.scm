@@ -37,6 +37,7 @@
 
 (attribute_declaration name: (identifier) @definition.attribute)
 (enumerated_attribute name: (identifier) @definition.attribute)
+(port_declaration name: (identifier) @definition.port)
 (const_declaration name: (identifier) @definition.const)
 (method_declaration name: (identifier) @definition.method)
 (abstract_method_declaration name: (identifier) @definition.method)

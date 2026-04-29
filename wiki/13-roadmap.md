@@ -11,29 +11,13 @@ A snapshot of what's shipping, what's known to be gappy, and where future studen
 
 ## Known grammar gaps
 
-These are real Umple constructs the grammar doesn't yet parse cleanly. Each one needs a grammar.js rule + corresponding query updates + tests.
+These must be compiler-verified before the tree-sitter grammar is widened. The old short list here was rechecked against a current local Umple compiler and should not be treated as confirmed parser work:
 
-### `inner class` keyword
-
-`451_ReqInnerClass.ump` from the compiler test corpus uses `inner class Name { ... }` to declare a true inner class (semantically distinct from the bare `class Name { ... }` inside another class, which means `isA`). Parser currently fails on the `inner` keyword. Fix: add to `_class_content` choice.
-
-Tracked in topic 038 / archive — was deferred when phase A–D landed.
-
-### Sorted association keys with method calls
-
-We support `sorted {attrName}` but not `sorted {method().attr}` chains. Compiler accepts the latter; parser would need a deeper `sort_key` expression rule.
-
-### Mixset --redefine semantics
-
-We parse `mixset name --redefine` but don't verify it actually points at an existing mixset. Compiler does. Could be a diagnostic (use compiler diagnostics) or a semantic check at indexing time.
-
-### Trait SM operations in cascading shape
-
-`isA T<-sm.s1.e1()[guard].s2>` chains parse but rename / refs across the chain segments has rough edges. See `referenceSearch.ts` post-filter logic — it works for known shapes but new compiler-grammar additions to trait_sm_operation could break it.
-
-### Multi-language extra code
-
-`extracode lang { ... }` syntax for per-target-language helper code. Currently parsed leniently as opaque content; could be more structured for hover / outline.
+- Sorted association keys stay intentionally narrow: `sorted {attrName}` is valid and supported; `sorted {method().attr}`, `sorted {method()}`, and `sorted {method(arg)}` currently fall back to compiler W1006/W1007 extra-code handling, so the parser should not silently model them as associations.
+- Trait SM operation support covers the compiler-shaped include/exclude forms already under test. A trailing state path after a guarded event, such as `isA T<-sm.s1.e1()[guard].s2>`, is rejected by the compiler and should not be added to the grammar without upstream compiler evidence.
+- `--redefine` is a namespace option in the current Umple grammar, not a mixset option. Do not add `mixset name --redefine` parsing unless the compiler grammar changes.
+- Top-level/multi-language extra code is already covered by `top Name [Lang] { ... }` and normal `codeLangs`/`moreCode` parsing. There is no current `extracode` keyword syntax to model.
+- Full-corpus parse errors that still end with compiler `Success!` are not automatically grammar gaps. Several current examples are malformed-state-machine tests, invalid identifier tests, missing semicolon/no-line-ending edge cases, and extra-code fallback cases. Keep those as parser errors unless the official grammar or a clean corpus example proves a real language construct.
 
 ## Known LSP gaps
 
@@ -60,7 +44,9 @@ The known array-fallback completion leaks have all been closed:
 - Workspace-wide rename safety — topic 066 (`textDocument/rename` synchronously indexes workspace roots for explicit rename requests, then searches every indexed `.ump` file instead of only the import graph)
 - Find-implementations beyond traits — topic 067 (`textDocument/implementation` now returns class subclasses and interface extensions/implementers in addition to the existing trait implementers)
 - LSP inlay hints — topic 068 (`textDocument/inlayHint` shows editor-only inferred types for compiler-verified untyped attributes; association/default multiplicity and trait-template hints are intentionally deferred)
-- Active/test method symbol polish — active methods and Umple `test` blocks are indexed as method symbols, and `testSequence` steps resolve/hover to the matching test methods in class scope. Port connector endpoints are still highlighting-only until component-port resolution is modeled.
+- Active/test/port symbol polish — active methods and Umple `test` blocks are indexed as method symbols, `testSequence` steps resolve/hover to the matching test methods in class scope, and port declarations are indexed as class-scoped `port` symbols. Bare same-class connector endpoints resolve to those ports; one-hop dotted component endpoints such as `cmp1.pOut1` resolve through the component attribute's declared type.
+- Inner class parser support — `inner class Name { ... }` inside a class body parses as a true nested class declaration, stays visible in document symbols, and no longer breaks nearby `implementsReq` parsing.
+- Corpus grammar triage — compiler-verified grammar support now covers glossary blocks, distributable variants, interface `position` / `test` / extra-code lines, trace `period` / `during` durations, trace wildcards and `onlyGet` / `transition` prefixes, comma-separated `record` and `logLevel` payloads, timed `deactivate`, dotted trace state targets, `fixml` attributes, `test` as a method or state-machine event name, static inner classes, class-local `strictness`, qualified emit template references, top-level `debug;`, `*` transition change markers, and state-to-state standalone transitions (`S1 -> S2;`). Current local corpus report: `1965 / 2092` parse-clean files.
 
 ### How to add new completion slots
 

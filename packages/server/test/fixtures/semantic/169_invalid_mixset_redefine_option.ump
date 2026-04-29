@@ -1,0 +1,3 @@
+mixset M --redefine {
+  class C {}
+}

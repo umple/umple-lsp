@@ -23,6 +23,7 @@ const CORE_WORKSPACE_SYMBOL_KINDS: ReadonlySet<UmpleSymbolKind> = new Set([
 
 const QUERY_ONLY_WORKSPACE_SYMBOL_KINDS: ReadonlySet<UmpleSymbolKind> = new Set([
   "attribute",
+  "port",
   "const",
   "enum_value",
 ]);

@@ -1,0 +1,11 @@
+// Compiler corpus 451_ReqInnerClass.ump: implementsReq before inner class.
+class Outer {
+  implementsReq /*@impl_a*/A;
+  inner class /*@inner_class*/Inner {
+    name;
+  }
+}
+
+req /*@req_a*/A text {
+  The outer class must have an inner class.
+}

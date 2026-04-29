@@ -1,7 +1,7 @@
 class Component1 {
-  public in Integer pIn1;
-  public out Integer pOut1;
-  pIn1 -> pOut1;
+  public in Integer /*@port_in1*/pIn1;
+  public out Integer /*@port_out1*/pOut1;
+  /*@port_in1_ref*/pIn1 -> /*@port_out1_ref*/pOut1;
 
   [pIn1]
   active /*@active_increment*/increment {
@@ -15,9 +15,9 @@ class Component1 {
 }
 
 class Component2 {
-  public in Integer pIn2;
-  public out Integer pOut2;
-  pIn2 -> pOut2;
+  public in Integer /*@port_in2*/pIn2;
+  public out Integer /*@port_out2*/pOut2;
+  /*@port_in2_ref*/pIn2 -> /*@port_out2_ref*/pOut2;
 
   [pIn2, pIn2 < 10]
   active stop {
@@ -26,15 +26,15 @@ class Component2 {
 }
 
 class Composite {
-  Component1 cmp1;
-  Component2 cmp2;
-  cmp1.pOut1 -> cmp2.pIn2;
-  cmp2.pOut2 -> cmp1.pIn1;
+  Component1 /*@component_cmp1*/cmp1;
+  Component2 /*@component_cmp2*/cmp2;
+  /*@cmp1_ref*/cmp1./*@cmp1_pout1_ref*/pOut1 -> /*@cmp2_ref*/cmp2./*@cmp2_pin2_ref*/pIn2;
+  /*@cmp2_ref_2*/cmp2./*@cmp2_pout2_ref*/pOut2 -> /*@cmp1_ref_2*/cmp1./*@cmp1_pin1_ref*/pIn1;
 }
 
 class Sensor {
-  public out int speed;
-  this.data -> client.sensorData { return new SensorData(); }
+  public out int /*@port_speed*/speed;
+  this./*@sensor_data_ref*/data -> client./*@client_sensor_data_ref*/sensorData { return new SensorData(); }
 
   [sensorData]
   void active /*@active_init*/init() {

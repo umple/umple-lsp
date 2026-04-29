@@ -82,7 +82,7 @@ const CLASS_BODY_KEYWORDS: string[] = [
   // Trace
   "trace", "tracecase",
   // Nested definitions
-  "class", "enum", "mixset",
+  "inner", "class", "enum", "mixset",
   // Class-level declarations
   "abstract", "singleton",
   // Attribute modifiers
@@ -269,6 +269,8 @@ export function symbolKindToCompletionKind(kind: SymbolKind): CompletionItemKind
       return CompletionItemKind.Enum;
     case "attribute":
       return CompletionItemKind.Field;
+    case "port":
+      return CompletionItemKind.Property;
     case "const":
       return CompletionItemKind.Constant;
     case "method":

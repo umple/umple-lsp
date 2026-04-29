@@ -13,6 +13,7 @@ export type SymbolKind =
   | "enum_value"
   | "const"
   | "attribute"
+  | "port"
   | "state"
   | "statemachine"
   | "method"
@@ -33,6 +34,7 @@ export const SYMBOL_KINDS_LONGEST_FIRST: SymbolKind[] = (
     "enum_value",
     "const",
     "attribute",
+    "port",
     "state",
     "statemachine",
     "method",
@@ -54,6 +56,7 @@ export type LookupContext =
   | { type: "toplevel_injection"; targetClass: string }
   | { type: "default_value_qualifier" }
   | { type: "sorted_key"; ownerClass: string }
+  | { type: "component_port"; componentName: string }
   | { type: "trait_sm_op"; traitName: string; pathSegments: string[]; segmentIndex: number; isEventSegment: boolean; eventParams?: string[] };
 
 /** Post-lookup disambiguation for dotted state references in transitions. */

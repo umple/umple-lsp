@@ -1,0 +1,9 @@
+class Student {
+  fixml Integer id;
+  fixml capacity = "31";
+}
+
+class X {
+  test() {
+  }
+}

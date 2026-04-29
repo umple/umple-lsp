@@ -82,9 +82,12 @@ Debounced (500ms default). Re-runs when any file in a chain changes (forward + r
 
 Active methods and Umple `test` blocks are represented as `method` symbols.
 `testSequence` step identifiers are method references, so go-to-definition and
-hover reuse the normal scoped method resolver. Port connector endpoints are not
-symbol references yet; they currently stay in the highlighting layer until the
-server has enough model information to resolve component ports correctly.
+hover reuse the normal scoped method resolver. Port declarations are
+class-scoped `port` symbols, so document/workspace symbols, hover,
+go-to-definition, and find-references work on declaration names, bare same-class
+connector endpoints such as `pIn -> pOut`, and one-hop component endpoints such
+as `cmp1.pOut1` when `cmp1` is a typed attribute. The resolver intentionally
+does not guess for unresolved components or deeper component chains.
 
 ### Completion
 

@@ -1,0 +1,13 @@
+class TestEventTransition {
+  Boolean ready;
+
+  sm {
+    s1 {
+      test[ready] -> s2;
+      test -> s2;
+    }
+    s2 {
+      test -> s1;
+    }
+  }
+}

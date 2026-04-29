@@ -15,6 +15,8 @@ export function umpleKindToLspSymbolKind(kind: UmpleSymbolKind): SymbolKind {
       return SymbolKind.EnumMember;
     case "attribute":
       return SymbolKind.Field;
+    case "port":
+      return SymbolKind.Property;
     case "const":
       return SymbolKind.Constant;
     case "method":

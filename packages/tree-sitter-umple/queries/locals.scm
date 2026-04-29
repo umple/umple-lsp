@@ -96,6 +96,9 @@
 (template_attribute
   name: (identifier) @local.definition.field)
 
+(port_declaration
+  name: (identifier) @local.definition.field)
+
 ; =============
 ; REFERENCES
 ; =============
@@ -143,3 +146,9 @@
 ; Referenced statemachine references a statemachine definition
 (referenced_statemachine
   definition: (identifier) @local.reference)
+
+; Port connector endpoints are semantic references. The LSP resolver decides
+; whether each segment is a class-local port, a component attribute, or a port
+; on the component's declared type.
+(port_connector
+  (qualified_name (identifier) @local.reference))

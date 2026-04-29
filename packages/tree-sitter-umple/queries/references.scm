@@ -50,6 +50,7 @@
 (state name: (qualified_name (identifier) @reference.state .))
 (association_definition name: (identifier) @reference.association)
 (attribute_declaration name: (identifier) @reference.attribute)
+(port_declaration name: (identifier) @reference.port)
 (const_declaration name: (identifier) @reference.const)
 (method_declaration name: (identifier) @reference.method)
 (method_signature name: (identifier) @reference.method)
@@ -63,6 +64,15 @@
 ; Attribute types, method return types, parameters — can be any named type
 
 (type_name (qualified_name (identifier) @reference.class_interface_trait_enum))
+
+; =====================
+; PORT CONNECTOR REFERENCES
+; =====================
+; Bare endpoints resolve to class-local ports. Dotted component endpoints are
+; split by tokenAnalysis.ts: the component segment is an attribute reference and
+; the port segment resolves against the component's declared type.
+(port_connector
+  (qualified_name (identifier) @reference.attribute_port))
 
 ; =====================
 ; ATTRIBUTE/CONST DEFAULT VALUE REFERENCES
@@ -180,7 +190,7 @@
 (trace_statement "," (trace_entity (identifier) @reference.attribute_method))
 (trace_statement "," (trace_entity_call (identifier) @reference.method))
 ; "record x" in trace postfix — additional entity reference
-(trace_postfix "record" . (identifier) @reference.attribute_method)
+(trace_record_target (identifier) @reference.attribute_method)
 ; tracecase definition name and activate/deactivate references
 (trace_statement name: (identifier) @reference.tracecase)
 (trace_statement "activate" . (identifier) @reference.tracecase)
@@ -191,7 +201,7 @@
 ; =====================
 (emit_method name: (identifier) @reference.method)
 (template_attribute name: (identifier) @reference.template)
-(template_list template_name: (identifier) @reference.template)
+(template_reference template_name: (identifier) @reference.template)
 
 ; =====================
 ; FILTER VALUE CLASS REFERENCES

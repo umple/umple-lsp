@@ -890,6 +890,155 @@ const TEST_CASES: TestCase[] = [
     ],
   },
 
+  // 166: Corpus gap — true inner classes use `inner class Name { ... }`.
+  {
+    name: "166 corpus: inner class declarations parse clean",
+    fixtures: ["166_corpus_inner_class.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "166_corpus_inner_class.ump" },
+      { type: "symbol_count", fixture: "166_corpus_inner_class.ump", name: "Outer", kind: "class", expect: 1 },
+      { type: "symbol_count", fixture: "166_corpus_inner_class.ump", name: "Inner", kind: "class", expect: 1 },
+      {
+        type: "goto_def_exact",
+        at: "impl_a",
+        expect: ["req_a"],
+      },
+      {
+        type: "document_symbols",
+        fixture: "166_corpus_inner_class.ump",
+        expectRoots: ["A", "Outer"],
+        expectChild: { parent: "Outer", child: "Inner" },
+      },
+    ],
+  },
+
+  // 167-169: Compiler-verified non-gaps — keep the grammar conservative for
+  // shapes that current Umple treats as invalid or extra-code fallback.
+  {
+    name: "167 invalid: sorted key expressions remain unmodeled",
+    fixtures: ["167_invalid_sorted_key_expression.ump"],
+    assertions: [
+      { type: "parse_has_error", fixture: "167_invalid_sorted_key_expression.ump" },
+    ],
+  },
+  {
+    name: "168 invalid: trait SM guarded cascades remain unmodeled",
+    fixtures: ["168_invalid_trait_sm_guard_cascade.ump"],
+    assertions: [
+      { type: "parse_has_error", fixture: "168_invalid_trait_sm_guard_cascade.ump" },
+    ],
+  },
+  {
+    name: "169 invalid: mixset --redefine is not a mixset grammar option",
+    fixtures: ["169_invalid_mixset_redefine_option.ump"],
+    assertions: [
+      { type: "parse_has_error", fixture: "169_invalid_mixset_redefine_option.ump" },
+    ],
+  },
+
+  // 170: Corpus gaps — compiler-accepted glossary, distributable variants,
+  // and interface layout metadata parse without indexing extra symbols.
+  {
+    name: "170 corpus: glossary, distributable variants, and interface position parse clean",
+    fixtures: ["170_corpus_directives_distributable_glossary.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "170_corpus_directives_distributable_glossary.ump" },
+      { type: "symbol_count", fixture: "170_corpus_directives_distributable_glossary.ump", name: "Service", kind: "class", expect: 1 },
+      { type: "symbol_count", fixture: "170_corpus_directives_distributable_glossary.ump", name: "RemoteService", kind: "interface", expect: 1 },
+      { type: "symbol_count", fixture: "170_corpus_directives_distributable_glossary.ump", name: "entity", kind: "class", expect: 0 },
+    ],
+  },
+
+  // 171: Corpus gap — trace period values use unit-suffixed durations.
+  {
+    name: "171 corpus: trace period postfix durations parse clean",
+    fixtures: ["171_corpus_trace_period.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "171_corpus_trace_period.ump" },
+      { type: "symbol_count", fixture: "171_corpus_trace_period.ump", name: "TracePeriod", kind: "class", expect: 1 },
+      { type: "goto_def_exact", at: "trace_name_ref", expect: ["trace_name_def"] },
+    ],
+  },
+
+  // 172: Corpus gaps — static inner classes, class-local strictness, and
+  // interface test/extra-code lines parse clean without extra symbols.
+  {
+    name: "172 corpus: static inner class, strictness in class, and interface test parse clean",
+    fixtures: ["172_corpus_static_inner_strictness_interface_test.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "172_corpus_static_inner_strictness_interface_test.ump" },
+      { type: "symbol_count", fixture: "172_corpus_static_inner_strictness_interface_test.ump", name: "OuterClass", kind: "class", expect: 1 },
+      { type: "symbol_count", fixture: "172_corpus_static_inner_strictness_interface_test.ump", name: "InnerStaticClass", kind: "class", expect: 1 },
+      { type: "symbol_count", fixture: "172_corpus_static_inner_strictness_interface_test.ump", name: "StrictnessClassNoDelete", kind: "class", expect: 1 },
+      { type: "symbol_count", fixture: "172_corpus_static_inner_strictness_interface_test.ump", name: "RegisterCapable", kind: "interface", expect: 1 },
+      { type: "symbol_count", fixture: "172_corpus_static_inner_strictness_interface_test.ump", name: "id", kind: "attribute", expect: 0 },
+      { type: "symbol_count", fixture: "172_corpus_static_inner_strictness_interface_test.ump", name: "checkCourseRegistration", kind: "method", expect: 0 },
+    ],
+  },
+
+  // 173: Corpus gaps — fixml attribute modifier and method named `test`.
+  {
+    name: "173 corpus: fixml attributes and test-named method parse clean",
+    fixtures: ["173_corpus_fixml_test_method.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "173_corpus_fixml_test_method.ump" },
+      { type: "symbol_count", fixture: "173_corpus_fixml_test_method.ump", name: "Student", kind: "class", expect: 1 },
+      { type: "symbol_count", fixture: "173_corpus_fixml_test_method.ump", name: "id", kind: "attribute", expect: 1 },
+      { type: "symbol_count", fixture: "173_corpus_fixml_test_method.ump", name: "capacity", kind: "attribute", expect: 1 },
+      { type: "symbol_count", fixture: "173_corpus_fixml_test_method.ump", name: "test", kind: "method", expect: 1 },
+    ],
+  },
+
+  // 174: Corpus gap — emit template lists can reference ClassName.templateName.
+  {
+    name: "174 corpus: qualified emit template references parse clean",
+    fixtures: ["174_corpus_qualified_template_refs.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "174_corpus_qualified_template_refs.ump" },
+      { type: "symbol_count", fixture: "174_corpus_qualified_template_refs.ump", name: "copyright", kind: "template", expect: 1 },
+      { type: "symbol_count", fixture: "174_corpus_qualified_template_refs.ump", name: "test1", kind: "template", expect: 1 },
+      { type: "symbol_count", fixture: "174_corpus_qualified_template_refs.ump", name: "end", kind: "template", expect: 1 },
+      { type: "symbol_count", fixture: "174_corpus_qualified_template_refs.ump", name: "generate1", kind: "method", expect: 1 },
+    ],
+  },
+
+  // 175: Corpus gap — `test` can be a state-machine event name even though it
+  // is also a keyword for test-case declarations in other contexts.
+  {
+    name: "175 corpus: test-named state-machine events parse clean",
+    fixtures: ["175_corpus_test_event_transition.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "175_corpus_test_event_transition.ump" },
+      { type: "symbol_count", fixture: "175_corpus_test_event_transition.ump", name: "TestEventTransition", kind: "class", expect: 1 },
+      { type: "symbol_count", fixture: "175_corpus_test_event_transition.ump", name: "test", kind: "method", expect: 0 },
+    ],
+  },
+
+  // 176: Corpus trace variants — wildcard targets, onlyGet/transition prefixes,
+  // comma-separated record/logLevel payloads, dotted states, and timed deactivate.
+  {
+    name: "176 corpus: trace variants parse clean",
+    fixtures: ["176_corpus_trace_variants.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "176_corpus_trace_variants.ump" },
+      { type: "symbol_count", fixture: "176_corpus_trace_variants.ump", name: "TraceVariants", kind: "class", expect: 1 },
+      { type: "symbol_count", fixture: "176_corpus_trace_variants.ump", name: "tc1", kind: "method", expect: 0 },
+    ],
+  },
+
+  // 177: Corpus transition variants — top-level debug directive, transition
+  // change marker `*`, and standalone state-to-state transitions without events.
+  {
+    name: "177 corpus: transition change markers and debug directive parse clean",
+    fixtures: ["177_corpus_transition_change_debug.ump"],
+    assertions: [
+      { type: "parse_clean", fixture: "177_corpus_transition_change_debug.ump" },
+      { type: "symbol_count", fixture: "177_corpus_transition_change_debug.ump", name: "OnOffSwitch", kind: "statemachine", expect: 1 },
+      { type: "symbol_count", fixture: "177_corpus_transition_change_debug.ump", name: "Lightbulb", kind: "class", expect: 1 },
+      { type: "symbol_count", fixture: "177_corpus_transition_change_debug.ump", name: "StandaloneNoEvent", kind: "class", expect: 1 },
+    ],
+  },
+
   {
     name: "152 inlay hints: conservative inferred attribute types",
     fixtures: ["152_inlay_hints.ump"],
@@ -2199,7 +2348,7 @@ const TEST_CASES: TestCase[] = [
         type: "parse_clean",
         fixture: "38_ports_reactive.ump",
       },
-      // Classes and active methods are indexed; port/connector/watchlist internals are not.
+      // Classes, active methods, and class-local port declarations are indexed.
       {
         type: "symbol_count",
         fixture: "38_ports_reactive.ump",
@@ -2234,6 +2383,170 @@ const TEST_CASES: TestCase[] = [
         name: "init",
         kind: "method",
         expect: 1,
+      },
+      {
+        type: "symbol_count",
+        fixture: "38_ports_reactive.ump",
+        name: "pIn1",
+        kind: "port",
+        expect: 1,
+      },
+      {
+        type: "symbol_count",
+        fixture: "38_ports_reactive.ump",
+        name: "pOut1",
+        kind: "port",
+        expect: 1,
+      },
+      {
+        type: "symbol_count",
+        fixture: "38_ports_reactive.ump",
+        name: "speed",
+        kind: "port",
+        expect: 1,
+      },
+      {
+        type: "symbol_count",
+        fixture: "38_ports_reactive.ump",
+        name: "pIn2",
+        kind: "port",
+        expect: 1,
+      },
+      {
+        type: "symbol_count",
+        fixture: "38_ports_reactive.ump",
+        name: "pOut2",
+        kind: "port",
+        expect: 1,
+      },
+      {
+        type: "goto_def_exact",
+        at: "port_in1_ref",
+        expect: ["port_in1"],
+      },
+      {
+        type: "goto_def_exact",
+        at: "port_out1_ref",
+        expect: ["port_out1"],
+      },
+      {
+        type: "goto_def_exact",
+        at: "cmp1_ref",
+        expect: ["component_cmp1"],
+      },
+      {
+        type: "goto_def_exact",
+        at: "cmp2_ref",
+        expect: ["component_cmp2"],
+      },
+      {
+        type: "goto_def_exact",
+        at: "cmp1_pout1_ref",
+        expect: ["port_out1"],
+      },
+      {
+        type: "goto_def_exact",
+        at: "cmp2_pin2_ref",
+        expect: ["port_in2"],
+      },
+      {
+        type: "goto_def_exact",
+        at: "cmp2_pout2_ref",
+        expect: ["port_out2"],
+      },
+      {
+        type: "goto_def_exact",
+        at: "cmp1_pin1_ref",
+        expect: ["port_in1"],
+      },
+      {
+        type: "goto_def_empty",
+        at: "sensor_data_ref",
+      },
+      {
+        type: "goto_def_empty",
+        at: "client_sensor_data_ref",
+      },
+      {
+        type: "refs",
+        decl: { name: "pIn1", kind: "port", container: "Component1" },
+        expectAt: ["port_in1", "port_in1_ref", "cmp1_pin1_ref"],
+      },
+      {
+        type: "refs",
+        decl: { name: "pOut1", kind: "port", container: "Component1" },
+        expectAt: ["port_out1", "port_out1_ref", "cmp1_pout1_ref"],
+      },
+      {
+        type: "refs",
+        decl: { name: "pIn2", kind: "port", container: "Component2" },
+        expectAt: ["port_in2", "port_in2_ref", "cmp2_pin2_ref"],
+      },
+      {
+        type: "refs",
+        decl: { name: "pOut2", kind: "port", container: "Component2" },
+        expectAt: ["port_out2", "port_out2_ref", "cmp2_pout2_ref"],
+      },
+      {
+        type: "refs",
+        decl: { name: "cmp1", kind: "attribute", container: "Composite" },
+        expectAt: ["component_cmp1", "cmp1_ref", "cmp1_ref_2"],
+      },
+      {
+        type: "refs",
+        decl: { name: "cmp2", kind: "attribute", container: "Composite" },
+        expectAt: ["component_cmp2", "cmp2_ref", "cmp2_ref_2"],
+      },
+      {
+        type: "hover_output",
+        at: "port_in1",
+        expectContains: ["public in Integer pIn1", "in class Component1"],
+      },
+      {
+        type: "hover_output",
+        at: "port_out1",
+        expectContains: ["public out Integer pOut1", "in class Component1"],
+      },
+      {
+        type: "hover_output",
+        at: "port_speed",
+        expectContains: ["public out int speed", "in class Sensor"],
+      },
+      {
+        type: "hover_output",
+        at: "component_cmp1",
+        expectContains: ["Component1 cmp1", "in class Composite"],
+      },
+      {
+        type: "hover_output",
+        at: "cmp1_pout1_ref",
+        expectContains: ["public out Integer pOut1", "in class Component1"],
+      },
+      {
+        type: "hover_output",
+        at: "cmp2_pin2_ref",
+        expectContains: ["public in Integer pIn2", "in class Component2"],
+      },
+      {
+        type: "document_symbols",
+        fixture: "38_ports_reactive.ump",
+        expectRoots: ["Component1", "Component2", "Composite", "Sensor"],
+        expectChild: { parent: "Component1", child: "pIn1" },
+      },
+      {
+        type: "workspace_symbols",
+        query: "",
+        expect: [],
+        exclude: [
+          { name: "Component1.pIn1" },
+        ],
+      },
+      {
+        type: "workspace_symbols",
+        query: "component1.pin1",
+        expect: [
+          { name: "Component1.pIn1", kind: "Property", containerName: "Component1", fixture: "38_ports_reactive.ump" },
+        ],
       },
       {
         type: "hover_output",
