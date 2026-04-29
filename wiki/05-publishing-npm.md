@@ -158,6 +158,7 @@ Useful for sanity-checking what's in npm vs your local `packages/server/package.
 
 | Version | Date | What it added |
 |---------|------|---------------|
+| 1.0.2 | 2026-04-29 | Trusted Publishing workflow UI polish: package.json remains the single version source; no runtime LSP behavior changes |
 | 1.0.1 | 2026-04-29 | Trusted Publishing workflow and release handoff docs; no runtime LSP behavior changes |
 | 1.0.0 | 2026-04-29 | Stable LSP baseline: expanded semantic features, formatter safety, parser/query coverage, inlay hints, workspace symbols, and trace transition event symbols |
 | 0.4.3 | 2026-04-23 | Topic 044: association arrow slot completion |

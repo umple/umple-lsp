@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.2 - 2026-04-29
+
+- Refined the GitHub Actions Trusted Publishing workflow so the manual dispatch dialog shows that `packages/server/package.json` is the version source.
+- Kept `packages/server/package.json` as the single release-version source. No runtime LSP behavior changes from 1.0.1.
+
 ## 1.0.1 - 2026-04-29
 
 - Added GitHub Actions Trusted Publishing release infrastructure for future npm publishes.
