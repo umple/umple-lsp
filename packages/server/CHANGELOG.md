@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.1 - 2026-04-29
+
+- Added GitHub Actions Trusted Publishing release infrastructure for future npm publishes.
+- Updated release documentation for maintainer handoff. No runtime LSP behavior changes from 1.0.0.
+
 ## 1.0.0 - 2026-04-29
 
 - Added broader semantic coverage across completion, hover, go-to-definition, references, rename, workspace symbols, inlay hints, semantic tokens, and code actions.

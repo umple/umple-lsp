@@ -22,7 +22,7 @@ umple-lsp-server --stdio
 
 ## Release Notes
 
-Current release: `1.0.0`
+Current release: `1.0.1`
 
 Highlights:
 
@@ -31,5 +31,6 @@ Highlights:
 - Formatter safety checks and focused formatting improvements for parser-visible structural syntax.
 - Expanded Tree-sitter grammar and query coverage backed by corpus checks.
 - Trace transition event symbols: `trace transition flip;` now resolves, references, hovers, and completes class-scoped transition events.
+- Release infrastructure now supports GitHub Actions Trusted Publishing for future npm releases.
 
 See `CHANGELOG.md` in this package and the upstream repository wiki for the full release history and publishing notes.
