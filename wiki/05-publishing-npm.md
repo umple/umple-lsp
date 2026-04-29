@@ -72,12 +72,12 @@ git push origin master    # or `org master` depending on your remote
 # 5. In GitHub Actions, run "Publish npm package" from master.
 # Enter X.Y.Z as the expected version, then approve the npm-publish environment.
 
-# 6. Verify
+# 6. Verify the exact version first; `latest` can lag briefly after publish.
+npm view umple-lsp-server@X.Y.Z version --registry https://registry.npmjs.org/
 npm view umple-lsp-server version --registry https://registry.npmjs.org/
-# should print X.Y.Z after the workflow completes
 ```
 
-The workflow is `.github/workflows/publish-npm.yml`. It verifies the branch, checks that the input version matches `packages/server/package.json`, rejects already-published versions, installs dependencies, downloads `umplesync.jar`, runs the full test suite, verifies `server --version`, runs `npm publish --dry-run`, publishes from `packages/server`, and checks the registry version.
+The workflow is `.github/workflows/publish-npm.yml`. It verifies the branch, checks that the input version matches `packages/server/package.json`, rejects already-published versions, installs dependencies, downloads `umplesync.jar`, runs the full test suite, verifies `server --version`, runs `npm publish --dry-run`, publishes from `packages/server`, and retries until the exact registry version exists. It also retries the `latest` pointer check because npm can briefly report the previous latest version immediately after a successful publish.
 
 The post-publish chain (what other things you might want to do after):
 
@@ -136,7 +136,19 @@ Someone (you, in another shell) already published this version. Bump the version
 
 ### `npm view umple-lsp-server version` lags behind your publish
 
-CDN propagation. Usually under a minute. `npm view --registry https://registry.npmjs.org/ umple-lsp-server version` to bypass any local cache.
+Registry propagation. Usually under a minute. First verify the exact published version:
+
+```bash
+npm view umple-lsp-server@X.Y.Z version --registry https://registry.npmjs.org/
+```
+
+Then check `latest`:
+
+```bash
+npm view umple-lsp-server version --registry https://registry.npmjs.org/
+```
+
+If the exact version exists but `latest` still reports the previous version, the publish succeeded and the registry pointer is still catching up.
 
 ## Recent release log (hand-curated)
 

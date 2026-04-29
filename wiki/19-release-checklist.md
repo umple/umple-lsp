@@ -24,7 +24,8 @@ git status --short
 git remote -v
 
 # Confirm the intended server version is not already taken
-npm view umple-lsp-server version --registry https://registry.npmjs.org/
+npm view umple-lsp-server@X.Y.Z version --registry https://registry.npmjs.org/
+# This should fail with E404 before publishing.
 ```
 
 Make sure unrelated scratch files stay unstaged. In this workspace there are often local `.ump` test files, tarballs, jars, and parse reports that should not go into release commits.
@@ -56,8 +57,11 @@ git push org master
 
 # In GitHub Actions, run "Publish npm package" from master.
 # Enter X.Y.Z as the expected version and approve the npm-publish environment.
+npm view umple-lsp-server@X.Y.Z version --registry https://registry.npmjs.org/
 npm view umple-lsp-server version --registry https://registry.npmjs.org/
 ```
+
+The exact version check is authoritative right after publish. The plain package version reports the `latest` dist-tag and can briefly lag behind the successful publish.
 
 If the release includes grammar or query changes, make sure the pushed `umple-lsp` commit is the one Zed should pin in `extension.toml`.
 
@@ -176,6 +180,7 @@ If grammar queries changed, Neovim users may also need to rebuild or refresh the
 ## Final Sanity Checks
 
 ```bash
+npm view umple-lsp-server@X.Y.Z version --registry https://registry.npmjs.org/
 npm view umple-lsp-server version --registry https://registry.npmjs.org/
 git -C ../umple.vscode log --oneline -1
 git -C ../umple.zed describe --tags --exact-match

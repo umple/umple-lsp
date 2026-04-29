@@ -107,9 +107,31 @@ jobs:
       - name: Verify published version
         run: |
           set -euo pipefail
-          published="$(npm view umple-lsp-server version --registry https://registry.npmjs.org/)"
-          if [[ "$published" != "${{ inputs.version }}" ]]; then
-            echo "npm registry reports $published, expected ${{ inputs.version }}"
+          expected="${{ inputs.version }}"
+          exact=""
+          for attempt in {1..12}; do
+            exact="$(npm view "umple-lsp-server@$expected" version --registry https://registry.npmjs.org/ 2>/dev/null || true)"
+            if [[ "$exact" == "$expected" ]]; then
+              break
+            fi
+            echo "Exact version $expected is not visible yet (attempt $attempt/12); waiting for propagation..."
+            sleep 10
+          done
+
+          if [[ "$exact" != "$expected" ]]; then
+            echo "npm registry does not expose umple-lsp-server@$expected yet; got '${exact:-not found}'"
             exit 1
           fi
-          echo "Published umple-lsp-server@$published"
+
+          latest=""
+          for attempt in {1..20}; do
+            latest="$(npm view umple-lsp-server version --registry https://registry.npmjs.org/ || true)"
+            if [[ "$latest" == "$expected" ]]; then
+              echo "Published umple-lsp-server@$expected; latest reports $latest"
+              exit 0
+            fi
+            echo "Exact version $expected exists, but latest reports '$latest' (attempt $attempt/20); waiting for propagation..."
+            sleep 15
+          done
+
+          echo "Published umple-lsp-server@$expected; exact version is available. Latest still reports '$latest' after propagation wait."
