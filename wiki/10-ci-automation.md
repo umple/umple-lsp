@@ -96,7 +96,7 @@ Manual approval, automated execution. `.github/workflows/publish-npm.yml` is a `
 
 Reasons for this shape:
 
-- npm publish is a hard-to-reverse action with global blast radius, so a human still bumps the committed package version and approves the environment. The workflow has no version input; it publishes the version from `packages/server/package.json`.
+- npm publish is a hard-to-reverse action with global blast radius, so a human still bumps the committed package version and approves the environment. The workflow has no manual version input; its Run workflow dialog shows a one-option Version source field and publishes the version from `packages/server/package.json`.
 - Trusted Publishing removes the shared-token problem and gives npm provenance for public packages.
 - The workflow re-runs the full test suite, performs a dry-run package publish, publishes from `packages/server`, and verifies the exact registry version.
 

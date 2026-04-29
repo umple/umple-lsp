@@ -56,7 +56,8 @@ git commit -m "Release server X.Y.Z"
 git push org master
 
 # In GitHub Actions, run "Publish npm package" from master.
-# There is no version field. The workflow publishes packages/server/package.json.
+# The dialog shows an info-only Version source field.
+# It has one choice: packages/server/package.json.
 # Approve the npm-publish environment.
 npm view umple-lsp-server@X.Y.Z version --registry https://registry.npmjs.org/
 npm view umple-lsp-server version --registry https://registry.npmjs.org/

@@ -13,7 +13,15 @@ name: Publish npm package
 # The GitHub environment `npm-publish` is the human approval gate.
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      version_source:
+        description: "Version source: packages/server/package.json (no manual version input)"
+        required: true
+        default: "packages/server/package.json"
+        type: choice
+        options:
+          - "packages/server/package.json"
 
 permissions:
   contents: read

@@ -70,7 +70,8 @@ git commit -m "Bump server to <X.Y.Z>"
 git push origin master    # or `org master` depending on your remote
 
 # 5. In GitHub Actions, run "Publish npm package" from master.
-# There is no version field. The workflow publishes packages/server/package.json.
+# The dialog shows an info-only Version source field.
+# It has one choice: packages/server/package.json.
 # Approve the npm-publish environment.
 
 # 6. Verify the exact version first; `latest` can lag briefly after publish.
@@ -78,7 +79,7 @@ npm view umple-lsp-server@X.Y.Z version --registry https://registry.npmjs.org/
 npm view umple-lsp-server version --registry https://registry.npmjs.org/
 ```
 
-The workflow is `.github/workflows/publish-npm.yml`. It verifies the branch, resolves the release version from `packages/server/package.json`, rejects already-published versions, installs dependencies, downloads `umplesync.jar`, runs the full test suite, verifies `server --version`, runs `npm publish --dry-run`, publishes from `packages/server`, and retries until the exact registry version exists. It also retries the `latest` pointer check because npm can briefly report the previous latest version immediately after a successful publish.
+The workflow is `.github/workflows/publish-npm.yml`. The Run workflow dialog includes a one-option Version source field so maintainers can see that the package version comes from `packages/server/package.json`; it does not accept a manually typed version. The workflow verifies the branch, resolves the release version from `packages/server/package.json`, rejects already-published versions, installs dependencies, downloads `umplesync.jar`, runs the full test suite, verifies `server --version`, runs `npm publish --dry-run`, publishes from `packages/server`, and retries until the exact registry version exists. It also retries the `latest` pointer check because npm can briefly report the previous latest version immediately after a successful publish.
 
 The post-publish chain (what other things you might want to do after):
 
