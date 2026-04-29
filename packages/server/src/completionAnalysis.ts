@@ -297,7 +297,21 @@ export function analyzeCompletion(
 
   // --- Trace completion fallback for zero-identifier case ("trace |") ---
   // Trace entity fallbacks for zero-identifier recovery
-  const TRACE_PREFIX_KEYWORDS = new Set(["trace", "set", "get", "in", "out", "entry", "exit", "cardinality", "add", "remove"]);
+  const TRACE_PREFIX_KEYWORDS = new Set([
+    "trace",
+    "set",
+    "get",
+    "onlyGet",
+    "onlySet",
+    "in",
+    "out",
+    "entry",
+    "exit",
+    "cardinality",
+    "add",
+    "remove",
+    "transition",
+  ]);
   if (prevLeaf && TRACE_PREFIX_KEYWORDS.has(prevLeaf.type)) {
     // Check if inside a trace_statement or ERROR under class body
     let inTrace = prevLeaf.parent?.type === "trace_statement";
@@ -1339,8 +1353,8 @@ export function analyzeCompletion(
     const traceStmt = findAncestorOfType(cursorNode, "trace_statement");
     if (traceStmt) {
       const STATE_PREFIXES = new Set(["entry", "exit"]);
-      const ATTR_PREFIXES = new Set(["set", "get"]);
-      const ASSOC_PREFIXES = new Set(["add", "remove", "cardinality"]);
+      const ATTR_PREFIXES = new Set(["set", "get", "onlyGet", "onlySet"]);
+      const ASSOC_PREFIXES = new Set(["add", "remove", "cardinality", "transition"]);
       let prefixType: "state" | "attribute" | "suppress" | null = null;
       for (let i = 0; i < traceStmt.childCount; i++) {
         const child = traceStmt.child(i);

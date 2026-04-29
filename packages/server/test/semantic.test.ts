@@ -1023,6 +1023,31 @@ const TEST_CASES: TestCase[] = [
       { type: "parse_clean", fixture: "176_corpus_trace_variants.ump" },
       { type: "symbol_count", fixture: "176_corpus_trace_variants.ump", name: "TraceVariants", kind: "class", expect: 1 },
       { type: "symbol_count", fixture: "176_corpus_trace_variants.ump", name: "tc1", kind: "method", expect: 0 },
+      { type: "goto_def_exact", at: "onlyget_id_ref", expect: ["def_id"] },
+      { type: "goto_def_exact", at: "onlyget_name_ref", expect: ["def_name"] },
+      { type: "goto_def_exact", at: "trace_sm_ref", expect: ["def_status"] },
+      { type: "goto_def_exact", at: "trace_closed_ref", expect: ["def_closed"] },
+      { type: "goto_def_exact", at: "trace_name_ref", expect: ["def_name"] },
+      { type: "goto_def_exact", at: "record_id_ref", expect: ["def_id"] },
+      { type: "goto_def_exact", at: "record_contact_ref", expect: ["def_contact"] },
+      { type: "goto_def_exact", at: "record_only_id_ref", expect: ["def_id"] },
+      { type: "goto_def_exact", at: "transition_record_contact_ref", expect: ["def_contact"] },
+      { type: "goto_def_empty", at: "transition_event_ref" },
+      { type: "goto_def_exact", at: "deact_tc1_ref", expect: ["tc1_def"] },
+      { type: "refs", decl: { name: "id", kind: "attribute", container: "TraceVariants" }, expectAt: ["def_id", "onlyget_id_ref", "record_id_ref", "record_only_id_ref"] },
+      { type: "refs", decl: { name: "contact", kind: "attribute", container: "TraceVariants" }, expectAt: ["def_contact", "record_contact_ref", "transition_record_contact_ref"] },
+      { type: "refs", decl: { name: "status", kind: "statemachine", container: "TraceVariants.status" }, expectAt: ["def_status", "trace_sm_ref"] },
+      { type: "refs", decl: { name: "Closed", kind: "state", container: "TraceVariants.status" }, expectAt: ["def_closed", "trace_closed_ref"] },
+      {
+        type: "token_context",
+        at: "trace_sm_ref",
+        expect: { contextType: "trace_state_path", pathSegments: ["status", "Closed"], segmentIndex: 0 },
+      },
+      {
+        type: "token_context",
+        at: "trace_closed_ref",
+        expect: { contextType: "trace_state_path", pathSegments: ["status", "Closed"], segmentIndex: 1 },
+      },
     ],
   },
 
@@ -1036,6 +1061,12 @@ const TEST_CASES: TestCase[] = [
       { type: "symbol_count", fixture: "177_corpus_transition_change_debug.ump", name: "OnOffSwitch", kind: "statemachine", expect: 1 },
       { type: "symbol_count", fixture: "177_corpus_transition_change_debug.ump", name: "Lightbulb", kind: "class", expect: 1 },
       { type: "symbol_count", fixture: "177_corpus_transition_change_debug.ump", name: "StandaloneNoEvent", kind: "class", expect: 1 },
+      { type: "goto_def_exact", at: "s1_from_ref", expect: ["s1_def"] },
+      { type: "goto_def_exact", at: "s2_to_ref", expect: ["s2_def"] },
+      { type: "goto_def_exact", at: "s2_from_ref", expect: ["s2_def"] },
+      { type: "goto_def_exact", at: "s1_to_ref", expect: ["s1_def"] },
+      { type: "refs", decl: { name: "S1", kind: "state", container: "StandaloneNoEvent.sm" }, expectAt: ["s1_def", "s1_from_ref", "s1_to_ref"] },
+      { type: "refs", decl: { name: "S2", kind: "state", container: "StandaloneNoEvent.sm" }, expectAt: ["s2_def", "s2_to_ref", "s2_from_ref"] },
     ],
   },
 
@@ -3740,6 +3771,17 @@ const TEST_CASES: TestCase[] = [
         at: "tpc_comp_set_later",
         expect: ["name", "age"],
       },
+      // onlyGet shares the same attribute-only completion path as set/get
+      {
+        type: "completion_kinds",
+        at: "tpc_comp_onlyget_later",
+        expect: "trace_attribute",
+      },
+      {
+        type: "completion_includes",
+        at: "tpc_comp_onlyget_later",
+        expect: ["name", "age"],
+      },
       // Blank later slot under exit → union of states + methods
       {
         type: "completion_kinds",
@@ -3777,6 +3819,12 @@ const TEST_CASES: TestCase[] = [
       {
         type: "completion_kinds",
         at: "tpc_comp_add",
+        expect: "suppress",
+      },
+      // transition events are not symbol-indexed, so avoid wrong attr/method suggestions
+      {
+        type: "completion_kinds",
+        at: "tpc_comp_transition",
         expect: "suppress",
       },
     ],

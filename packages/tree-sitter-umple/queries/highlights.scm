@@ -343,6 +343,12 @@
 (standalone_transition
   to_state: (identifier) @constant)
 
+(state_to_state_transition
+  from_state: (identifier) @constant)
+
+(state_to_state_transition
+  to_state: (identifier) @constant)
+
 ; =============
 ; ASSOCIATIONS
 ; =============

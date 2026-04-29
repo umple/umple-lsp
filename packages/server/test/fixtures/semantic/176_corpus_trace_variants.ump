@@ -3,25 +3,25 @@ namespace example;
 tracer log4j;
 
 class TraceVariants {
-  Integer id;
-  Integer contact;
-  String name;
+  Integer /*@def_id*/id;
+  Integer /*@def_contact*/contact;
+  String /*@def_name*/name;
 
-  status {
+  /*@def_status*/status {
     Open { flip -> Closed; }
-    Closed { flip -> Open; }
+    /*@def_closed*/Closed { flip -> Open; }
   }
 
   trace *attributes;
-  trace onlyGet id, name;
-  trace status.Closed;
-  trace name record id,contact;
-  trace name record only id;
+  trace onlyGet /*@onlyget_id_ref*/id, /*@onlyget_name_ref*/name;
+  trace /*@trace_sm_ref*/status./*@trace_closed_ref*/Closed;
+  trace /*@trace_name_ref*/name record /*@record_id_ref*/id,/*@record_contact_ref*/contact;
+  trace name record only /*@record_only_id_ref*/id;
   trace name logLevel debug,fatal;
-  trace transition flip record contact;
+  trace transition /*@transition_event_ref*/flip record /*@transition_record_contact_ref*/contact;
 
-  tracecase tc1 {
+  tracecase /*@tc1_def*/tc1 {
     trace name;
   }
-  deactivate tc1 onThisObject for 1s;
+  deactivate /*@deact_tc1_ref*/tc1 onThisObject for 1s;
 }

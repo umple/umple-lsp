@@ -89,6 +89,15 @@ connector endpoints such as `pIn -> pOut`, and one-hop component endpoints such
 as `cmp1.pOut1` when `cmp1` is a typed attribute. The resolver intentionally
 does not guess for unresolved components or deeper component chains.
 
+Trace variants are semantic only where the target is a normal model symbol.
+`trace set/get/onlyGet/onlySet ...` and trace `record ...` payloads resolve as
+attributes. Dotted trace state targets such as `trace status.Closed;` resolve
+the first segment to the class-local state machine and later segments to states
+inside it. Trace wildcards, log-level values, timing payloads, and
+`trace transition eventName` remain parse/highlight-only unless event symbols
+are added later. No-event state transitions (`S1 -> S2;`) reuse the normal state
+resolver for both endpoints.
+
 ### Completion
 
 `analyzeCompletion(tree, lang, completionsQuery, content, line, col)` returns a `CompletionInfo` with:
@@ -143,6 +152,12 @@ multiplicity/default guesses. Inlay hints never edit source text.
 3. Apply state-path disambiguation, container check, shared-state equivalence
 
 For reused state machines (`as` aliasing), `getSharedStateDeclarations()` builds the equivalence class first.
+
+Dotted trace state paths have extra filtering in `referenceSearch.ts`: the
+first segment must match a state-machine declaration in the enclosing class, and
+later segments must match state declarations under that state machine. This
+keeps `status` and `Closed` references in `trace status.Closed;` from matching
+unrelated attributes, classes, or states with the same names.
 
 ### Rename
 

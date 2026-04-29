@@ -21,7 +21,7 @@ type Tree = InstanceType<typeof TreeSitter.Tree>;
 
 /** Allowed child types inside a state body for expansion eligibility. */
 const EXPANSION_ALLOWED_CHILDREN = new Set([
-  "transition", "standalone_transition",
+  "transition", "standalone_transition", "state_to_state_transition",
   "{", "}", ";", "identifier",
 ]);
 
@@ -57,7 +57,7 @@ function isEligibleForExpansion(stateNode: any): boolean {
     const type = child.type;
 
     if (EXPANSION_ALLOWED_CHILDREN.has(type)) {
-      if (type === "transition" || type === "standalone_transition") {
+      if (type === "transition" || type === "standalone_transition" || type === "state_to_state_transition") {
         hasTransition = true;
       }
       continue;
@@ -130,7 +130,7 @@ export function expandCompactStates(text: string, tree: Tree): string {
     const transitionTexts: string[] = [];
     for (let i = 0; i < stateNode.childCount; i++) {
       const child = stateNode.child(i);
-      if (child.type === "transition" || child.type === "standalone_transition") {
+      if (child.type === "transition" || child.type === "standalone_transition" || child.type === "state_to_state_transition") {
         transitionTexts.push(child.text);
       }
     }
@@ -396,10 +396,10 @@ function getLineIndentColumns(line: string, tabSize: number): number {
 // ── Phase 2: Targeted fixups ────────────────────────────────────────────────
 
 /** Node types that contain a `->` arrow whose surrounding whitespace should be normalized. */
-const ARROW_NODES = new Set(["transition", "standalone_transition"]);
+const ARROW_NODES = new Set(["transition", "standalone_transition", "state_to_state_transition"]);
 
 /**
- * Normalize whitespace around `->` in transition and standalone_transition nodes.
+ * Normalize whitespace around `->` in transition and standalone/state-to-state transition nodes.
  * Only handles single-line nodes. Leaves event, guard, action, and target text verbatim.
  */
 export function fixTransitionSpacing(

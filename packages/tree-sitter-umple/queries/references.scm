@@ -153,6 +153,8 @@
 (transition target: (qualified_name (identifier) @reference.state))
 (standalone_transition from_state: (identifier) @reference.state)
 (standalone_transition to_state: (identifier) @reference.state)
+(state_to_state_transition from_state: (identifier) @reference.state)
+(state_to_state_transition to_state: (identifier) @reference.state)
 
 ; =====================
 ; KEY DEFINITION
@@ -179,6 +181,8 @@
 ; set/get → attribute (all entities in statement)
 (trace_statement "set" (trace_entity (identifier) @reference.attribute))
 (trace_statement "get" (trace_entity (identifier) @reference.attribute))
+(trace_statement "onlyGet" (trace_entity (identifier) @reference.attribute))
+(trace_statement "onlySet" (trace_entity (identifier) @reference.attribute))
 ; entry/exit bare → state; entry/exit call → method (all entities)
 (trace_statement "entry" (trace_entity (identifier) @reference.state))
 (trace_statement "exit" (trace_entity (identifier) @reference.state))
@@ -189,8 +193,10 @@
 ; Subsequent entities after "," in no-prefix traces
 (trace_statement "," (trace_entity (identifier) @reference.attribute_method))
 (trace_statement "," (trace_entity_call (identifier) @reference.method))
+; Dotted trace state target: trace status.Closed;
+(trace_qualified_name (identifier) @reference.statemachine_state)
 ; "record x" in trace postfix — additional entity reference
-(trace_record_target (identifier) @reference.attribute_method)
+(trace_record_target (identifier) @reference.attribute)
 ; tracecase definition name and activate/deactivate references
 (trace_statement name: (identifier) @reference.tracecase)
 (trace_statement "activate" . (identifier) @reference.tracecase)

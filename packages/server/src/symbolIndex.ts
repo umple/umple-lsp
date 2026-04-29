@@ -215,7 +215,7 @@ export class SymbolIndex {
       // - empty-body statemachines (misparsed class boundaries)
       // - nested states (depth > 1) — path ambiguity too high
       if (!existing) {
-        const SM_CONTENT = new Set(["state", "standalone_transition", "mixset_definition", "trace_statement"]);
+        const SM_CONTENT = new Set(["state", "standalone_transition", "state_to_state_transition", "mixset_definition", "trace_statement"]);
         liveSymbols = liveSymbols.filter((s) => {
           if (s.kind === "statemachine") {
             // Reject empty-body SMs
@@ -1357,7 +1357,7 @@ export class SymbolIndex {
           }
           // Require at least one SM-content child to reject bogus empty SMs
           // (e.g., "class B {}" misparsed as a state_machine inside a broken class)
-          const SM_CONTENT = new Set(["state", "standalone_transition", "mixset_definition", "trace_statement"]);
+          const SM_CONTENT = new Set(["state", "standalone_transition", "state_to_state_transition", "mixset_definition", "trace_statement"]);
           let hasContent = false;
           for (let ci = 0; ci < defNode.namedChildCount; ci++) {
             const c = defNode.namedChild(ci);

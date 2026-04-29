@@ -241,6 +241,47 @@ export function resolveSymbolAtPosition(
       break;
     }
 
+    case "trace_state_path": {
+      if (!token.enclosingClass) break;
+      const { pathSegments, segmentIndex } = token.context;
+      const smName = pathSegments[0];
+      const smContainer = `${token.enclosingClass}.${smName}`;
+
+      if (segmentIndex === 0) {
+        symbols = si
+          .getSymbols({
+            name: smName,
+            kind: ["statemachine"],
+            container: smContainer,
+          })
+          .filter((s) => reachableFiles.has(path.normalize(s.file)));
+      } else {
+        symbols = si
+          .getSymbols({
+            name: token.word,
+            kind: ["state"],
+            container: smContainer,
+          })
+          .filter((s) => reachableFiles.has(path.normalize(s.file)));
+
+        const precedingStatePath = pathSegments.slice(1, segmentIndex);
+        if (precedingStatePath.length === 0) {
+          symbols = symbols.filter(
+            (s) => !s.statePath || s.statePath.length === 1,
+          );
+        } else if (symbols.length > 1) {
+          const resolved = si.resolveStateInPath(
+            precedingStatePath,
+            token.word,
+            smContainer,
+            reachableFiles,
+          );
+          if (resolved) symbols = [resolved];
+        }
+      }
+      break;
+    }
+
     case "default_value_qualifier":
     case "normal": {
       // Split kinds into scoped (class/SM-local) and unscoped (global).

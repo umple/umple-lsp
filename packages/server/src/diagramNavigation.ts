@@ -173,7 +173,7 @@ function findTransitionInSm(
   const fromState = sourcePath.length > 0 ? sourcePath[sourcePath.length - 1] : undefined;
   for (let i = 0; i < smNode.childCount; i++) {
     const child = smNode.child(i);
-    if (child.type === "standalone_transition") {
+    if (child.type === "standalone_transition" || child.type === "state_to_state_transition") {
       const eventNode = child.childForFieldName("event");
       const fromNode = child.childForFieldName("from_state");
       const toNode = child.childForFieldName("to_state");
@@ -221,8 +221,8 @@ function findTransitionInSm(
         };
       }
     }
-    // standalone_transition: "event fromState -> toState;"
-    if (child.type === "standalone_transition") {
+    // standalone_transition/state_to_state_transition: "event fromState -> toState;" or "fromState -> toState;"
+    if (child.type === "standalone_transition" || child.type === "state_to_state_transition") {
       const eventNode = child.childForFieldName("event");
       const toNode = child.childForFieldName("to_state");
       const eventMatch = eventNode ? eventNode.text === event : !event;

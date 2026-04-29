@@ -143,6 +143,12 @@
 (standalone_transition
   to_state: (identifier) @local.reference)
 
+(state_to_state_transition
+  from_state: (identifier) @local.reference)
+
+(state_to_state_transition
+  to_state: (identifier) @local.reference)
+
 ; Referenced statemachine references a statemachine definition
 (referenced_statemachine
   definition: (identifier) @local.reference)

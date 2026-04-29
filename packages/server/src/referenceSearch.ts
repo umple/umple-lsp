@@ -118,6 +118,34 @@ export function searchReferences(
         }
       }
 
+      // Dotted trace state paths: trace status.Closed;
+      // First segment is a class-local state machine, later segments are states
+      // under that state machine. Plain trace entities remain handled by the
+      // normal reference captures.
+      const traceStatePath = getTraceStatePathSegmentInfo(node);
+      if (traceStatePath) {
+        if (traceStatePath.segmentIndex === 0 && symKind !== "statemachine") continue;
+        if (traceStatePath.segmentIndex > 0 && symKind !== "state") continue;
+
+        const enclosingClass = resolveEnclosingScopeFromNode(node, "attribute");
+        if (!enclosingClass) continue;
+        const expectedContainer = `${enclosingClass}.${traceStatePath.pathSegments[0]}`;
+        if (!validContainers.has(expectedContainer)) continue;
+        if (
+          symKind === "state" &&
+          sym.statePath
+        ) {
+          const expectedStatePath = traceStatePath.pathSegments.slice(
+            1,
+            traceStatePath.segmentIndex + 1,
+          );
+          if (!pathMatches(sym.statePath, expectedStatePath, false)) {
+            continue;
+          }
+        }
+        skipContainerScopeCheck = true;
+      }
+
       // For sorted keys, resolve the owner class from the association and check
       // it matches the declaration container (with inheritance).
       if (node.parent?.type === "sorted_modifier" && symKind === "attribute") {
@@ -199,7 +227,7 @@ export function searchReferences(
         (node.parent?.type === "trace_entity" || node.parent?.type === "trace_entity_call") &&
         node.parent?.parent?.type === "trace_statement"
       ) {
-        const ASSOC_PREFIXES = new Set(["add", "remove", "cardinality"]);
+        const ASSOC_PREFIXES = new Set(["add", "remove", "cardinality", "transition"]);
         const traceStmt = node.parent.parent;
         let isAssocPrefix = false;
         for (let i = 0; i < traceStmt.childCount; i++) {
@@ -212,7 +240,7 @@ export function searchReferences(
       }
 
       // For nested states, disambiguate by path context
-      if (symKind === "state" && sym.statePath && sym.statePath.length >= 1) {
+      if (symKind === "state" && sym.statePath && sym.statePath.length >= 1 && !traceStatePath) {
         const pathCtx = extractPathContextFromNode(node);
         if (pathCtx) {
           let preceding = pathCtx.preceding;
@@ -512,6 +540,28 @@ function getTraitSmBindingValueSegmentIndex(node: SyntaxNode): number | undefine
   return undefined;
 }
 
+interface TraceStatePathInfo {
+  segmentIndex: number;
+  pathSegments: string[];
+}
+
+function getTraceStatePathSegmentInfo(node: SyntaxNode): TraceStatePathInfo | undefined {
+  const parent = node.parent;
+  if (parent?.type !== "trace_qualified_name") return undefined;
+  if (parent.parent?.type !== "trace_entity") return undefined;
+
+  const pathSegments: string[] = [];
+  let segmentIndex = -1;
+  for (let i = 0; i < parent.namedChildCount; i++) {
+    const child = parent.namedChild(i);
+    if (child?.type !== "identifier") continue;
+    if (child.id === node.id) segmentIndex = pathSegments.length;
+    pathSegments.push(child.text);
+  }
+
+  return segmentIndex >= 0 ? { segmentIndex, pathSegments } : undefined;
+}
+
 interface TraitSmOpInfo {
   segmentIndex: number;
   isEventSegment: boolean;
@@ -629,7 +679,7 @@ function extractPathContextFromNode(
   node: SyntaxNode,
 ): { preceding: string[] } | null {
   const parent = node.parent;
-  if (!parent || parent.type !== "qualified_name") return null;
+  if (!parent || (parent.type !== "qualified_name" && parent.type !== "trace_qualified_name")) return null;
 
   const segments: string[] = [];
   let nodeIndex = -1;

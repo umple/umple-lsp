@@ -60,9 +60,10 @@ Tree-sitter uses a JavaScript DSL — see https://tree-sitter.github.io/tree-sit
 5. **Add a `@reference.<kinds>` capture** in `references.scm` if it can reference existing symbols.
 6. **Add a `@scope.<kind>` capture** in `completions.scm` if it should change completion behavior inside its body.
 7. **Add a highlight pattern** in `highlights.scm` for any new keywords.
-8. **Run `npm run compile`** — fails loudly if there's a parser conflict.
-9. **Run `npm test`** — the semantic suite and parser-report self-test should still pass if you didn't change semantics.
-10. **Add a fixture + assertions** for the new construct (see [03-development.md § Add a test](03-development.md#testing)).
+8. **Decide whether semantics are useful** before wiring hover/goto/refs/rename/completion. Parse-only nodes are fine when they are literals, options, wildcards, or config payloads; add semantic behavior only when the node points at an existing model symbol.
+9. **Run `npm run compile`** — fails loudly if there's a parser conflict.
+10. **Run `npm test`** — the semantic suite and parser-report self-test should still pass if you didn't change semantics.
+11. **Add a fixture + assertions** for the new construct (see [03-development.md § Add a test](03-development.md#testing)).
 
 ### Key gotchas
 

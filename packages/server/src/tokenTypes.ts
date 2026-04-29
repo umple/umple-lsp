@@ -57,6 +57,7 @@ export type LookupContext =
   | { type: "default_value_qualifier" }
   | { type: "sorted_key"; ownerClass: string }
   | { type: "component_port"; componentName: string }
+  | { type: "trace_state_path"; pathSegments: string[]; segmentIndex: number }
   | { type: "trait_sm_op"; traitName: string; pathSegments: string[]; segmentIndex: number; isEventSegment: boolean; eventParams?: string[] };
 
 /** Post-lookup disambiguation for dotted state references in transitions. */

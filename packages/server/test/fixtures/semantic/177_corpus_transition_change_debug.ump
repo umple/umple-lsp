@@ -1,10 +1,10 @@
 debug;
 
 statemachine OnOffSwitch {
-  On {
+  /*@switch_on_def*/On {
     push -> Off;
   }
-  Off {
+  /*@switch_off_def*/Off {
     push -> On;
   }
 }
@@ -19,9 +19,9 @@ class Lightbulb {
 
 class StandaloneNoEvent {
   sm {
-    S1 {}
-    S2 {}
-    S1 -> S2;
-    S2 -> S1;
+    /*@s1_def*/S1 {}
+    /*@s2_def*/S2 {}
+    /*@s1_from_ref*/S1 -> /*@s2_to_ref*/S2;
+    /*@s2_from_ref*/S2 -> /*@s1_to_ref*/S1;
   }
 }

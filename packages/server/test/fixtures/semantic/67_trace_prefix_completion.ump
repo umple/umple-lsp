@@ -17,6 +17,9 @@ class A {
   // Later prefixed attribute entity completion
   trace set,get name, /*@tpc_comp_set_later*/ ;
 
+  // Later onlyGet attribute entity completion
+  trace onlyGet name, /*@tpc_comp_onlyget_later*/ ;
+
   // Blank later slot under exit with call-form sibling → union
   trace exit open(), /*@tpc_comp_exit_blank_later*/ ;
 
@@ -28,4 +31,7 @@ class A {
 
   // add/remove suppressed
   trace add /*@tpc_comp_add*/ ;
+
+  // transition events are not indexed as normal symbols
+  trace transition /*@tpc_comp_transition*/ ;
 }

@@ -159,10 +159,32 @@ export function analyzeToken(
     }
   }
 
+  // Trace dotted state targets:
+  //   trace status.Closed;
+  // First segment resolves to the class-local state machine, later segments to
+  // states inside that state machine. Plain trace entities stay attribute/method
+  // references; wildcard trace entities remain parse/highlight only.
+  if (
+    node.type === "identifier" &&
+    parent?.type === "trace_qualified_name" &&
+    parent.parent?.type === "trace_entity" &&
+    parent.parent.parent?.type === "trace_statement"
+  ) {
+    const path = getIdentifierSegments(parent, node);
+    if (path) {
+      kinds = path.index === 0 ? ["statemachine"] : ["state"];
+      context = {
+        type: "trace_state_path",
+        pathSegments: path.segments,
+        segmentIndex: path.index,
+      };
+    }
+  }
+
   // ── Trace prefix override: propagate prefix semantics to all entities ────
   const TRACE_PREFIX_STATE = new Set(["entry", "exit"]);
-  const TRACE_PREFIX_ATTR = new Set(["set", "get"]);
-  const TRACE_PREFIX_ASSOC = new Set(["add", "remove", "cardinality"]);
+  const TRACE_PREFIX_ATTR = new Set(["set", "get", "onlyGet", "onlySet"]);
+  const TRACE_PREFIX_ASSOC = new Set(["add", "remove", "cardinality", "transition"]);
 
   if (
     node.type === "identifier" &&
@@ -496,6 +518,13 @@ function getQualifiedNameSegments(
   target: SyntaxNode,
 ): { segments: string[]; index: number } | null {
   if (node.type !== "qualified_name") return null;
+  return getIdentifierSegments(node, target);
+}
+
+function getIdentifierSegments(
+  node: SyntaxNode,
+  target: SyntaxNode,
+): { segments: string[]; index: number } | null {
   const segments: string[] = [];
   let index = -1;
   for (let i = 0; i < node.namedChildCount; i++) {
