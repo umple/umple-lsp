@@ -80,6 +80,12 @@ Debounced (500ms default). Re-runs when any file in a chain changes (forward + r
 3. For class-/SM-scoped kinds (`attribute`, `method`, `state`, ...): try enclosing container first (with isA inheritance), fall back to global
 4. Post-lookup disambiguation: dotted state paths, state definition sites, use_case_step exact-position matching
 
+Active methods and Umple `test` blocks are represented as `method` symbols.
+`testSequence` step identifiers are method references, so go-to-definition and
+hover reuse the normal scoped method resolver. Port connector endpoints are not
+symbol references yet; they currently stay in the highlighting layer until the
+server has enough model information to resolve component ports correctly.
+
 ### Completion
 
 `analyzeCompletion(tree, lang, completionsQuery, content, line, col)` returns a `CompletionInfo` with:

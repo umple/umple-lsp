@@ -4,7 +4,7 @@ class Component1 {
   pIn1 -> pOut1;
 
   [pIn1]
-  active increment {
+  active /*@active_increment*/increment {
     pOut1(pIn1 + 1);
   }
 
@@ -37,7 +37,7 @@ class Sensor {
   this.data -> client.sensorData { return new SensorData(); }
 
   [sensorData]
-  void active init() {
+  void active /*@active_init*/init() {
     doInit();
   }
 

@@ -2,10 +2,10 @@ generate Test;
 
 class Person {
   testSequence ts {
-    checkName -> checkStatus;
+    /*@seq_check_name*/checkName -> /*@seq_check_status*/checkStatus;
   }
 
-  test checkName {
+  test /*@test_check_name*/checkName {
     for (Job job : jobs) {
       assertTrue(job.getName() != "Coach");
     }
@@ -19,7 +19,7 @@ class Person {
     // delete files
   }
 
-  JUnit concrete test checkStatus {
+  JUnit concrete test /*@test_check_status*/checkStatus {
     before assertFalse(d1.firstName() == "Orlean");
     after assertFalse(p1.getId() == "something");
   }
@@ -28,7 +28,7 @@ class Person {
 class Student {
   isA Person;
 
-  override test checkName {
+  override test /*@student_test_check_name*/checkName {
     assertTrue(id == 2);
   }
 }

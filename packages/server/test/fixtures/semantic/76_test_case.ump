@@ -2,12 +2,12 @@ class /*@tc_class*/Student {
   id = "ID123";
   /*@tc_name*/name = "John";
 
-  test checkSetId {
+  test /*@test_check_id*/checkSetId {
     Student s ();
     assertTrue(s.setId("ID432"));
   }
 
-  test checkSetName {
+  test /*@test_check_name*/checkSetName {
     Student s ();
     assertTrue(s.setName("Jane"));
   }

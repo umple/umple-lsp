@@ -747,7 +747,8 @@ const TEST_CASES: TestCase[] = [
   },
 
   // 142: Corpus gap — Test generator syntax includes test sequences and
-  // prefixed test cases. These are parse-only constructs for LSP purposes.
+  // prefixed test cases. Test cases are method symbols; test sequence steps
+  // reference those test methods in the enclosing class scope.
   {
     name: "142 corpus: testSequence and prefixed test cases parse clean",
     fixtures: ["142_corpus_test_sequence.ump"],
@@ -755,6 +756,15 @@ const TEST_CASES: TestCase[] = [
       { type: "parse_clean", fixture: "142_corpus_test_sequence.ump" },
       { type: "symbol_count", fixture: "142_corpus_test_sequence.ump", name: "Person", kind: "class", expect: 1 },
       { type: "symbol_count", fixture: "142_corpus_test_sequence.ump", name: "Student", kind: "class", expect: 1 },
+      { type: "symbol_count", fixture: "142_corpus_test_sequence.ump", name: "checkName", kind: "method", expect: 2 },
+      { type: "symbol_count", fixture: "142_corpus_test_sequence.ump", name: "checkStatus", kind: "method", expect: 1 },
+      { type: "goto_def_exact", at: "seq_check_name", expect: ["test_check_name"] },
+      { type: "goto_def_exact", at: "seq_check_status", expect: ["test_check_status"] },
+      {
+        type: "hover_output",
+        at: "seq_check_status",
+        expectContains: ["JUnit concrete test checkStatus", "in class Person"],
+      },
     ],
   },
 
@@ -2189,7 +2199,7 @@ const TEST_CASES: TestCase[] = [
         type: "parse_clean",
         fixture: "38_ports_reactive.ump",
       },
-      // Classes are indexed, port/connector/watchlist internals are not
+      // Classes and active methods are indexed; port/connector/watchlist internals are not.
       {
         type: "symbol_count",
         fixture: "38_ports_reactive.ump",
@@ -2210,6 +2220,30 @@ const TEST_CASES: TestCase[] = [
         name: "Sensor",
         kind: "class",
         expect: 1,
+      },
+      {
+        type: "symbol_count",
+        fixture: "38_ports_reactive.ump",
+        name: "increment",
+        kind: "method",
+        expect: 1,
+      },
+      {
+        type: "symbol_count",
+        fixture: "38_ports_reactive.ump",
+        name: "init",
+        kind: "method",
+        expect: 1,
+      },
+      {
+        type: "hover_output",
+        at: "active_increment",
+        expectContains: ["active increment", "in class Component1"],
+      },
+      {
+        type: "hover_output",
+        at: "active_init",
+        expectContains: ["void active init()", "in class Sensor"],
       },
     ],
   },
@@ -3613,6 +3647,13 @@ const TEST_CASES: TestCase[] = [
     assertions: [
       { type: "parse_clean", fixture: "76_test_case.ump" },
       { type: "symbol_count", fixture: "76_test_case.ump", name: "Student", kind: "class", expect: 1 },
+      { type: "symbol_count", fixture: "76_test_case.ump", name: "checkSetId", kind: "method", expect: 1 },
+      { type: "symbol_count", fixture: "76_test_case.ump", name: "checkSetName", kind: "method", expect: 1 },
+      {
+        type: "hover_output",
+        at: "test_check_id",
+        expectContains: ["test checkSetId", "in class Student"],
+      },
     ],
   },
 

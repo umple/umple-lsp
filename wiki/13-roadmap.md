@@ -60,6 +60,7 @@ The known array-fallback completion leaks have all been closed:
 - Workspace-wide rename safety — topic 066 (`textDocument/rename` synchronously indexes workspace roots for explicit rename requests, then searches every indexed `.ump` file instead of only the import graph)
 - Find-implementations beyond traits — topic 067 (`textDocument/implementation` now returns class subclasses and interface extensions/implementers in addition to the existing trait implementers)
 - LSP inlay hints — topic 068 (`textDocument/inlayHint` shows editor-only inferred types for compiler-verified untyped attributes; association/default multiplicity and trait-template hints are intentionally deferred)
+- Active/test method symbol polish — active methods and Umple `test` blocks are indexed as method symbols, and `testSequence` steps resolve/hover to the matching test methods in class scope. Port connector endpoints are still highlighting-only until component-port resolution is modeled.
 
 ### How to add new completion slots
 

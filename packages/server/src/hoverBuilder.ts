@@ -135,10 +135,76 @@ function buildConstHover(
   return result;
 }
 
+function buildParamString(defNode: any): string {
+  const paramList = defNode.children.find((c: any) => c.type === "param_list");
+  if (!paramList) return "";
+
+  const params: string[] = [];
+  for (const p of paramList.children) {
+    if (p.type !== "param") continue;
+    const pName = p.childForFieldName("name");
+    const pType = p.children.find((c: any) => c.type === "type_name");
+    if (pType && pName) {
+      params.push(`${pType.text} ${pName.text}`);
+    } else if (pName) {
+      params.push(pName.text);
+    }
+  }
+  return params.join(", ");
+}
+
+function methodContainerSuffix(sym: SymbolEntry): string {
+  return sym.container ? `\n\n*in class ${sym.container}*` : "";
+}
+
+function buildActiveMethodHover(
+  sym: SymbolEntry,
+  defNode: any,
+): string {
+  const parts: string[] = [];
+
+  const vis = defNode.children.find((c: any) => c.type === "visibility");
+  if (vis) parts.push(vis.text);
+
+  const returnType = defNode.childForFieldName("return_type");
+  if (returnType) parts.push(returnType.text);
+
+  const activeModifier = defNode.children.find((c: any) =>
+    c.text === "atomic" || c.text === "synchronous" || c.text === "intercept"
+  );
+  if (activeModifier) parts.push(activeModifier.text);
+
+  parts.push("active");
+
+  const hasParens = defNode.children.some((c: any) => c.text === "(");
+  const paramStr = buildParamString(defNode);
+  parts.push(hasParens ? `${sym.name}(${paramStr})` : sym.name);
+
+  return "```umple\n" + parts.join(" ") + "\n```" + methodContainerSuffix(sym);
+}
+
+function buildTestCaseHover(
+  sym: SymbolEntry,
+  defNode: any,
+): string {
+  const prefix = defNode.children.find((c: any) => c.type === "test_case_prefix");
+  const parts: string[] = [];
+  if (prefix) parts.push(prefix.text);
+  parts.push("test", sym.name);
+  return "```umple\n" + parts.join(" ") + "\n```" + methodContainerSuffix(sym);
+}
+
 function buildMethodHover(
   sym: SymbolEntry,
   defNode: any,
 ): string {
+  if (defNode.type === "active_method") {
+    return buildActiveMethodHover(sym, defNode);
+  }
+  if (defNode.type === "test_case") {
+    return buildTestCaseHover(sym, defNode);
+  }
+
   const parts: string[] = [];
 
   const vis = defNode.children.find((c: any) => c.type === "visibility");
@@ -158,31 +224,10 @@ function buildMethodHover(
     parts.push("void");
   }
 
-  const paramList = defNode.children.find((c: any) => c.type === "param_list");
-  let paramStr = "";
-  if (paramList) {
-    const params: string[] = [];
-    for (const p of paramList.children) {
-      if (p.type === "param") {
-        const pName = p.childForFieldName("name");
-        const pType = p.children.find((c: any) => c.type === "type_name");
-        if (pType && pName) {
-          params.push(`${pType.text} ${pName.text}`);
-        } else if (pName) {
-          params.push(pName.text);
-        }
-      }
-    }
-    paramStr = params.join(", ");
-  }
+  const paramStr = buildParamString(defNode);
   parts.push(`${sym.name}(${paramStr})`);
 
-  let extra = "";
-  if (sym.container) {
-    extra = `\n\n*in class ${sym.container}*`;
-  }
-
-  return "```umple\n" + parts.join(" ") + "\n```" + extra;
+  return "```umple\n" + parts.join(" ") + "\n```" + methodContainerSuffix(sym);
 }
 
 function buildStateMachineHover(

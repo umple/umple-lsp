@@ -42,6 +42,8 @@
 (abstract_method_declaration name: (identifier) @definition.method)
 (method_signature name: (identifier) @definition.method)
 (trait_method_signature name: (identifier) @definition.method)
+(active_method name: (identifier) @definition.method)
+(test_case name: (identifier) @definition.method)
 (state_machine name: (identifier) @definition.statemachine)
 (state name: (identifier) @definition.state)
 (state name: (qualified_name (identifier) @definition.state .))

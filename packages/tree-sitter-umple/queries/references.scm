@@ -54,6 +54,8 @@
 (method_declaration name: (identifier) @reference.method)
 (method_signature name: (identifier) @reference.method)
 (trait_method_signature name: (identifier) @reference.method)
+(active_method name: (identifier) @reference.method)
+(test_case name: (identifier) @reference.method)
 
 ; =====================
 ; TYPE REFERENCES
@@ -115,6 +117,11 @@
 ; resolves the entry to itself (symbolIndex has these indexed as use_case_step).
 (req_user_step id: (req_step_id (identifier) @reference.use_case_step))
 (req_system_response id: (req_step_id (identifier) @reference.use_case_step))
+
+; Test sequence steps reference test case methods in the same class/inherited scope.
+(test_sequence_step
+  from: (identifier) @reference.method
+  to: (identifier) @reference.method)
 
 ; =====================
 ; ASSOCIATION TYPE REFERENCES
