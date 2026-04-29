@@ -13,13 +13,7 @@ name: Publish npm package
 # The GitHub environment `npm-publish` is the human approval gate.
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: "Optional version override. Leave blank to publish packages/server/package.json version."
-        required: false
-        default: ""
-        type: string
+  workflow_dispatch: {}
 
 permissions:
   contents: read
@@ -63,15 +57,9 @@ jobs:
           npm --version
 
       - name: Resolve release version
-        env:
-          REQUESTED_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
           package_version="$(node -p "require('./packages/server/package.json').version")"
-          if [[ -n "$REQUESTED_VERSION" && "$REQUESTED_VERSION" != "$package_version" ]]; then
-            echo "Requested version $REQUESTED_VERSION does not match packages/server/package.json version $package_version"
-            exit 1
-          fi
           echo "EXPECTED_VERSION=$package_version" >> "$GITHUB_ENV"
           echo "Publishing umple-lsp-server@$package_version"
 
