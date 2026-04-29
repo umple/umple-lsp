@@ -267,6 +267,8 @@ export function symbolKindToCompletionKind(kind: SymbolKind): CompletionItemKind
       return CompletionItemKind.EnumMember;
     case "statemachine":
       return CompletionItemKind.Enum;
+    case "event":
+      return CompletionItemKind.Event;
     case "attribute":
       return CompletionItemKind.Field;
     case "port":
@@ -697,6 +699,16 @@ export function buildSemanticCompletionItems(
     const seen = new Set<string>();
     appendSymbolsOfKinds(items, seen, symbolIndex, reachableFiles, {
       kinds: ["method"],
+      container: info.enclosingClass,
+      inherited: true,
+    });
+    return items;
+  }
+  if (symbolKinds === "trace_event" && info.enclosingClass) {
+    const items: CompletionItem[] = [];
+    const seen = new Set<string>();
+    appendSymbolsOfKinds(items, seen, symbolIndex, reachableFiles, {
+      kinds: ["event"],
       container: info.enclosingClass,
       inherited: true,
     });

@@ -44,6 +44,7 @@ const WHITESPACE_TRIGGER_SCOPES = new Set<string>([
   "trace_method",
   "trace_state_method",
   "trace_attribute",
+  "trace_event",
   "sorted_attribute",
   "trait_sm_op_sm",
   "trait_sm_op_state",

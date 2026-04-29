@@ -182,6 +182,18 @@ function buildParamString(defNode: any): string {
   return params.join(", ");
 }
 
+function buildEventHover(
+  sym: SymbolEntry,
+  defNode: any,
+): string {
+  const paramStr = buildParamString(defNode);
+  let result = "```umple\n" + `${sym.name}(${paramStr})` + "\n```";
+  if (sym.container) {
+    result += `\n\n*event in ${sym.container}*`;
+  }
+  return result;
+}
+
 function methodContainerSuffix(sym: SymbolEntry): string {
   return sym.container ? `\n\n*in class ${sym.container}*` : "";
 }
@@ -434,6 +446,9 @@ export function buildHoverMarkdown(
       break;
     case "method":
       result = buildMethodHover(sym, defNode);
+      break;
+    case "event":
+      result = buildEventHover(sym, defNode);
       break;
     case "statemachine":
       result = buildStateMachineHover(sym, allSymbols);

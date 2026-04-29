@@ -184,7 +184,8 @@ export function analyzeToken(
   // ── Trace prefix override: propagate prefix semantics to all entities ────
   const TRACE_PREFIX_STATE = new Set(["entry", "exit"]);
   const TRACE_PREFIX_ATTR = new Set(["set", "get", "onlyGet", "onlySet"]);
-  const TRACE_PREFIX_ASSOC = new Set(["add", "remove", "cardinality", "transition"]);
+  const TRACE_PREFIX_EVENT = new Set(["transition"]);
+  const TRACE_PREFIX_ASSOC = new Set(["add", "remove", "cardinality"]);
 
   if (
     node.type === "identifier" &&
@@ -194,13 +195,14 @@ export function analyzeToken(
     const traceStmt = parent.parent;
     // Find the prefix keyword(s) — anonymous children between "trace" and first trace_entity
     let hasPrefix = false;
-    let prefixKind: "state" | "attribute" | "association" | null = null;
+    let prefixKind: "state" | "attribute" | "event" | "association" | null = null;
     for (let i = 0; i < traceStmt.childCount; i++) {
       const child = traceStmt.child(i);
       if (!child) continue;
       if (child.type === "trace_entity" || child.type === "trace_entity_call") break; // past prefixes
       if (TRACE_PREFIX_STATE.has(child.type)) { hasPrefix = true; prefixKind = "state"; }
       if (TRACE_PREFIX_ATTR.has(child.type)) { hasPrefix = true; prefixKind = "attribute"; }
+      if (TRACE_PREFIX_EVENT.has(child.type)) { hasPrefix = true; prefixKind = "event"; }
       // add/remove/cardinality: parse-only (association roles not indexed)
       if (TRACE_PREFIX_ASSOC.has(child.type)) { hasPrefix = true; prefixKind = null; }
     }
@@ -211,6 +213,8 @@ export function analyzeToken(
         kinds = ["state"];
       } else if (prefixKind === "attribute") {
         kinds = ["attribute"];
+      } else if (prefixKind === "event") {
+        kinds = ["event"];
       } else {
         // association or unrecognized prefix → parse-only, no goto-def
         kinds = null;

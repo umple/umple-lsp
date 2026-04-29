@@ -47,7 +47,7 @@ The known array-fallback completion leaks have all been closed:
 - Active/test/port symbol polish — active methods and Umple `test` blocks are indexed as method symbols, `testSequence` steps resolve/hover to the matching test methods in class scope, and port declarations are indexed as class-scoped `port` symbols. Bare same-class connector endpoints resolve to those ports; one-hop dotted component endpoints such as `cmp1.pOut1` resolve through the component attribute's declared type.
 - Inner class parser support — `inner class Name { ... }` inside a class body parses as a true nested class declaration, stays visible in document symbols, and no longer breaks nearby `implementsReq` parsing.
 - Corpus grammar triage — compiler-verified grammar support now covers glossary blocks, distributable variants, interface `position` / `test` / extra-code lines, trace `period` / `during` durations, trace wildcards and `onlyGet` / `transition` prefixes, comma-separated `record` and `logLevel` payloads, timed `deactivate`, dotted trace state targets, `fixml` attributes, `test` as a method or state-machine event name, static inner classes, class-local `strictness`, qualified emit template references, top-level `debug;`, `*` transition change markers, and state-to-state standalone transitions (`S1 -> S2;`). Current local corpus report: `1965 / 2092` parse-clean files.
-- Semantic coverage for new grammar nodes — trace `set/get/onlyGet/onlySet` targets and trace `record` payloads now resolve as attributes, dotted trace state targets (`trace status.Closed;`) resolve to the class-local state machine and child state, and no-event standalone transitions (`S1 -> S2;`) resolve both endpoints as state references. `trace transition eventName` completion is deliberately suppressed because events are not currently indexed as normal symbols.
+- Semantic coverage for new grammar nodes — trace `set/get/onlyGet/onlySet` targets and trace `record` payloads now resolve as attributes, dotted trace state targets (`trace status.Closed;`) resolve to the class-local state machine and child state, trace transition targets (`trace transition flip;`) resolve to class-scoped transition event symbols, and no-event standalone transitions (`S1 -> S2;`) resolve both endpoints as state references.
 
 ### Semantic coverage notes for new grammar nodes
 
@@ -60,13 +60,14 @@ Done:
 - Trace attribute variants: `set`, `get`, `onlyGet`, and `onlySet` route trace entity references and completions to class-scoped attributes.
 - Trace `record` payloads: `record id,contact` and `record only id` resolve as attribute references.
 - Dotted trace state targets: `trace status.Closed;` resolves `status` to the enclosing class's state machine and `Closed` to a state inside that machine.
+- Trace transition events: `trace transition flip;` resolves `flip` to class-scoped transition event symbols, find-references includes both transition occurrences and trace uses, hover shows the event signature, and completion after `trace transition` offers event names only.
 - No-event state transitions: `S1 -> S2;` resolves both endpoints to states, participates in semantic highlighting/local references, and is handled by formatter arrow spacing plus diagram transition lookup.
 
 Intentionally parse/highlight-only for now:
 
 - Trace wildcards such as `*attribute`, `*attributes`, `*`, and wildcard variants have no stable declaration target.
 - Trace `logLevel` values, `period` / `during` durations, timed `deactivate ... for 1s`, and similar payload keywords are configuration literals rather than model-symbol references.
-- `trace transition eventName` does not resolve `eventName` yet because transition events are not indexed as first-class symbols. Completion after `trace transition` is suppressed to avoid suggesting unrelated class-body keywords or attributes.
+- Timed-event keywords such as `after(...)` and `afterEvery(...)` are not indexed as user event symbols.
 - Non-trace parse-only nodes such as `glossary`, `distributable`, `debug`, `strictness`, and `fixml` should stay highlighting/document-symbol level unless a user-facing resolver use case appears.
 
 ### How to add new completion slots

@@ -141,6 +141,13 @@ Tells the LSP what kinds an identifier can reference, by position. Capture name 
 
 When the cursor is on a captured identifier, the resolver narrows its symbol search to those kinds. Identifiers NOT matched by any pattern get null kinds → no go-to-def / hover / rename.
 
+Event identifiers in `event_spec` are indexed as `event` symbols for normal
+transitions. They are scoped to the owning class or trait, matching Umple's
+generated trigger-method behavior. Timed-event keywords (`after`,
+`afterEvery`) are intentionally skipped during symbol extraction, so do not add
+semantic references to them unless the compiler exposes them as user-named
+symbols later.
+
 ### completions.scm
 
 Tells the LSP what symbol kinds to offer at a given cursor position. Capture is `@scope.<kind>`:

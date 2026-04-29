@@ -16,6 +16,7 @@ export type SymbolKind =
   | "port"
   | "state"
   | "statemachine"
+  | "event"
   | "method"
   | "association"
   | "mixset"
@@ -37,6 +38,7 @@ export const SYMBOL_KINDS_LONGEST_FIRST: SymbolKind[] = (
     "port",
     "state",
     "statemachine",
+    "event",
     "method",
     "association",
     "mixset",

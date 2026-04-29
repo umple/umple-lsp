@@ -10,7 +10,7 @@ A Language Server Protocol implementation for the [Umple](https://www.umple.org)
 ## Features
 
 - **Diagnostics** - Real-time error and warning detection via the Umple compiler
-- **Go-to-definition** - Jump to classes, interfaces, traits, enums, attributes, methods, state machines, states, associations, mixsets, and requirements. Container-scoped resolution prevents false cross-class jumps. Includes reused standalone statemachine fallback.
+- **Go-to-definition** - Jump to classes, interfaces, traits, enums, attributes, methods, transition events, state machines, states, associations, mixsets, and requirements. Container-scoped resolution prevents false cross-class jumps. Includes reused standalone statemachine fallback.
 - **Find references** - Semantic reference search with state-path disambiguation, inheritance chain walking, and shared-state equivalence for reused standalone statemachines
 - **Find implementations** - Jump from traits, interfaces, and classes to their `isA` implementers, extensions, and subclasses
 - **Rename** - Safe rename across all references (same pipeline as find-references)

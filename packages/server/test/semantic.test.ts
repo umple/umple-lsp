@@ -1011,6 +1011,7 @@ const TEST_CASES: TestCase[] = [
       { type: "parse_clean", fixture: "175_corpus_test_event_transition.ump" },
       { type: "symbol_count", fixture: "175_corpus_test_event_transition.ump", name: "TestEventTransition", kind: "class", expect: 1 },
       { type: "symbol_count", fixture: "175_corpus_test_event_transition.ump", name: "test", kind: "method", expect: 0 },
+      { type: "symbol_count", fixture: "175_corpus_test_event_transition.ump", name: "test", kind: "event", expect: 3 },
     ],
   },
 
@@ -1023,6 +1024,7 @@ const TEST_CASES: TestCase[] = [
       { type: "parse_clean", fixture: "176_corpus_trace_variants.ump" },
       { type: "symbol_count", fixture: "176_corpus_trace_variants.ump", name: "TraceVariants", kind: "class", expect: 1 },
       { type: "symbol_count", fixture: "176_corpus_trace_variants.ump", name: "tc1", kind: "method", expect: 0 },
+      { type: "symbol_count", fixture: "176_corpus_trace_variants.ump", name: "flip", kind: "event", expect: 2 },
       { type: "goto_def_exact", at: "onlyget_id_ref", expect: ["def_id"] },
       { type: "goto_def_exact", at: "onlyget_name_ref", expect: ["def_name"] },
       { type: "goto_def_exact", at: "trace_sm_ref", expect: ["def_status"] },
@@ -1032,12 +1034,14 @@ const TEST_CASES: TestCase[] = [
       { type: "goto_def_exact", at: "record_contact_ref", expect: ["def_contact"] },
       { type: "goto_def_exact", at: "record_only_id_ref", expect: ["def_id"] },
       { type: "goto_def_exact", at: "transition_record_contact_ref", expect: ["def_contact"] },
-      { type: "goto_def_empty", at: "transition_event_ref" },
+      { type: "goto_def_exact", at: "transition_event_ref", expect: ["event_flip_open", "event_flip_closed"] },
       { type: "goto_def_exact", at: "deact_tc1_ref", expect: ["tc1_def"] },
       { type: "refs", decl: { name: "id", kind: "attribute", container: "TraceVariants" }, expectAt: ["def_id", "onlyget_id_ref", "record_id_ref", "record_only_id_ref"] },
       { type: "refs", decl: { name: "contact", kind: "attribute", container: "TraceVariants" }, expectAt: ["def_contact", "record_contact_ref", "transition_record_contact_ref"] },
       { type: "refs", decl: { name: "status", kind: "statemachine", container: "TraceVariants.status" }, expectAt: ["def_status", "trace_sm_ref"] },
       { type: "refs", decl: { name: "Closed", kind: "state", container: "TraceVariants.status" }, expectAt: ["def_closed", "trace_closed_ref"] },
+      { type: "refs", decl: { name: "flip", kind: "event", container: "TraceVariants" }, expectAt: ["event_flip_open", "event_flip_closed", "transition_event_ref"] },
+      { type: "hover_output", at: "transition_event_ref", expectContains: ["flip()", "event in TraceVariants"] },
       {
         type: "token_context",
         at: "trace_sm_ref",
@@ -1973,6 +1977,8 @@ const TEST_CASES: TestCase[] = [
     name: "27 timed_events: state refs through timed transitions",
     fixtures: ["27_timed_events.ump"],
     assertions: [
+      { type: "symbol_count", fixture: "27_timed_events.ump", name: "after", kind: "event", expect: 0 },
+      { type: "symbol_count", fixture: "27_timed_events.ump", name: "afterEvery", kind: "event", expect: 0 },
       // Go-to-def: timed transition target Yellow resolves to Yellow state def
       {
         type: "goto_def",
@@ -3821,11 +3827,21 @@ const TEST_CASES: TestCase[] = [
         at: "tpc_comp_add",
         expect: "suppress",
       },
-      // transition events are not symbol-indexed, so avoid wrong attr/method suggestions
+      // transition → event symbols only
       {
         type: "completion_kinds",
         at: "tpc_comp_transition",
-        expect: "suppress",
+        expect: "trace_event",
+      },
+      {
+        type: "completion_includes",
+        at: "tpc_comp_transition",
+        expect: ["flip", "reset"],
+      },
+      {
+        type: "completion_excludes",
+        at: "tpc_comp_transition",
+        expect: ["name", "age", "open", "Open", "Closed"],
       },
     ],
   },

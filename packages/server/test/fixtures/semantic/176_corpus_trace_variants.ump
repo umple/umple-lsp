@@ -8,8 +8,8 @@ class TraceVariants {
   String /*@def_name*/name;
 
   /*@def_status*/status {
-    Open { flip -> Closed; }
-    /*@def_closed*/Closed { flip -> Open; }
+    Open { /*@event_flip_open*/flip -> Closed; }
+    /*@def_closed*/Closed { /*@event_flip_closed*/flip -> Open; }
   }
 
   trace *attributes;

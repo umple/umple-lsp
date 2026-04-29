@@ -53,6 +53,7 @@ export function searchReferences(
   // Container-scoped kinds need enclosing scope verification
   const containerScopedKinds = new Set<SymbolKind>([
     "attribute", "port", "const", "method", "template", "state", "statemachine", "tracecase",
+    "event",
   ]);
   const isContainerScoped = containerScopedKinds.has(symKind);
 
@@ -222,12 +223,13 @@ export function searchReferences(
         continue;
       }
 
-      // Exclude trace entities under parse-only prefixes (add/remove/cardinality)
+      // Exclude trace entities under parse-only prefixes (add/remove/cardinality).
+      // `transition` is event-backed and is handled through @reference.event.
       if (
         (node.parent?.type === "trace_entity" || node.parent?.type === "trace_entity_call") &&
         node.parent?.parent?.type === "trace_statement"
       ) {
-        const ASSOC_PREFIXES = new Set(["add", "remove", "cardinality", "transition"]);
+        const ASSOC_PREFIXES = new Set(["add", "remove", "cardinality"]);
         const traceStmt = node.parent.parent;
         let isAssocPrefix = false;
         for (let i = 0; i < traceStmt.childCount; i++) {
@@ -395,7 +397,7 @@ function resolveEnclosingScopeFromNode(
       let isInBody = false;
       let walk: SyntaxNode | null = node;
       while (walk && walk.id !== current.id) {
-        if (walk.type === "state" || walk.type === "transition" || walk.type === "standalone_transition") {
+        if (walk.type === "state" || walk.type === "transition" || walk.type === "standalone_transition" || walk.type === "state_to_state_transition") {
           isInBody = true;
           break;
         }
@@ -424,6 +426,10 @@ function resolveEnclosingScopeFromNode(
       if (refSmName) return `${enclosingClass}.${refSmName}`;
     }
     return undefined;
+  }
+
+  if (targetKind === "event") {
+    return enclosingClass ?? enclosingSM;
   }
 
   if (!enclosingClass && targetKind === "method") {

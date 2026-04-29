@@ -21,6 +21,8 @@ export function umpleKindToLspSymbolKind(kind: UmpleSymbolKind): SymbolKind {
       return SymbolKind.Constant;
     case "method":
       return SymbolKind.Method;
+    case "event":
+      return SymbolKind.Event;
     case "template":
       return SymbolKind.Field;
     case "statemachine":

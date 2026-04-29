@@ -150,6 +150,7 @@
 ; STATE REFERENCES
 ; =====================
 
+(event_spec (identifier) @reference.event)
 (transition target: (qualified_name (identifier) @reference.state))
 (standalone_transition from_state: (identifier) @reference.state)
 (standalone_transition to_state: (identifier) @reference.state)
@@ -190,6 +191,9 @@
 (trace_statement "exit" (trace_entity_call (identifier) @reference.method))
 ; add/remove/cardinality: parse-only (association roles not indexed as symbols)
 ; in/out: parse-only
+; transition → event names
+(trace_statement "transition" (trace_entity (identifier) @reference.event))
+(trace_statement "transition" (trace_entity_call (identifier) @reference.event))
 ; Subsequent entities after "," in no-prefix traces
 (trace_statement "," (trace_entity (identifier) @reference.attribute_method))
 (trace_statement "," (trace_entity_call (identifier) @reference.method))

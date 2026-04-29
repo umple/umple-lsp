@@ -48,6 +48,7 @@ export function resolveSymbolAtPosition(
     "const",
     "method",
     "template",
+    "event",
     "state",
     "statemachine",
     "tracecase",
@@ -55,9 +56,13 @@ export function resolveSymbolAtPosition(
   const isScoped = token.kinds.some((k) => containerKinds.has(k));
   let container: string | undefined;
   if (isScoped) {
-    container = token.kinds.some((k) => k === "state" || k === "statemachine")
-      ? token.enclosingStateMachine
-      : token.enclosingClass;
+    if (token.kinds.some((k) => k === "state" || k === "statemachine")) {
+      container = token.enclosingStateMachine;
+    } else if (token.kinds.some((k) => k === "event")) {
+      container = token.enclosingClass ?? token.enclosingStateMachine;
+    } else {
+      container = token.enclosingClass;
+    }
   }
 
   // ── Primary lookup: switch on context type ──────────────────────────────

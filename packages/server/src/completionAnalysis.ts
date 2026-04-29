@@ -134,7 +134,7 @@ export interface CompletionInfo {
   /** Operators the parser expects at this position. */
   operators: string[];
   /** Which symbol kinds to offer, or null for none. */
-  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "trace_state" | "trace_method" | "trace_state_method" | "trace_attribute" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | "top_level" | "class_body" | "trait_body" | "interface_body" | "assoc_class_body" | "mixset_body" | "statemachine_body" | "state_body" | "filter_body" | "transition_target" | "userstory_body" | "usecase_body" | "association_multiplicity" | "association_type" | "association_typed_prefix" | "association_arrow" | "isa_typed_prefix" | "decl_type_typed_prefix" | "return_type_typed_prefix" | "code_injection_method" | "filter_include_target" | "param_type_typed_prefix" | "referenced_sm_target" | "trait_sm_binding_target" | "trait_sm_binding_state_target" | null;
+  symbolKinds: SymbolKind[] | "suppress" | "use_path" | "own_attribute" | "guard_attribute_method" | "trace_attribute_method" | "trace_state" | "trace_method" | "trace_state_method" | "trace_attribute" | "trace_event" | "sorted_attribute" | "trait_sm_op_sm" | "trait_sm_op_state" | "trait_sm_op_state_event" | "trait_sm_op_event" | "top_level" | "class_body" | "trait_body" | "interface_body" | "assoc_class_body" | "mixset_body" | "statemachine_body" | "state_body" | "filter_body" | "transition_target" | "userstory_body" | "usecase_body" | "association_multiplicity" | "association_type" | "association_typed_prefix" | "association_arrow" | "isa_typed_prefix" | "decl_type_typed_prefix" | "return_type_typed_prefix" | "code_injection_method" | "filter_include_target" | "param_type_typed_prefix" | "referenced_sm_target" | "trait_sm_binding_target" | "trait_sm_binding_state_target" | null;
   /** True if cursor is at a definition-name position (suppress all). */
   isDefinitionName: boolean;
   /** True if cursor is inside a comment. */
@@ -1354,14 +1354,16 @@ export function analyzeCompletion(
     if (traceStmt) {
       const STATE_PREFIXES = new Set(["entry", "exit"]);
       const ATTR_PREFIXES = new Set(["set", "get", "onlyGet", "onlySet"]);
-      const ASSOC_PREFIXES = new Set(["add", "remove", "cardinality", "transition"]);
-      let prefixType: "state" | "attribute" | "suppress" | null = null;
+      const EVENT_PREFIXES = new Set(["transition"]);
+      const ASSOC_PREFIXES = new Set(["add", "remove", "cardinality"]);
+      let prefixType: "state" | "attribute" | "event" | "suppress" | null = null;
       for (let i = 0; i < traceStmt.childCount; i++) {
         const child = traceStmt.child(i);
         if (!child) continue;
         if (child.type === "trace_entity" || child.type === "trace_entity_call") break;
         if (STATE_PREFIXES.has(child.type)) { prefixType = "state"; break; }
         if (ATTR_PREFIXES.has(child.type)) { prefixType = "attribute"; break; }
+        if (EVENT_PREFIXES.has(child.type)) { prefixType = "event"; break; }
         if (ASSOC_PREFIXES.has(child.type)) { prefixType = "suppress"; break; }
       }
       if (prefixType === "state") {
@@ -1378,6 +1380,8 @@ export function analyzeCompletion(
         }
       } else if (prefixType === "attribute") {
         symbolKinds = "trace_attribute";
+      } else if (prefixType === "event") {
+        symbolKinds = "trace_event";
       } else if (prefixType === "suppress") {
         symbolKinds = "suppress";
       }

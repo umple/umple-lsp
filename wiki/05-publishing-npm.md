@@ -95,6 +95,15 @@ Past examples:
 - `LSP: implementsReq traceability across all entity types`
 - `Completion: structured req body starters at slot-ready positions`
 
+## Npm-visible update log
+
+Npm itself does not have a first-class release-notes field for each publish. The package page shows `packages/server/README.md`, and the tarball includes `packages/server/CHANGELOG.md`. For user-facing release notes:
+
+1. Update `packages/server/README.md` when the npm page should advertise a new release highlight.
+2. Append the new version to `packages/server/CHANGELOG.md`.
+3. Append the concise operator-facing entry to the release table below.
+4. For editor-specific announcements, update the matching editor publishing doc after the downstream extension is bumped.
+
 ## Troubleshooting
 
 ### `npm publish` returns 403
@@ -122,6 +131,7 @@ Useful for sanity-checking what's in npm vs your local `packages/server/package.
 
 | Version | Date | What it added |
 |---------|------|---------------|
+| 1.0.0 | 2026-04-29 | Stable LSP baseline: expanded semantic features, formatter safety, parser/query coverage, inlay hints, workspace symbols, and trace transition event symbols |
 | 0.4.3 | 2026-04-23 | Topic 044: association arrow slot completion |
 | 0.4.2 | 2026-04-23 | Topic 043: typed-prefix association right_type |
 | 0.4.1 | 2026-04-22 | Topic 042: association multiplicity / type slot completion |

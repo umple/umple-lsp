@@ -205,7 +205,7 @@ export class SymbolIndex {
       const RECOVERY_SAFE_KINDS: Set<SymbolKind> = new Set([
         "class", "interface", "trait", "enum",
         "mixset", "attribute", "const", "method",
-        "statemachine", "state",
+        "statemachine", "state", "event",
       ]);
 
       let liveSymbols = newSymbols.filter((s) => RECOVERY_SAFE_KINDS.has(s.kind));
@@ -1236,6 +1236,25 @@ export class SymbolIndex {
     return className ? `${className}.${rootSmName}` : rootSmName;
   }
 
+  /**
+   * Events generate class-level trigger methods in Umple, so class-local and
+   * trait-local transition events are scoped to the enclosing entity rather
+   * than to one specific state machine. Top-level state machines fall back to
+   * their own SM container.
+   */
+  private resolveEventContainer(node: SyntaxNode): string | undefined {
+    return this.resolveClassContainer(node) ?? this.resolveStateMachineContainer(node);
+  }
+
+  private isInsideNodeType(node: SyntaxNode, type: string): boolean {
+    let current: SyntaxNode | null = node.parent;
+    while (current) {
+      if (current.type === type) return true;
+      current = current.parent;
+    }
+    return false;
+  }
+
   /** For enum values: walk up to find the enclosing enum_definition name. */
   private resolveEnumContainer(node: SyntaxNode): string | undefined {
     let current = node.parent;
@@ -1272,8 +1291,16 @@ export class SymbolIndex {
       const node = capture.node;
 
       let container: string | undefined;
+      if (kind === "event" && this.isInsideNodeType(node, "timed_event")) {
+        // Timed events (`after(...)`, `afterEvery(...)`) are keywords, not
+        // user-defined event symbols that trace transition can target by name.
+        continue;
+      }
+
       if (kind === "state" || kind === "statemachine") {
         container = this.resolveStateMachineContainer(node);
+      } else if (kind === "event") {
+        container = this.resolveEventContainer(node);
       } else if (
         kind === "attribute" ||
         kind === "port" ||

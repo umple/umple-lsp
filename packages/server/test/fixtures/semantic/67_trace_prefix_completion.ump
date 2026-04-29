@@ -7,8 +7,12 @@ class A {
   Integer age;
   void /*@tpc_open*/open() {}
   sm {
-    Open {}
-    Closed {}
+    Open {
+      flip -> Closed;
+    }
+    Closed {
+      reset -> Open;
+    }
   }
 
   // Later prefixed state entity completion
@@ -32,6 +36,6 @@ class A {
   // add/remove suppressed
   trace add /*@tpc_comp_add*/ ;
 
-  // transition events are not indexed as normal symbols
+  // transition events are indexed as class-scoped event symbols
   trace transition /*@tpc_comp_transition*/ ;
 }

@@ -48,6 +48,7 @@
 (state_machine name: (identifier) @definition.statemachine)
 (state name: (identifier) @definition.state)
 (state name: (qualified_name (identifier) @definition.state .))
+(event_spec (identifier) @definition.event)
 (referenced_statemachine name: (identifier) @definition.statemachine)
 (emit_method name: (identifier) @definition.method)
 (template_attribute name: (identifier) @definition.template)
