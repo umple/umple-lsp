@@ -7,7 +7,7 @@ The `umple-lsp-server` npm package is the **single shipping unit** for all edito
 - **Name:** `umple-lsp-server`
 - **Registry:** https://registry.npmjs.org
 - **Page:** https://www.npmjs.com/package/umple-lsp-server
-- **Publisher:** owned by the `umple` org (you need publish rights via npm token or `npm login` as a member)
+- **Publisher:** owned by the `umple` org. Normal releases use Trusted Publishing; npm owner access is still needed to configure package settings or run the manual fallback.
 - **Version scheme:** semantic-ish. Patch bump for fixes, minor bump for new features. We've been pretty liberal with patch bumps for small features.
 
 What ships in the tarball (per `packages/server/package.json` `files` field):
@@ -26,26 +26,28 @@ README (if present)
 
 `umplesync.jar` is **NOT shipped** — editor extensions download it separately or auto-discover it. Keeps the tarball small (~270 KB compressed, ~1.8 MB unpacked).
 
-## One-time setup
+## One-time setup: Trusted Publishing
 
-You need an authenticated npm session that's a member of the `umple` org with publish rights.
+The preferred release path is npm Trusted Publishing from GitHub Actions. It uses OpenID Connect (OIDC), so maintainers do not share or rotate a long-lived npm publish token.
 
-```bash
-npm login
-```
+GitHub side:
 
-Browser opens for OAuth. Or use an automation token:
+1. In `umple/umple-lsp`, create or verify the GitHub Environment `npm-publish`.
+2. Add release maintainers as required reviewers.
+3. Keep admin bypass enabled only if the repo admins agree that emergency releases need it.
 
-```bash
-npm config set //registry.npmjs.org/:_authToken=<your_token>
-```
+npm side:
 
-Verify:
+1. Open the npm package settings for `umple-lsp-server`.
+2. Add a Trusted Publisher:
+   - Provider: GitHub Actions
+   - Organization/user: `umple`
+   - Repository: `umple-lsp`
+   - Workflow filename: `publish-npm.yml`
+   - Environment name: `npm-publish`
+3. After one successful trusted publish, set Publishing Access to require 2FA and disallow traditional tokens.
 
-```bash
-npm whoami
-# should print your username, not E401
-```
+Trusted Publishing requires Node `22.14+` and npm CLI `11.5.1+`; the workflow uses Node `24`.
 
 ## Release flow
 
@@ -67,17 +69,15 @@ git add packages/server/package.json
 git commit -m "Bump server to <X.Y.Z>"
 git push origin master    # or `org master` depending on your remote
 
-# 5. Dry-run the publish to see what would ship
-cd packages/server
-npm publish --dry-run | tail -25
+# 5. In GitHub Actions, run "Publish npm package" from master.
+# Enter X.Y.Z as the expected version, then approve the npm-publish environment.
 
-# 6. Real publish
-npm publish
-
-# 7. Verify
-npm view umple-lsp-server version
-# should print X.Y.Z
+# 6. Verify
+npm view umple-lsp-server version --registry https://registry.npmjs.org/
+# should print X.Y.Z after the workflow completes
 ```
+
+The workflow is `.github/workflows/publish-npm.yml`. It verifies the branch, checks that the input version matches `packages/server/package.json`, rejects already-published versions, installs dependencies, downloads `umplesync.jar`, runs the full test suite, verifies `server --version`, runs `npm publish --dry-run`, publishes from `packages/server`, and checks the registry version.
 
 The post-publish chain (what other things you might want to do after):
 
@@ -104,18 +104,31 @@ Npm itself does not have a first-class release-notes field for each publish. The
 3. Append the concise operator-facing entry to the release table below.
 4. For editor-specific announcements, update the matching editor publishing doc after the downstream extension is bumped.
 
+## Manual fallback
+
+Use manual `npm publish` only if Trusted Publishing is broken and the release cannot wait. You need an npm account with publish rights and 2FA:
+
+```bash
+cd packages/server
+npm publish
+```
+
+Record why the fallback was used, and rotate/remove any temporary publish token afterward.
+
 ## Troubleshooting
 
-### `npm publish` returns 403
+### Workflow fails with authentication / OIDC errors
 
-You're not authenticated as a publisher. Either:
+Check:
 
-- Run `npm login` and re-authenticate
-- If using an automation token, check it hasn't expired at https://www.npmjs.com/settings/<your-username>/tokens
+- npm Trusted Publisher settings exactly match `umple / umple-lsp / publish-npm.yml / npm-publish`.
+- `.github/workflows/publish-npm.yml` has `permissions: id-token: write`.
+- The workflow is running on GitHub-hosted runners, not self-hosted runners.
+- The package's `repository.url` still points at `https://github.com/umple/umple-lsp.git`.
 
 ### `npm publish` returns 401
 
-Same as 403 in spirit — check `npm whoami` first. Most common cause: token expired.
+For the workflow, treat this as an OIDC/trusted-publisher configuration problem. For the manual fallback, run `npm login` and make sure your npm account has package publish rights.
 
 ### `npm publish` returns `EPUBLISHCONFLICT` / `cannot publish over the previously published versions`
 

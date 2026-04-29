@@ -74,7 +74,7 @@ Pushes that ONLY touch the server TS or fixtures don't fire it (no zed-side arti
    - changed paths
    - merge-gate note: "highlights only → safe; grammar/both → wait for npm publish if new syntax requires server-side support"
 
-The full design rationale (why auto-PR-only, why npm publish stays manual, why the marketplace PR also stays manual) is in `.collab/archive/040_zed_release_automation_scope.md`.
+The original design rationale for keeping release actions human-gated is in `.collab/archive/040_zed_release_automation_scope.md`. npm publish now uses a manually approved Trusted Publishing workflow instead of a local token-backed publish.
 
 **Required secrets:** `UMPLE_ZED_BOT_PAT` (fine-grained PAT scoped to `umple/umple.zed`, Contents R/W + Pull requests R/W). To rotate:
 
@@ -92,11 +92,13 @@ This catches the case where someone manually edits umple.zed without running the
 
 ### npm publish
 
-Manual. `npm publish` from `packages/server/` runs in your terminal. Reasons:
+Manual approval, automated execution. `.github/workflows/publish-npm.yml` is a `workflow_dispatch` release workflow protected by the `npm-publish` GitHub Environment. It publishes through npm Trusted Publishing / OIDC, so no long-lived npm token is stored in GitHub.
 
-- npm publish is a hard-to-reverse action with global blast radius. Triggering it from CI invites surprise releases (rebase pushes, accidental tag pushes, stale lock files).
-- We release infrequently enough (a few times a month at peak) that the cost of typing `npm publish` is small.
-- Authorship attribution: the npm release log shows "published by <user>", which is meaningful when something goes wrong.
+Reasons for this shape:
+
+- npm publish is a hard-to-reverse action with global blast radius, so a human still chooses the version and approves the environment.
+- Trusted Publishing removes the shared-token problem and gives npm provenance for public packages.
+- The workflow re-runs the full test suite, performs a dry-run package publish, publishes from `packages/server`, and verifies the registry version.
 
 ### VS Code marketplace publish
 

@@ -54,8 +54,8 @@ git diff --check
 git commit -m "Release server X.Y.Z"
 git push org master
 
-cd packages/server
-npm publish
+# In GitHub Actions, run "Publish npm package" from master.
+# Enter X.Y.Z as the expected version and approve the npm-publish environment.
 npm view umple-lsp-server version --registry https://registry.npmjs.org/
 ```
 

@@ -133,9 +133,13 @@ The LSP has PR/push/manual build-test CI now. Remaining optional follow-ups:
 - Decide whether corpus parse stress should become a scheduled/manual CI report once a runner-accessible `cruise.umple/test` source is available. The local reporter exists now (`npm run parse:corpus`) and is report-only by default.
 - Keep the README badge current if workflow filenames change.
 
-### No automated npm publish
+### Trusted npm publishing follow-ups
 
-Publishing is manual. Tag-triggered `npm publish` workflow (push `server-v0.5.0` → CI publishes) was discussed in topic 040 and deferred. Could add when shipping cadence picks up.
+The repo now has a manually approved Trusted Publishing workflow for `umple-lsp-server`, so future maintainers can publish without sharing npm tokens. Optional follow-ups are governance polish rather than core release enablement:
+
+- Review the `npm-publish` GitHub Environment reviewer list as maintainers change.
+- After the first successful trusted publish, ensure npm package settings require 2FA and disallow traditional tokens.
+- Decide whether tag-triggered release automation is worth adding later. Keep human approval even if tags become the trigger.
 
 ### No automated marketplace PR
 
