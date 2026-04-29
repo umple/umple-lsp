@@ -274,6 +274,7 @@ See [`wiki/`](wiki/) for the full project handoff:
 | What this project is + architecture | [01-overview](wiki/01-overview.md), [02-architecture](wiki/02-architecture.md) |
 | Setup, build, test | [03-development](wiki/03-development.md) |
 | Editing the grammar | [04-grammar](wiki/04-grammar.md) |
+| Full release checklist | [19-release-checklist](wiki/19-release-checklist.md) |
 | Releasing — npm | [05-publishing-npm](wiki/05-publishing-npm.md) |
 | Releasing — VS Code | [06-publishing-vscode](wiki/06-publishing-vscode.md) |
 | Releasing — Zed | [07-publishing-zed](wiki/07-publishing-zed.md) |

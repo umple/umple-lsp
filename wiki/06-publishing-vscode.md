@@ -42,35 +42,35 @@ PATs expire — usually a year. When publish returns `401 Unauthorized` that's t
 
 ## Release flow
 
-Assumes you've just published a new `umple-lsp-server` to npm (see [05-publishing-npm.md](05-publishing-npm.md)). The extension's `package.json` currently pins a **local tarball** (`file:../umple-lsp/packages/server/umple-lsp-server-X.Y.Z.tgz`) so that the .vsix bundles a precise build. To pick up a new server version, either update the path to point at a new tarball you've packed locally with `npm pack`, OR change the dep to `"umple-lsp-server": "^X.Y.Z"` and `npm install` to pull from the registry. Both approaches give an end-to-end-tested .vsix; pick whichever fits your release workflow.
+Assumes you've just published a new `umple-lsp-server` to npm (see [05-publishing-npm.md](05-publishing-npm.md)). The extension's `package.json` should pin an **exact registry version** such as `"umple-lsp-server": "1.0.0"` so the `.vsix` bundles a reproducible server build.
 
 ```bash
-# A. Pack the local server into a versioned tarball (assumes you just bumped + compiled it)
-cd ~/.../workspace/lsp_umple/umple-lsp/packages/server
-npm pack
-# produces umple-lsp-server-X.Y.Z.tgz in packages/server/
+# A. Verify the server version exists on npm
+npm view umple-lsp-server version --registry https://registry.npmjs.org/
 
-# B. Switch to umple.vscode and refresh node_modules from that tarball
+# B. Switch to umple.vscode and update package.json
 cd ~/.../workspace/lsp_umple/umple.vscode
-# Edit package.json's umple-lsp-server dep to point at the new tarball path:
-#   "umple-lsp-server": "file:../umple-lsp/packages/server/umple-lsp-server-X.Y.Z.tgz"
-# Or just `npm install ../umple-lsp/packages/server/umple-lsp-server-X.Y.Z.tgz`
-npm install ../umple-lsp/packages/server/umple-lsp-server-X.Y.Z.tgz
+# Edit:
+#   "version": "<VS_CODE_VERSION>"
+#   "umple-lsp-server": "<SERVER_VERSION>"
 
-# C. Verify the bundled server matches what you expect
+# C. Remove stale local installs / lockfiles and reinstall from npm
+rm -f package-lock.json umple-*.vsix
+rm -rf node_modules/umple-lsp-server
+npm install --no-package-lock
+
+# D. Verify the bundled server matches what you expect
+test ! -L node_modules/umple-lsp-server
 node node_modules/umple-lsp-server/out/server.js --version
-# should print the new X.Y.Z
-
-# D. Bump extension version (independent of server version)
-npm version <patch|minor|major> --no-git-tag-version
-# or pin: npm version 2.4.3 --no-git-tag-version
+npm ls umple-lsp-server
 
 # E. Compile (extension TypeScript)
 npm run compile
+npm test
 
 # F. Package the .vsix (no auth needed for this step)
 npx vsce package
-# produces umple-<X.Y.Z>.vsix in the repo root
+# produces umple-<VS_CODE_VERSION>.vsix in the repo root
 
 # G. Sanity check: install the .vsix locally first
 # In VS Code: Extensions panel → … menu → Install from VSIX...
@@ -79,16 +79,16 @@ npx vsce package
 # and check semantic token entries such as class/type/property/method.
 
 # H. Publish to marketplace
-npx vsce publish --packagePath umple-<X.Y.Z>.vsix
+npx vsce publish --packagePath umple-<VS_CODE_VERSION>.vsix
 # If PAT is configured (`vsce login digized` previously), this just works.
 
 # I. Commit + push the bump (and the dep change if you updated package.json)
-git add package.json package-lock.json
-git commit -m "Bump version to <X.Y.Z>"
+git add package.json README.md
+git commit -m "Release VS Code extension <VS_CODE_VERSION>"
 git push origin master  # or `org master` per local remote naming
 ```
 
-**Alternative**: instead of pinning a local tarball, change the dep to `"umple-lsp-server": "^X.Y.Z"` and `npm install` after publishing the server to npm. Cleaner long-term but requires npm publish FIRST. The tarball approach lets you build + sanity-test the .vsix even before npm publish lands.
+Keep `package-lock.json` absent unless the repository policy changes. Do not publish from a symlinked `node_modules/umple-lsp-server`; symlinks can produce broken `.vsix` packages.
 
 Marketplace propagation is usually 1–5 minutes; verify at https://marketplace.visualstudio.com/items?itemName=digized.umple.
 
@@ -101,6 +101,7 @@ The VS Code extension's version is **independent** of the server version. We've 
 
 | VS Code | npm server bundled | What it added |
 |---------|--------------------|---------------|
+| 3.0.0 | 1.0.0 | Stable LSP baseline: expanded semantic features, formatter safety, parser/query coverage, inlay hints, workspace symbols, and trace transition event symbols |
 | 2.4.2 | 0.4.3 | Topic 044 association arrow slot |
 | 2.4.1 | 0.4.2 | Topic 043 typed-prefix |
 | 2.4.0 | 0.4.0 | Phase A–D req/implementsReq |
@@ -161,7 +162,7 @@ Usually missing `repository` or `license` in the extension's `package.json`. Alr
 
 ### Extension installs but features don't work
 
-Check that `package.json` declares the bundled `umple-lsp-server` (currently a pinned tarball; could also be a registry version) and that `node_modules/umple-lsp-server/out/server.js --version` works on the user's install. Logs go to the "Umple Language Server" output channel in VS Code (`View → Output`).
+Check that `package.json` declares the bundled `umple-lsp-server` as an exact registry version and that `node_modules/umple-lsp-server/out/server.js --version` works on the user's install. Logs go to the "Umple Language Server" output channel in VS Code (`View → Output`).
 
 ### Bundle size
 

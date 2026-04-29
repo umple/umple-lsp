@@ -24,6 +24,7 @@ Welcome. This wiki is the handoff document for future contributors to the Umple 
 | 16 | [completion-playbook.md](16-completion-playbook.md) | Completion-specific playbook: scopes, analyzer, builder, recovery, and tests |
 | 17 | [agent-implementation-checklists.md](17-agent-implementation-checklists.md) | Compact decision tables and checklists for AI agents and future contributors |
 | 18 | [examples.md](18-examples.md) | Small end-to-end examples: parse-only, symbol-feature, and completion-feature |
+| 19 | [release-checklist.md](19-release-checklist.md) | One linear release checklist for npm, VS Code, Zed, and downstream editor notes |
 
 ## Quick links
 
@@ -35,7 +36,7 @@ Welcome. This wiki is the handoff document for future contributors to the Umple 
 - **Completion workflow:** [16-completion-playbook.md](16-completion-playbook.md)
 - **Agent-oriented quick checklists:** [17-agent-implementation-checklists.md](17-agent-implementation-checklists.md)
 - **Copyable examples:** [18-examples.md](18-examples.md)
-- **Ship a new release of everything:** [05-publishing-npm.md](05-publishing-npm.md) → [06-publishing-vscode.md](06-publishing-vscode.md) → [07-publishing-zed.md](07-publishing-zed.md)
+- **Ship a new release of everything:** [19-release-checklist.md](19-release-checklist.md)
 - **CI / secrets:** [10-ci-automation.md](10-ci-automation.md)
 
 ## Maintenance note
